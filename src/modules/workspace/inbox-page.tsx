@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, ClipboardList, Inbox, RotateCcw, Timer } from "lucide-react";
+import { CheckCircle2, ClipboardList, Inbox, RotateCcw, Send, Timer } from "lucide-react";
 import {
   Badge,
   Button,
@@ -22,13 +22,17 @@ import { useRole } from "@/lib/auth/session";
 import { useDbActions, useLookups } from "@/lib/data/hooks";
 import type { Task } from "@/lib/data/types";
 import { date, moneyShort } from "@/lib/format";
-import { useAdminParams } from "@/modules/admin/store";
+import { publish } from "@/lib/platform/events";
+import { runHooks } from "@/lib/platform/hooks";
+import { currentStep, getDefinition, stepDueAt, useMyApprovalQueue, useMyRequests, type OperationInstance } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
 import { isDueSoon, isOverdue, useApprovalsAwaiting, useRoleTasks } from "./data";
 import { useAuditLog } from "./use-audit-log";
 
 type Row = {
   id: string;
-  kind: "Approval" | "Task";
+  kind: "Approval" | "Operation" | "Request" | "Task";
   title: string;
   detail: string;
   module: string;
@@ -39,18 +43,27 @@ type Row = {
   stepUp?: boolean;
 };
 
-type View = "Open" | "Done" | "All";
+type View = "Open" | "Requests" | "Done" | "All";
+
+const openStatus = (i: OperationInstance) => i.status === "Pending" || i.status === "In progress";
+const opHref = (i: OperationInstance) => `/operations/item?id=${i.id}`;
 
 const priorityRank: Record<Task["priority"], number> = { High: 0, Medium: 1, Low: 2 };
 
-/** My tasks (PRD §4: work routed to the signed-in role) — store tasks + live approvals from the chart-flow. */
+/** My tasks (PRD §4: work routed to the signed-in user) — store tasks, chart-flow approvals, Operations approvals and my requests. */
 export function InboxPage() {
   const role = useRole()!;
   const tasks = useRoleTasks(role.id);
   const awaiting = useApprovalsAwaiting(role.id);
   const { obligor } = useLookups();
   const { update } = useDbActions();
-  const params = useAdminParams();
+  const { actor } = useScope();
+  // Credit approvals already listed from the chart-flow aren't repeated as Operations items.
+  const opsQueue = useMyApprovalQueue(actor).filter((i) => !awaiting.some((a) => a.app.id === i.subject.id));
+  const myRequests = useMyRequests(actor.id);
+  const stepUp = useRule<number>("approvals.stepUpThresholdNgn");
+  const highAmount = useRule<number>("workspace.highPriorityAmountNgn");
+  const dueSoonDays = useRule<number>("workspace.taskDueSoonDays");
   const log = useAuditLog();
   const [view, setView] = useState<View>("Open");
 
@@ -63,20 +76,50 @@ export function InboxPage() {
       module: "Loan origination",
       href: `/origination/application?id=${app.id}`,
       dueAt: app.slaDueAt,
-      priority: app.amount > 1e9 || isOverdue(app.slaDueAt) ? "High" : "Medium",
+      priority: app.amount > highAmount || isOverdue(app.slaDueAt) ? "High" : "Medium",
       status: "Open",
-      stepUp: app.amount > params.stepUpThresholdNgn,
+      stepUp: app.amount > stepUp,
+    }));
+    const operations: Row[] = opsQueue.map((i) => {
+      const due = stepDueAt(i) ?? i.requestedAt;
+      return {
+        id: `ops:${i.id}`,
+        kind: "Operation",
+        title: i.title,
+        detail: `${getDefinition(i.operationType).name} · step “${currentStep(i)?.name ?? "—"}” · requested by ${i.requestedBy.name}`,
+        module: "Operations",
+        href: opHref(i),
+        dueAt: due,
+        priority: isOverdue(due) ? "High" : "Medium",
+        status: "Open",
+      };
+    });
+    const requests: Row[] = myRequests.map((i) => ({
+      id: `req:${i.id}`,
+      kind: "Request",
+      title: i.title,
+      detail: `${getDefinition(i.operationType).name} · ${openStatus(i) ? `waiting on “${currentStep(i)?.name ?? "—"}”` : i.status}`,
+      module: "Operations",
+      href: opHref(i),
+      dueAt: stepDueAt(i) ?? i.completedAt ?? i.requestedAt,
+      priority: "Low",
+      status: openStatus(i) ? "Open" : "Done",
     }));
     const own: Row[] = tasks.map((t) => ({ id: t.id, kind: "Task", title: t.title, detail: t.module, module: t.module, href: t.href, dueAt: t.dueAt, priority: t.priority, status: t.status }));
-    return [...approvals, ...own].sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority] || a.dueAt.localeCompare(b.dueAt));
-  }, [awaiting, tasks, obligor, params.stepUpThresholdNgn]);
+    return [...approvals, ...operations, ...requests, ...own].sort((a, b) => priorityRank[a.priority] - priorityRank[b.priority] || a.dueAt.localeCompare(b.dueAt));
+  }, [awaiting, tasks, obligor, stepUp, highAmount, opsQueue, myRequests]);
 
-  const visible = view === "All" ? rows : rows.filter((r) => r.status === view);
-  const open = rows.filter((r) => r.status === "Open");
+  const work = rows.filter((r) => r.kind !== "Request");
+  const visible = view === "All" ? rows : view === "Requests" ? rows.filter((r) => r.kind === "Request") : work.filter((r) => r.status === view);
+  const open = work.filter((r) => r.status === "Open");
 
-  const setStatus = (row: Row, status: Task["status"]) => {
+  const setStatus = async (row: Row, status: Task["status"]) => {
+    const hook = await runHooks("workspace.task.update.before", { taskId: row.id, from: row.status, to: status });
+    if (!hook.ok) return;
     update("tasks", row.id, { status });
     log({ action: status === "Done" ? "Marked task done" : "Reopened task", entityType: "Task", entityId: row.id, before: row.status, after: status });
+    publish(status === "Done" ? "workspace.task.completed" : "workspace.task.reopened", { module: "workspace", subject: { type: "Task", id: row.id, title: row.title, href: row.href }, payload: { taskId: row.id } });
+    await runHooks("workspace.task.update.after", { taskId: row.id, status });
   };
 
   const columns: DataTableColumn<Row>[] = [
@@ -94,7 +137,7 @@ export function InboxPage() {
         </span>
       ),
     },
-    { id: "kind", header: "Type", accessor: "kind", cell: (r) => <Badge tone={r.kind === "Approval" ? "info" : "neutral"}>{r.kind}</Badge> },
+    { id: "kind", header: "Type", accessor: "kind", cell: (r) => <Badge tone={r.kind === "Approval" || r.kind === "Operation" ? "info" : r.kind === "Request" ? "accent" : "neutral"}>{r.kind === "Request" ? "My request" : r.kind}</Badge> },
     { id: "module", header: "Module", accessor: "module", hidden: true },
     {
       id: "priority",
@@ -117,7 +160,7 @@ export function InboxPage() {
           <Badge tone="danger" variant="solid">
             Overdue · {date(r.dueAt)}
           </Badge>
-        ) : isDueSoon(r.dueAt, 1) ? (
+        ) : isDueSoon(r.dueAt, dueSoonDays) ? (
           <Badge tone="warning">Due {date(r.dueAt)}</Badge>
         ) : (
           <span className="font-mono">{date(r.dueAt)}</span>
@@ -135,16 +178,20 @@ export function InboxPage() {
       exportable: false,
       align: "end",
       cell: (r) =>
-        r.kind === "Approval" ? (
+        r.kind === "Approval" || r.kind === "Operation" ? (
           <Button size="small" as={Link} href={r.href}>
             Decide
           </Button>
+        ) : r.kind === "Request" ? (
+          <Button size="small" variant="tertiary" as={Link} href={r.href}>
+            Track
+          </Button>
         ) : r.status === "Open" ? (
-          <Button size="small" variant="tertiary" iconBefore={<CheckCircle2 aria-hidden className="size-4" />} onClick={() => setStatus(r, "Done")}>
+          <Button size="small" variant="tertiary" iconBefore={<CheckCircle2 aria-hidden className="size-4" />} onClick={() => void setStatus(r, "Done")}>
             Mark done
           </Button>
         ) : (
-          <Button size="small" variant="text" iconBefore={<RotateCcw aria-hidden className="size-4" />} onClick={() => setStatus(r, "Open")}>
+          <Button size="small" variant="text" iconBefore={<RotateCcw aria-hidden className="size-4" />} onClick={() => void setStatus(r, "Open")}>
             Reopen
           </Button>
         ),
@@ -152,13 +199,13 @@ export function InboxPage() {
   ];
 
   return (
-    <ModulePage module="inbox" description={`Work routed to ${role.name}: approvals from the chart-flow and tasks assigned to your role.`}>
+    <ModulePage module="inbox" description={`Work routed to you as ${role.name}: chart-flow approvals, Operations approvals, tasks for your role — and the requests you've raised.`}>
       <Stack gap="large">
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
           <StatCard label="Open" value={open.length} icon={<Inbox aria-hidden className="size-5" />} tone="accent" hint="Tasks and approvals" />
-          <StatCard label="Awaiting my decision" value={awaiting.length} icon={<ClipboardList aria-hidden className="size-5" />} tone="info" hint={awaiting.length ? moneyShort(awaiting.reduce((s, a) => s + a.app.amount, 0)) : "None"} />
+          <StatCard label="Awaiting my decision" value={awaiting.length + opsQueue.length} icon={<ClipboardList aria-hidden className="size-5" />} tone="info" hint={`${awaiting.length} credit (${moneyShort(awaiting.reduce((s, a) => s + a.app.amount, 0))}) · ${opsQueue.length} in Operations`} />
           <StatCard label="Overdue" value={open.filter((r) => isOverdue(r.dueAt)).length} icon={<Timer aria-hidden className="size-5" />} tone="danger" hint="Past due date / SLA" />
-          <StatCard label="Done" value={rows.filter((r) => r.status === "Done").length} icon={<CheckCircle2 aria-hidden className="size-5" />} tone="success" hint="Completed tasks" />
+          <StatCard label="My requests" value={myRequests.filter(openStatus).length} icon={<Send aria-hidden className="size-5" />} tone="neutral" hint={`${myRequests.length} raised · in progress`} />
         </Grid>
         <Card>
           <CardContent>
@@ -170,12 +217,13 @@ export function InboxPage() {
                   onChange={(v) => setView(v as View)}
                   options={[
                     { value: "Open", label: `Open (${open.length})` },
+                    { value: "Requests", label: `My requests (${myRequests.filter(openStatus).length})` },
                     { value: "Done", label: "Done" },
                     { value: "All", label: "All" },
                   ]}
                 />
                 <Text variant="small" tone="muted">
-                  Approvals close when you decide on the application; approvals above {moneyShort(params.stepUpThresholdNgn)} need step-up authentication.
+                  Credit approvals close when you decide on the application; above {moneyShort(stepUp)} they need step-up authentication. Other approvals are decided in Operations.
                 </Text>
               </div>
               <DataTable
@@ -208,7 +256,7 @@ export function InboxPage() {
                       <Badge tone={r.priority === "High" ? "danger" : "warning"}>{r.priority}</Badge>
                       {r.status === "Open" && isOverdue(r.dueAt) ? <Badge tone="danger">Overdue</Badge> : <Badge variant="outline">Due {date(r.dueAt)}</Badge>}
                       {r.kind === "Task" && r.status === "Open" ? (
-                        <Button size="small" variant="tertiary" onClick={() => setStatus(r, "Done")}>
+                        <Button size="small" variant="tertiary" onClick={() => void setStatus(r, "Done")}>
                           Mark done
                         </Button>
                       ) : null}

@@ -13,7 +13,7 @@ import type { RoleId } from "@/lib/rbac/roles";
 export type CpState = { status: ChecklistStatus; byName: string; at: string; note?: string; evidence?: string };
 
 export type WaiverKind = "Waiver" | "Deferral" | "Sanction for breach";
-export type WaiverStatus = "Pending approval" | "Approved" | "Declined" | "Lapsed" | "Routed to Operational Risk" | "Closed";
+export type WaiverStatus = "Pending approval" | "Approved" | "Declined" | "Returned to requester" | "Withdrawn" | "Lapsed" | "Routed to Operational Risk" | "Closed";
 
 export type WaiverRequest = {
   id: string;
@@ -41,6 +41,8 @@ export type WaiverRequest = {
   /** Sanction for breach: staff / unit and loss-event reference. */
   breachDetail?: string;
   lossEventRef?: string;
+  /** Operations workflow request that decides it. */
+  operationId?: string;
 };
 
 export type CrmsSearch = {

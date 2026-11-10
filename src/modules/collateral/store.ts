@@ -9,6 +9,7 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { useCollateral, useFacilities } from "@/lib/data/hooks";
+import { useRulesStore } from "@/lib/platform/rules";
 import type { Collateral } from "@/lib/data/types";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { legalSeed, lienSeed, moSeed, type LegalRecord, type LienStatus, type MoVerification, type ValuationEntry } from "./data";
@@ -21,7 +22,9 @@ type State = {
   liens: Record<string, LienStatus>;
   prices: Record<string, number>;
   pricesAt?: string;
-  marginCalls: Record<string, { at: string; by: string; exceptionId: string; topUp: number }>;
+  marginCalls: Record<string, { at: string; by: string; exceptionId: string; topUp: number; releasedAt?: string; releasedBy?: string; operationId?: string }>;
+  /** Reminder notifications already sent, by alert id (dedupe). */
+  reminders: Record<string, string>;
   insurance: Record<string, { expiry: string; by: string; at: string }>;
   setVerification: (id: string, v: MoVerification) => void;
   patchLegal: (id: string, v: Partial<LegalRecord>) => void;
@@ -30,6 +33,8 @@ type State = {
   setPrices: (p: Record<string, number>) => void;
   recordMarginCall: (id: string, v: { by: string; exceptionId: string; topUp: number }) => void;
   renewInsurance: (id: string, v: { expiry: string; by: string }) => void;
+  releaseMarginCall: (id: string, v: { by: string; operationId: string }) => void;
+  markReminders: (ids: string[]) => void;
 };
 
 export const useCollateralStore = create<State>()(
@@ -42,6 +47,7 @@ export const useCollateralStore = create<State>()(
       prices: {},
       marginCalls: {},
       insurance: {},
+      reminders: {},
       setVerification: (id, v) => set((s) => ({ verifications: { ...s.verifications, [id]: v } })),
       patchLegal: (id, v) => set((s) => ({ legal: { ...s.legal, [id]: { ...s.legal[id], ...v } } })),
       addValuation: (id, v) => set((s) => ({ valuations: { ...s.valuations, [id]: [...(s.valuations[id] ?? []), v] } })),
@@ -49,8 +55,11 @@ export const useCollateralStore = create<State>()(
       setPrices: (p) => set(() => ({ prices: p, pricesAt: new Date().toISOString() })),
       recordMarginCall: (id, v) => set((s) => ({ marginCalls: { ...s.marginCalls, [id]: { ...v, at: new Date().toISOString() } } })),
       renewInsurance: (id, v) => set((s) => ({ insurance: { ...s.insurance, [id]: { ...v, at: new Date().toISOString() } } })),
+      releaseMarginCall: (id, v) =>
+        set((s) => (s.marginCalls[id] ? { marginCalls: { ...s.marginCalls, [id]: { ...s.marginCalls[id]!, releasedAt: new Date().toISOString(), releasedBy: v.by, operationId: v.operationId } } } : s)),
+      markReminders: (ids) => set((s) => ({ reminders: { ...s.reminders, ...Object.fromEntries(ids.map((i) => [i, new Date().toISOString()])) } })),
     }),
-    { name: "credigit.ser.collateral", version: 1, storage: createJSONStorage(() => localStorage), partialize: ({ verifications, legal, valuations, liens, prices, pricesAt, marginCalls, insurance }) => ({ verifications, legal, valuations, liens, prices, pricesAt, marginCalls, insurance }) },
+    { name: "credigit.ser.collateral", version: 1, storage: createJSONStorage(() => localStorage), partialize: ({ verifications, legal, valuations, liens, prices, pricesAt, marginCalls, insurance, reminders }) => ({ verifications, legal, valuations, liens, prices, pricesAt, marginCalls, insurance, reminders }) },
   ),
 );
 
@@ -94,6 +103,8 @@ export function useCollateralView(): CollateralView[] {
   const legal = useCollateralStore((s) => s.legal);
   const liens = useCollateralStore((s) => s.liens);
   const insurance = useCollateralStore((s) => s.insurance);
+  // Haircuts are business rules read inside adjustedValue(); recompute when tenant rule values change.
+  const ruleValues = useRulesStore((s) => s.values);
   return useMemo(() => {
     const fac = new Map(facilities.map((f) => [f.id, f]));
     return collateral.map((c) => {
@@ -110,7 +121,7 @@ export function useCollateralView(): CollateralView[] {
         basisValue: a.value,
         basis: a.basis,
         haircutPct: a.haircut.pct,
-        haircutSource: a.haircut.source === "PRD §6.7.3" ? `PRD §6.7.3 — ${a.haircut.prdCategory}` : "Tenant parameter (demo value)",
+        haircutSource: a.haircut.prdCategory ? `${a.haircut.source} — ${a.haircut.prdCategory}` : "Tenant parameter (demo value) — business rule",
         adjusted: a.adjusted,
         eligible: a.eligible,
         exposure,
@@ -121,5 +132,6 @@ export function useCollateralView(): CollateralView[] {
         insuranceExpiryEffective: insurance[c.id]?.expiry ?? c.insuranceExpiry,
       };
     });
-  }, [collateral, facilities, prices, verifications, legal, liens, insurance]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collateral, facilities, prices, verifications, legal, liens, insurance, ruleValues]);
 }

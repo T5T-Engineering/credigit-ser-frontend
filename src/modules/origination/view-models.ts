@@ -1,8 +1,9 @@
 /** Mappers from domain records to @credigit/web-ui component shapes (no JSX). */
-import type { ActivityItem, ApprovalParticipant, ApprovalTier, DocumentItem } from "@credigit/web-ui";
+import type { ActivityItem, ApprovalParticipant, ApprovalTier, DocumentItem, OperationDecisionKind, OperationStatus as UiOperationStatus, OperationStep, OperationStepStatus } from "@credigit/web-ui";
 import type { ApprovalStep, AuditEvent, DocumentRecord, User } from "@/lib/data/types";
 import { roleById } from "@/lib/rbac/roles";
-import { chartFlow } from "@/lib/workflow";
+import { stepApproverLabel, stepDueAt, type OperationInstance, type OperationStatus, type StepDecision, type WorkflowStep } from "@/lib/platform/operations";
+import { FAST_TRACK_PAIR, tierByPair } from "@/lib/workflow";
 import { dateTime, moneyShort } from "@/lib/format";
 
 const docStatus: Record<DocumentRecord["status"], DocumentItem["status"]> = {
@@ -39,11 +40,10 @@ export function toActivityItem(e: AuditEvent): ActivityItem {
   };
 }
 
-/** Tier limit for a pair id (Standard from the tenant chart-flow; Fast-Track FT1 = BDM limit). */
-export function pairLimit(pair: string | undefined, roleId: ApprovalStep["roleId"]): number | null {
-  if (pair === "FT1") return roleById.bdm.limitNgn;
-  const tier = chartFlow.find((t) => t.pair === pair) ?? chartFlow.find((t) => t.roles.includes(roleId) && t.roles.length === 1);
-  return tier ? tier.limit : roleById[roleId].limitNgn;
+/** Tier limit for a chain step (from the chart-flow business rules). */
+export function pairLimit(pair: string | undefined): number | null {
+  const tier = tierByPair(pair);
+  return tier ? tier.limit : null;
 }
 
 function participant(s: ApprovalStep, users: User[]): ApprovalParticipant {
@@ -70,7 +70,7 @@ export function toApprovalTiers(chain: ApprovalStep[], users: User[]): ApprovalT
     const key = s.pair ?? s.id;
     let t = tiers.find((x) => x.id === key);
     if (!t) {
-      const limit = pairLimit(s.pair, s.roleId);
+      const limit = pairLimit(s.pair ?? s.id.split("-")[0]);
       t = {
         id: key,
         title: s.pair ? `Tier ${s.tier} — co-signers` : s.roleId === "bdm" ? `Tier ${s.tier} — recommendation` : `Tier ${s.tier} — ${roleById[s.roleId].name}`,
@@ -83,4 +83,46 @@ export function toApprovalTiers(chain: ApprovalStep[], users: User[]): ApprovalT
     t.participants.push(participant(s, users));
   }
   return tiers;
+}
+
+// ---------------------------------------------------------------- Operations instance → library shapes
+
+const uiStatus: Record<OperationStatus, UiOperationStatus> = { Pending: "pending", "In progress": "in_progress", Approved: "approved", Rejected: "rejected", Returned: "returned", Cancelled: "cancelled" };
+export const toUiOperationStatus = (s: OperationStatus) => uiStatus[s];
+
+function decisionKind(d: StepDecision, recommend: boolean): OperationDecisionKind {
+  return d.decision === "approve" ? (recommend ? "recommended" : "approved") : d.decision === "reject" ? "rejected" : "returned";
+}
+
+/** Steps of an operation instance for `WorkflowInstanceCard` / `OperationTimeline`. */
+export function toOperationSteps(instance: OperationInstance, steps: WorkflowStep[]): OperationStep[] {
+  const open = instance.status === "Pending" || instance.status === "In progress";
+  return steps.map((step, i) => {
+    const recommend = i === 0 && step.approverRoles.length === 1 && step.id !== FAST_TRACK_PAIR;
+    let status: OperationStepStatus = i < instance.stepIndex ? "approved" : "pending";
+    if (i === instance.stepIndex) {
+      status = open ? "current" : instance.status === "Approved" ? "approved" : instance.status === "Rejected" ? "rejected" : instance.status === "Returned" ? "returned" : "skipped";
+    }
+    const tier = tierByPair(step.id);
+    const adjudicator = step.adjudicatorRole ? roleById[step.adjudicatorRole]?.name : undefined;
+    return {
+      id: step.id,
+      name: step.name,
+      status,
+      mode: step.mode,
+      approvers: `${stepApproverLabel(step)}${adjudicator ? ` · adjudicator: ${adjudicator}` : ""}`,
+      decisions: instance.decisions
+        .filter((d) => d.stepId === step.id)
+        .map((d, k) => ({ id: `${step.id}-${k}`, actor: { name: d.actorName, role: `${roleById[d.roleId]?.name ?? d.roleId}${d.adjudication ? " (adjudicator)" : ""}` }, decision: decisionKind(d, recommend), time: dateTime(d.at), comment: d.comment || undefined })),
+      dueAt: i === instance.stepIndex && open ? stepDueAt(instance) : undefined,
+      meta:
+        instance.awaitingAdjudication && i === instance.stepIndex
+          ? `Co-signers disagree — awaiting the ${adjudicator ?? "adjudicator"}`
+          : tier
+            ? tier.limit === Number.POSITIVE_INFINITY
+              ? "Apex — no limit"
+              : `Limit up to ${moneyShort(tier.limit)} · SLA ${step.slaHours}h`
+            : `SLA ${step.slaHours}h`,
+    };
+  });
 }

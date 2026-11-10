@@ -3,7 +3,8 @@
 import { Badge, DataTable, type DataTableColumn, DescriptionList, Drawer, Stack, StatusBadge, Text, riskStatusTones } from "@credigit/web-ui";
 import { ms } from "./common";
 import { money, pct } from "@/lib/format";
-import { CCF_GUARANTEE, CCF_REVOLVING, FLI_OVERLAY, RECOVERY_DISCOUNT, stageTone, type EclRow } from "./data";
+import { eclParams, stageTone, type EclRow } from "./data";
+import { useRulesVersion } from "./governance";
 
 export const cbnTones = { ...riskStatusTones, Performing: "success", Watchlist: "warning", Substandard: "warning", Doubtful: "danger", Lost: "danger" } as const;
 
@@ -66,6 +67,8 @@ export function EclTable({ rows, onOpen, label = "Facility-level ECL" }: { rows:
 /** Drill-down: every input of one facility's ECL, with the formula applied to its numbers. */
 export function EclDetailDrawer({ row, onClose }: { row: EclRow | null; onClose: () => void }) {
   const f = row?.facility;
+  useRulesVersion();
+  const p = eclParams();
   return (
     <Drawer open={!!row} onOpenChange={(o) => !o && onClose()} title={row ? `${row.id} · ${row.obligor?.name ?? ""}` : ""} description="ECL = PD × LGD × EAD (PRD §8)" size="large">
       {row && f && (
@@ -92,12 +95,12 @@ export function EclDetailDrawer({ row, onClose }: { row: EclRow | null; onClose:
                   mono: true,
                   hint: f.currency === "USD" ? "USD revalued at the configured spot rate" : "CBA facility ledger",
                 },
-                { label: "Accrued interest", value: money(row.accrued), mono: true, hint: "Outstanding × rate × (min(DPD, 90) + 30) / 365" },
+                { label: "Accrued interest", value: money(row.accrued), mono: true, hint: `Outstanding × rate × (min(DPD, ${p.accrualDpdCap}) + ${p.accrualWindow}) / 365` },
                 {
                   label: "Undrawn × CCF",
                   value: money(row.undrawnCcf),
                   mono: true,
-                  hint: `Overdraft/revolving CCF ${CCF_REVOLVING * 100}% · guarantees ${CCF_GUARANTEE * 100}% (demo)`,
+                  hint: `Overdraft/revolving CCF ${pct(p.ccfRevolving * 100, 0)} · guarantees ${pct(p.ccfGuarantee * 100, 0)} (business rules)`,
                 },
                 { label: "EAD", value: money(row.ead), mono: true },
               ]}
@@ -109,7 +112,7 @@ export function EclDetailDrawer({ row, onClose }: { row: EclRow | null; onClose:
               columns={2}
               items={[
                 { label: "Internal risk grade", value: String(row.obligor?.riskGrade ?? "—"), mono: true },
-                { label: "Forward-looking overlay", value: `× ${FLI_OVERLAY.toFixed(3)}`, mono: true, hint: "Probability-weighted macro scenarios" },
+                { label: "Forward-looking overlay", value: `× ${p.fli.toFixed(3)}`, mono: true, hint: "Probability-weighted macro scenarios" },
                 { label: "12-month PD", value: pct(row.pd12 * 100, 2), mono: true },
                 { label: "Lifetime PD", value: pct(row.pdLifetime * 100, 2), mono: true, hint: "1 − (1 − PD₁₂)^remaining years" },
                 { label: "PD applied", value: pct(row.pd * 100, 2), mono: true, hint: row.stage === 3 ? "Credit-impaired: PD = 100%" : row.basis },
@@ -125,9 +128,9 @@ export function EclDetailDrawer({ row, onClose }: { row: EclRow | null; onClose:
                   label: "Collateral recovery",
                   value: money(row.recovery),
                   mono: true,
-                  hint: `Perfected FSV (MTM for quoted shares) × (1 − haircut) × ${RECOVERY_DISCOUNT} work-out discount`,
+                  hint: `Perfected FSV (MTM for quoted shares) × (1 − haircut) × ${pct(p.recoveryRate * 100, 0)} recovered after work-out`,
                 },
-                { label: "LGD", value: pct(row.lgd * 100, 1), mono: true, hint: "1 − recovery / EAD, floor 10%, unsecured cap 75% (demo)" },
+                { label: "LGD", value: pct(row.lgd * 100, 1), mono: true, hint: `1 − recovery / EAD, floor ${pct(p.lgdFloor * 100, 0)}, performing cap ${pct(p.lgdCap * 100, 0)} (business rules)` },
               ]}
             />
           </Stack>

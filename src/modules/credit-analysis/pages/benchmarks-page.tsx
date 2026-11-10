@@ -28,7 +28,7 @@ import { useHydrated } from "@/lib/auth/session";
 import { rarPosition, rarMidpoint, type RarPosition } from "@/lib/rar";
 import type { Obligor } from "@/lib/data/types";
 import { CORPUS_VERSION, corpusMetrics, formatMetric, lifeCycleTone, ngxById, ngxForSector, sectorDistribution, sectorMapping } from "../data";
-import { assess, OUTLIER_SD, ratioBenchmarks, type RatioBenchmark } from "../logic";
+import { assess, outlierSd, ratioBenchmarks, type RatioBenchmark } from "../logic";
 import { cardinalPoints } from "../parameters";
 import { assessmentHref, PostureBadge } from "../shared";
 import { ordinal } from "../assessment/peers-tab";
@@ -252,7 +252,7 @@ export function BenchmarksPage() {
                   tone={ngx ? lifeCycleTone[ngx.lifeCycle] : "neutral"}
                   hint={ngx?.lifeCycleReason}
                 />
-                <StatCard label="Ratio outliers" value={String(outliers.length)} icon={<BarChart3 aria-hidden />} tone="warning" hint={`Top/bottom decile or > ${OUTLIER_SD} SD`} />
+                <StatCard label="Ratio outliers" value={String(outliers.length)} icon={<BarChart3 aria-hidden />} tone="warning" hint={`Top/bottom decile or > ${outlierSd()} SD`} />
               </Grid>
 
               {inSector.length ? (

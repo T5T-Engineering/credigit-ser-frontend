@@ -9,6 +9,7 @@ import { DEMO_NOW } from "@/lib/data/seed";
 import type { Application, ApprovalStep, CbnClass, Facility, Obligor, Sector, Task } from "@/lib/data/types";
 import type { RoleId } from "@/lib/rbac/roles";
 import { useApplications, useFacilities, useObligors, useSectors, useTasks } from "@/lib/data/hooks";
+import { getRule, useRulesStore } from "@/lib/platform/rules";
 
 export const DAY = 24 * 60 * 60 * 1000;
 export const nowMs = DEMO_NOW.getTime();
@@ -37,7 +38,8 @@ export function useRoleTasks(roleId: RoleId | undefined): Task[] {
 }
 
 export const isOverdue = (iso: string) => new Date(iso).getTime() < nowMs;
-export const isDueSoon = (iso: string, days = 2) => {
+/** Due within `days` (default: rule workspace.slaDueSoonDays). */
+export const isDueSoon = (iso: string, days = getRule<number>("workspace.slaDueSoonDays")) => {
   const t = new Date(iso).getTime();
   return t >= nowMs && t - nowMs <= days * DAY;
 };
@@ -61,8 +63,9 @@ export type PortfolioSnapshot = {
  * Portfolio figures for the dashboard.
  * NPL ratio = outstanding classified Substandard + Doubtful + Lost ÷ total outstanding (active book).
  * Sector share = sector outstanding ÷ total outstanding, compared with the sector's limit % (Rules & parameters).
+ * "Near limit" = share ≥ rule workspace.nearLimitPct % of the limit.
  */
-export function portfolioSnapshot(facilities: Facility[], obligors: Obligor[], sectors: Sector[]): PortfolioSnapshot {
+export function portfolioSnapshot(facilities: Facility[], obligors: Obligor[], sectors: Sector[], nearLimitPct = getRule<number>("workspace.nearLimitPct")): PortfolioSnapshot {
   const live = facilities.filter((f) => f.status !== "Closed" && f.status !== "Written off");
   const obligorById = new Map(obligors.map((o) => [o.id, o]));
   const outstanding = live.reduce((s, f) => s + f.outstanding, 0) || 1;
@@ -90,7 +93,7 @@ export function portfolioSnapshot(facilities: Facility[], obligors: Obligor[], s
     byClass: classes.map((c) => ({ label: c, value: sum((f) => f.cbnClass === c) })),
     bySector,
     breaches: bySector.filter((s) => s.sharePct > s.limitPct),
-    nearBreach: bySector.filter((s) => s.sharePct <= s.limitPct && s.sharePct >= s.limitPct * 0.9),
+    nearBreach: bySector.filter((s) => s.sharePct <= s.limitPct && s.sharePct >= s.limitPct * (nearLimitPct / 100)),
   };
 }
 
@@ -98,7 +101,8 @@ export function usePortfolioSnapshot() {
   const facilities = useFacilities();
   const obligors = useObligors();
   const sectors = useSectors();
-  return useMemo(() => portfolioSnapshot(facilities, obligors, sectors), [facilities, obligors, sectors]);
+  const nearLimitPct = useRulesStore((s) => s.values["workspace.nearLimitPct"]);
+  return useMemo(() => portfolioSnapshot(facilities, obligors, sectors, typeof nearLimitPct === "number" ? nearLimitPct : undefined), [facilities, obligors, sectors, nearLimitPct]);
 }
 
 export const classTone: Record<CbnClass, "success" | "warning" | "accent" | "danger" | "neutral"> = {

@@ -5,7 +5,8 @@ import { AiDraftPanel, Card, CardContent, CardHeader, CardTitle, ChecklistPanel,
 import { DEMO_NOW } from "@/lib/data/seed";
 import { date, dateTime, money } from "@/lib/format";
 import { roleById } from "@/lib/rbac/roles";
-import { fastTrackVariants } from "../params";
+import { fastTrackVariants, inGroup } from "../params";
+import { recordChange } from "../actions";
 import { recommendationLabel, recommendationLabelTones } from "../logic";
 import type { AppCtx } from "./context";
 import { gateItems } from "./next-step";
@@ -18,9 +19,9 @@ export function OverviewTab({ c }: { c: AppCtx }) {
   const creator = c.users.find((u) => u.id === app.createdById);
   const rm = c.users.find((u) => u.id === obligor.relationshipManagerId);
   const index = lifecycle.indexOf(app.stage as (typeof lifecycle)[number]);
-  const variant = fastTrackVariants.find((v) => v.id === c.extra.variant);
+  const variant = fastTrackVariants().find((v) => v.id === c.extra.variant);
   const memo = c.extra.memo;
-  const canSign = c.canEdit && (c.roleId === "credit-analyst" || c.roleId === "cco");
+  const canSign = c.canEdit && inGroup("recommenders", c.roleId);
 
   return (
     <Stack gap="large">
@@ -107,8 +108,9 @@ export function OverviewTab({ c }: { c: AppCtx }) {
                 canSign
                   ? (text) => {
                       const edited = text.trim() !== draftMemo(c).trim();
-                      c.patchExtra({ memo: { text, by: c.me.name, at: new Date().toISOString(), edited } });
-                      c.log(edited ? "Edited and signed off AI-drafted credit memo" : "Signed off AI-drafted credit memo", undefined, "Human sign-off");
+                      void recordChange(app.id, { point: "memo.sign-off", event: "origination.memo.signed-off", action: edited ? "Edited and signed off AI-drafted credit memo" : "Signed off AI-drafted credit memo", after: "Human sign-off", payload: { edited } }).then((r) => {
+                        if (r.ok) c.patchExtra({ memo: { text, by: c.me.name, at: new Date().toISOString(), edited } });
+                      });
                     }
                   : undefined
               }

@@ -52,8 +52,31 @@ export const navigation: NavGroup[] = [
     items: [
       { module: "dashboard", label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
       { module: "inbox", label: "My tasks", href: "/inbox", icon: Inbox },
-      { module: "executive", label: "Executive view", href: "/executive", icon: Gauge, phase: 1, prd: "§6.11, §3 row 19" },
-      { module: "ai-console", label: "AI analytics", href: "/ai", icon: Bot, phase: 2, prd: "§6.12–6.13" },
+      {
+        module: "executive",
+        label: "Executive view",
+        href: "/executive",
+        icon: Gauge,
+        phase: 1,
+        prd: "§6.11, §3 row 19",
+        pages: [
+          { label: "Cockpit", href: "/executive" },
+          { label: "Board Risk Committee pack", href: "/executive/board-pack" },
+        ],
+      },
+      {
+        module: "ai-console",
+        label: "AI analytics",
+        href: "/ai",
+        icon: Bot,
+        phase: 2,
+        prd: "§6.12–6.13",
+        pages: [
+          { label: "Query console", href: "/ai" },
+          { label: "AI activity", href: "/ai/activity" },
+          { label: "Query log & schedules", href: "/ai/log" },
+        ],
+      },
     ],
   },
   {
@@ -68,6 +91,8 @@ export const navigation: NavGroup[] = [
         prd: "§6.1",
         pages: [
           { label: "Applications", href: "/origination" },
+          { label: "My queue", href: "/origination?scope=mine" },
+          { label: "My applications", href: "/origination?scope=created" },
           { label: "New application", href: "/origination/new" },
           { label: "Approval chart-flows", href: "/origination/chart-flows" },
         ],
@@ -84,6 +109,7 @@ export const navigation: NavGroup[] = [
           { label: "Peer benchmarks", href: "/credit-analysis/benchmarks", phase: 2 },
           { label: "Share of wallet", href: "/credit-analysis/share-of-wallet", phase: 2 },
           { label: "NGX sector corpus", href: "/credit-analysis/sector-corpus", phase: 2 },
+          { label: "My requests", href: "/credit-analysis/requests" },
         ],
       },
       {
@@ -126,6 +152,7 @@ export const navigation: NavGroup[] = [
           { label: "Covenants & inflows", href: "/monitoring/covenants" },
           { label: "Guarantees & overdrafts", href: "/monitoring/guarantees" },
           { label: "Exceptions & escalations", href: "/monitoring/exceptions" },
+          { label: "Escalation protocol", href: "/monitoring/escalation" },
         ],
       },
       {
@@ -138,6 +165,7 @@ export const navigation: NavGroup[] = [
         pages: [
           { label: "Collateral register", href: "/collateral" },
           { label: "Legal review", href: "/collateral/legal" },
+          { label: "Valuation verification", href: "/collateral/verification" },
           { label: "Share-backed (SEC/CSCS)", href: "/collateral/shares", phase: 2 },
         ],
       },
@@ -177,6 +205,7 @@ export const navigation: NavGroup[] = [
           { label: "PD / LGD / EAD models", href: "/ifrs9/models" },
           { label: "ICAAP", href: "/ifrs9/icaap" },
           { label: "Declassification", href: "/ifrs9/declassification" },
+          { label: "Rules & approvals", href: "/ifrs9/governance" },
         ],
       },
       {
@@ -191,6 +220,7 @@ export const navigation: NavGroup[] = [
           { label: "Liquidity", href: "/market-risk/liquidity" },
           { label: "ILAAP", href: "/market-risk/ilaap", phase: 3 },
           { label: "Stress testing", href: "/market-risk/stress-testing", phase: 3 },
+          { label: "Limits, rules & approvals", href: "/market-risk/governance" },
         ],
       },
       {
@@ -207,7 +237,22 @@ export const navigation: NavGroup[] = [
           { label: "BCM & crisis", href: "/operational-risk/bcm" },
         ],
       },
-      { module: "enterprise-risk", label: "Enterprise risk", href: "/enterprise-risk", icon: Building2, phase: 2, prd: "§6.10" },
+      {
+        module: "enterprise-risk",
+        label: "Enterprise risk",
+        href: "/enterprise-risk",
+        icon: Building2,
+        phase: 2,
+        prd: "§6.10",
+        pages: [
+          { label: "Risk appetite", href: "/enterprise-risk" },
+          { label: "Risk register", href: "/enterprise-risk/register" },
+          { label: "Insider & related party", href: "/enterprise-risk/insider" },
+          { label: "Regulatory & policies", href: "/enterprise-risk/regulatory" },
+          { label: "BRC pack", href: "/enterprise-risk/brc-pack" },
+          { label: "Lines of defence", href: "/enterprise-risk/lines-of-defence" },
+        ],
+      },
     ],
   },
   {
@@ -233,7 +278,19 @@ export const navigation: NavGroup[] = [
   {
     label: "Administration",
     items: [
-      { module: "connectors", label: "Connectors", href: "/connectors", icon: Cable, phase: 1, prd: "§5" },
+      {
+        module: "connectors",
+        label: "Connectors",
+        href: "/connectors",
+        icon: Cable,
+        phase: 1,
+        prd: "§5",
+        pages: [
+          { label: "Overview", href: "/connectors" },
+          { label: "Recent runs", href: "/connectors/runs" },
+          { label: "Staging & reconciliation", href: "/connectors/staging" },
+        ],
+      },
       {
         module: "admin",
         label: "Users & roles",

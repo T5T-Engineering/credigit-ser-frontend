@@ -1,38 +1,57 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { CalendarClock, CheckCircle2, FileClock, FileSignature, Scale } from "lucide-react";
-import { Alert, Card, DataTable, Grid, Stack, StatCard, StatusBadge, Steps, Text, type DataTableColumn } from "@credigit/web-ui";
+import { Alert, Badge, Card, DataTable, Grid, SegmentedControl, Stack, StatCard, StatusBadge, Steps, Text, type DataTableColumn } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { useApplications, useLookups } from "@/lib/data/hooks";
 import { date, money, moneyShort } from "@/lib/format";
 import type { Application } from "@/lib/data/types";
+import { canDecide, useOperationsStore, type OperationInstance } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
 import { daysBetween } from "../../credit-admin/common";
 import { displayStatus, expiresAt, letterStatusTones, useOfferLetters, type LetterDisplayStatus, type OfferLetter } from "../store";
 
-type Row = { letter: OfferLetter; app?: Application; obligorName: string; status: LetterDisplayStatus; expires?: string };
+type Row = { letter: OfferLetter; app?: Application; obligorName: string; status: LetterDisplayStatus; expires?: string; pending?: OperationInstance; mine: boolean; awaitingMe: boolean };
+type Scope = "all" | "mine" | "awaiting";
 
 export function OfferLettersPage() {
   const letters = useOfferLetters();
   const apps = useApplications();
   const { obligor } = useLookups();
+  const { actor } = useScope();
+  const instances = useOperationsStore((s) => s.instances);
+  const recentDays = useRule<number>("offer-letters.recentAcceptanceDays");
+  const [scope, setScope] = useState<Scope>("all");
 
-  const rows: Row[] = useMemo(
-    () =>
-      letters
-        .map((letter) => {
-          const app = apps.find((a) => a.id === letter.applicationId);
-          return { letter, app, obligorName: (app && obligor.get(app.obligorId)?.name) ?? "—", status: displayStatus(letter), expires: expiresAt(letter) };
-        })
-        .sort((a, b) => b.letter.updatedAt.localeCompare(a.letter.updatedAt)),
-    [letters, apps, obligor],
-  );
+  const all: Row[] = useMemo(() => {
+    const open = new Map(instances.filter((i) => i.subject.type === "OfferLetter" && ["Pending", "In progress"].includes(i.status)).map((i) => [i.subject.id, i]));
+    return letters
+      .map((letter) => {
+        const app = apps.find((a) => a.id === letter.applicationId);
+        const ob = app ? obligor.get(app.obligorId) : undefined;
+        const pending = open.get(letter.id);
+        const awaitingMe = !!pending && canDecide(pending, actor).ok;
+        // "My letters": I originate / manage the relationship, I reviewed or recorded it, or a request on it is mine to act on.
+        const mine =
+          app?.createdById === actor.id ||
+          ob?.relationshipManagerId === actor.id ||
+          letter.legalSignedOffByName === actor.name ||
+          letter.acceptanceRecordedByName === actor.name ||
+          pending?.requestedBy.id === actor.id ||
+          awaitingMe;
+        return { letter, app, obligorName: ob?.name ?? "—", status: displayStatus(letter), expires: expiresAt(letter), pending, mine, awaitingMe };
+      })
+      .sort((a, b) => b.letter.updatedAt.localeCompare(a.letter.updatedAt));
+  }, [letters, apps, obligor, instances, actor]);
+  const rows = scope === "all" ? all : all.filter((r) => (scope === "mine" ? r.mine : r.awaitingMe));
 
   const count = (s: LetterDisplayStatus) => rows.filter((r) => r.status === s).length;
   const inReview = rows.filter((r) => r.status === "Draft" || r.status === "Legal review");
   const issued = rows.filter((r) => r.status === "Issued");
-  const accepted30 = rows.filter((r) => r.status === "Accepted" && r.letter.acceptedAt && daysBetween(r.letter.acceptedAt) <= 30);
+  const accepted30 = rows.filter((r) => r.status === "Accepted" && r.letter.acceptedAt && daysBetween(r.letter.acceptedAt) <= recentDays);
 
   const columns: DataTableColumn<Row>[] = [
     {
@@ -50,7 +69,18 @@ export function OfferLettersPage() {
     { id: "obligor", header: "Obligor", accessor: (r) => r.obligorName, sortable: true, cell: (r) => <span className="font-medium text-fg">{r.obligorName}</span> },
     { id: "product", header: "Facility", accessor: (r) => r.app?.product ?? "—", sortable: true },
     { id: "amount", header: "Amount", accessor: (r) => r.app?.amount ?? 0, numeric: true, align: "end", sortable: true, cell: (r) => (r.app ? moneyShort(r.app.amount) : "—") },
-    { id: "status", header: "Status", accessor: (r) => r.status, sortable: true, cell: (r) => <StatusBadge status={r.status} tones={letterStatusTones} /> },
+    {
+      id: "status",
+      header: "Status",
+      accessor: (r) => r.status,
+      sortable: true,
+      cell: (r) => (
+        <Stack gap="none">
+          <StatusBadge status={r.status} tones={letterStatusTones} />
+          {r.awaitingMe ? <Badge tone="accent">Awaiting your sign-off</Badge> : r.pending ? <span className="text-xs text-fg-subtle">With Legal · {r.pending.id}</span> : null}
+        </Stack>
+      ),
+    },
     { id: "template", header: "Template", accessor: (r) => `v${r.letter.templateVersion}`, cell: (r) => <span className="font-mono text-xs">v{r.letter.templateVersion}</span> },
     { id: "clauses", header: "Clauses", accessor: (r) => r.letter.clauseIds.length + r.letter.customClauses.length, numeric: true, align: "end" },
     {
@@ -78,7 +108,7 @@ export function OfferLettersPage() {
         <Grid columns={{ base: 1, sm: 2, lg: 4 }} gap="medium">
           <StatCard label="Draft & in Legal review" value={String(inReview.length)} icon={<Scale aria-hidden />} hint={`${count("Draft")} draft · ${count("Legal review")} with Legal`} />
           <StatCard label="Issued — awaiting acceptance" value={String(issued.length)} icon={<FileClock aria-hidden />} tone="info" hint={issued.length ? `${moneyShort(issued.reduce((s, r) => s + (r.app?.amount ?? 0), 0))} on offer` : "None outstanding"} />
-          <StatCard label="Accepted (30 days)" value={String(accepted30.length)} icon={<CheckCircle2 aria-hidden />} tone="success" hint={`${count("Accepted")} accepted in total`} />
+          <StatCard label={`Accepted (${recentDays} days)`} value={String(accepted30.length)} icon={<CheckCircle2 aria-hidden />} tone="success" hint={`${count("Accepted")} accepted in total`} />
           <StatCard label="Expired offers" value={String(count("Expired"))} icon={<CalendarClock aria-hidden />} tone="danger" hint="Validity lapsed before acceptance (§7.3)" />
         </Grid>
 
@@ -104,9 +134,22 @@ export function OfferLettersPage() {
 
         {count("Expired") > 0 ? (
           <Alert tone="warning" title={`${count("Expired")} offer${count("Expired") > 1 ? "s have" : " has"} lapsed`}>
-            Offers lapse when not accepted within the validity period. Legal can re-issue a lapsed letter from its record.
+            Offers lapse when not accepted within the validity period. The Account Officer can request a re-issue from the letter record; Legal signs it off through Operations.
           </Alert>
         ) : null}
+
+        <div className="overflow-x-auto">
+          <SegmentedControl
+            label="Show"
+            value={scope}
+            onChange={(v) => setScope(v as Scope)}
+            options={[
+              { value: "all", label: `All letters (${all.length})` },
+              { value: "mine", label: `My letters (${all.filter((r) => r.mine).length})` },
+              { value: "awaiting", label: `Awaiting my sign-off (${all.filter((r) => r.awaitingMe).length})` },
+            ]}
+          />
+        </div>
 
         <DataTable
           label="Offer letters"
@@ -123,7 +166,8 @@ export function OfferLettersPage() {
           ]}
           defaultSort={{ id: "issued", direction: "desc" }}
           exportFilename="offer-letters.csv"
-          emptyState={<Text tone="muted">No offer letters match these filters.</Text>}
+          emptyState={<Text tone="muted">{scope === "all" ? "No offer letters match these filters." : scope === "mine" ? "No letters are linked to you." : "Nothing is waiting for your sign-off."}</Text>}
+
           mobileCard={(r) => (
             <Stack gap="xsmall">
               <div className="flex items-center justify-between gap-2">

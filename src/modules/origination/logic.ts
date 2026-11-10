@@ -7,8 +7,10 @@ import { DEMO_NOW } from "@/lib/data/seed";
 import type { Application, ApplicationStage, ApprovalStep, Collateral, Facility, Obligor, ProductType, Sector, User } from "@/lib/data/types";
 import { roleById, type RoleId } from "@/lib/rbac/roles";
 import { rarPosition, type RarPosition } from "@/lib/rar";
-import { applyDecision, buildApprovalChain, chainStatus, currentSteps } from "@/lib/workflow";
-import { offBalanceProducts, originationParams as P } from "./params";
+import { getRule } from "@/lib/platform/rules";
+import { actingRoles, useOperationsStore } from "@/lib/platform/operations";
+import { buildApprovalChain, chainStatus, currentSteps, tierByPair } from "@/lib/workflow";
+import { offBalanceProducts } from "./params";
 
 // ---------------------------------------------------------------- Stages
 
@@ -38,7 +40,7 @@ export function slaState(a: Application, now = DEMO_NOW): SlaState {
   const due = new Date(a.slaDueAt).getTime();
   const t = now.getTime();
   if (due < t) return "Breached";
-  if (due - t < 2 * 86_400_000) return "Due soon";
+  if (due - t < getRule<number>("origination.sla.dueSoonDays") * 86_400_000) return "Due soon";
   return "On track";
 }
 export const slaTones: Record<SlaState, Tone> = { Breached: "danger", "Due soon": "warning", "On track": "success", Closed: "neutral" };
@@ -56,57 +58,13 @@ export const recommendationLabelTones: Record<string, Tone> = { Proceed: "succes
 
 // ---------------------------------------------------------------- Chart-flow routing
 
-/** Adjudicators for Fast-Track-only pairs (Standard pairs come from src/lib/workflow.ts). PRD §6.1.3: BDM + CA → CCO. */
-export const fastTrackAdjudicators: Record<string, RoleId> = { FT1: "cco" };
-
 /**
- * Approval chain for a request (PRD §6.1.2 / §6.1.3).
- * Standard: the tenant chart-flow (BDM recommends, then co-signer pairs until within limit).
- * Fast-Track: within the BDM's limit the BDM and the Fast-Track Analyst co-sign (adjudicator CCO);
- * beyond it the Group Head / CCO / CRO tiers are added exactly as in the Standard ladder.
+ * Approval chain for a request (PRD §6.1.2 / §6.1.3), from the chart-flow business rules (src/lib/workflow.ts).
+ * Standard: BDM recommends, then co-signer pairs until within limit. Fast-Track: within the Fast-Track ceiling the
+ * Fast-Track pair co-signs; beyond it the Standard ladder applies (open question O1).
  */
 export function buildChainFor(flow: Application["flow"], amount: number, users: User[]): ApprovalStep[] {
-  if (flow === "Fast-Track" && amount <= (roleById.bdm.limitNgn ?? 0)) {
-    return (["bdm", "credit-analyst"] as RoleId[]).map((roleId) => ({
-      id: `FT1-${roleId}`,
-      tier: 1,
-      roleId,
-      assigneeId: users.find((u) => u.roleId === roleId)?.id,
-      decision: "pending" as const,
-      pair: "FT1",
-    }));
-  }
-  return buildApprovalChain(amount, users);
-}
-
-/** Apply a decision, including Fast-Track pair dissent → adjudicator (Standard pairs are handled by the shared engine). */
-export function decide(
-  chain: ApprovalStep[],
-  stepId: string,
-  decision: "approved" | "declined" | "recommended" | "returned",
-  comment: string,
-  users: User[],
-): ApprovalStep[] {
-  let next = applyDecision(chain, stepId, decision, comment, users);
-  const step = next.find((s) => s.id === stepId);
-  const adjudicator = step?.pair ? fastTrackAdjudicators[step.pair] : undefined;
-  if (step?.pair && adjudicator) {
-    const pair = next.filter((s) => s.pair === step.pair && !s.adjudicates);
-    const done = pair.every((s) => s.decision !== "pending");
-    if (done && pair.some((s) => s.decision === "approved") && pair.some((s) => s.decision === "declined")) {
-      next = next.map((s) => (s.pair === step.pair && !s.adjudicates ? { ...s, decision: "dissent" as const } : s));
-      const last = next.findLastIndex((s) => s.pair === step.pair);
-      next.splice(last + 1, 0, {
-        id: `${step.pair}-adjudication`,
-        tier: step.tier,
-        roleId: adjudicator,
-        assigneeId: users.find((u) => u.roleId === adjudicator)?.id,
-        decision: "pending",
-        adjudicates: step.pair,
-      });
-    }
-  }
-  return next;
+  return buildApprovalChain(amount, users, flow);
 }
 
 export { chainStatus, currentSteps };
@@ -119,13 +77,20 @@ export function finalAuthority(chain: ApprovalStep[]): string {
   return pair.length > 1 ? pair.map((s) => roleById[s.roleId].short).join(" + ") : roleById[last.roleId].name;
 }
 
+/** Limit of the tier a chain step belongs to (null = no limit configured). */
+export function stepTierLimit(s: Pick<ApprovalStep, "pair" | "roleId">): number | null {
+  const tier = tierByPair(s.pair);
+  if (tier) return tier.limit;
+  return null;
+}
+
 // ---------------------------------------------------------------- COP Ratio (PRD §6.1.4)
 
 export type CopBand = "High" | "Medium" | "Low";
 export function copBand(ratio: number | undefined): { band: CopBand; label: string; tone: Tone; requiresExplanation: boolean; weight: string } | undefined {
   if (ratio === undefined || Number.isNaN(ratio)) return undefined;
-  if (ratio >= P.copBands.high) return { band: "High", label: "High confidence", tone: "success", requiresExplanation: false, weight: "Declared financials carried at full weight" };
-  if (ratio >= P.copBands.medium) return { band: "Medium", label: "Medium confidence", tone: "warning", requiresExplanation: false, weight: "Declared financials dampened in the Internal Risk score" };
+  if (ratio >= getRule<number>("origination.cop.highBand")) return { band: "High", label: "High confidence", tone: "success", requiresExplanation: false, weight: "Declared financials carried at full weight" };
+  if (ratio >= getRule<number>("origination.cop.mediumBand")) return { band: "Medium", label: "Medium confidence", tone: "warning", requiresExplanation: false, weight: "Declared financials dampened in the Internal Risk score" };
   return { band: "Low", label: "Low confidence — requires explanation", tone: "danger", requiresExplanation: true, weight: "Declared financials heavily dampened; analyst must document a customer explanation" };
 }
 
@@ -146,7 +111,7 @@ export type LimitGateResult = {
   bookSize: number;
 };
 
-const weightFor = (product: ProductType) => (offBalanceProducts.includes(product) ? P.offBalanceWeight : 1);
+const weightFor = (product: ProductType) => (offBalanceProducts().includes(product) ? getRule<number>("origination.offBalanceWeightPct") / 100 : 1);
 const live = (f: Facility) => f.status === "Active" || f.status === "Pending disbursement" || f.status === "Restructured";
 
 export function limitGate(
@@ -161,7 +126,8 @@ export function limitGate(
   const obligorExposure = book.filter((f) => f.obligorId === req.obligorId).reduce((s, f) => s + f.approvedAmount * weightFor(f.product), 0);
   const weightedRequest = req.amount * weightFor(req.product);
   const obligorTotal = obligorExposure + weightedRequest;
-  const solLimit = (P.shareholdersFunds * P.singleObligorPct) / 100;
+  const shareholdersFunds = getRule<number>("platform.shareholdersFundsNgn");
+  const solLimit = (shareholdersFunds * getRule<number>("origination.singleObligorPct")) / 100;
   const sector = sectors.find((s) => s.id === obligor?.sectorId);
   const sectorObligors = new Set(obligors.filter((o) => o.sectorId === obligor?.sectorId).map((o) => o.id));
   const sectorExposure = book.filter((f) => sectorObligors.has(f.obligorId)).reduce((s, f) => s + f.approvedAmount, 0) + req.amount;
@@ -174,7 +140,7 @@ export function limitGate(
     obligorTotal,
     solLimit,
     solUtilisation: obligorTotal / solLimit,
-    largeExposure: obligorTotal >= (P.shareholdersFunds * P.largeExposurePct) / 100,
+    largeExposure: obligorTotal >= (shareholdersFunds * getRule<number>("origination.largeExposurePct")) / 100,
     sector,
     sectorExposure,
     sectorLimit,
@@ -222,10 +188,10 @@ export function runEngine(i: EngineInput): EngineOutput {
   }
   rationale.push("Portfolio-limit gate: within single-obligor and sectoral limits.");
   const strongDefensive = position.base === "Defensive" && position.intensity !== "Marginally" && !position.neutral;
-  if (i.obligor.riskGrade >= 8 || strongDefensive || (band?.band === "Low" && !i.copExplained)) {
+  if (i.obligor.riskGrade >= getRule<number>("origination.engine.declineGradeAtOrAbove") || strongDefensive || (band?.band === "Low" && !i.copExplained)) {
     return { recommendation: "Decline", rationale, position };
   }
-  if (band?.band !== "High" || position.base === "Conservative" || position.base === "Defensive" || i.obligor.watchlist || i.obligor.riskGrade >= 6 || i.bureauAdverse || i.coverage < 1) {
+  if (band?.band !== "High" || position.base === "Conservative" || position.base === "Defensive" || i.obligor.watchlist || i.obligor.riskGrade >= getRule<number>("origination.engine.conditionsGradeAtOrAbove") || i.bureauAdverse || i.coverage < getRule<number>("origination.engine.minCoverPct") / 100) {
     return { recommendation: "Approve with conditions", rationale, position };
   }
   return { recommendation: "Approve", rationale, position };
@@ -287,12 +253,17 @@ export function inMyQueue(a: Application, roleId: RoleId | undefined, userId: st
       return roleId === "credit-analyst";
     case "Recommendation":
     case "Approval":
-      return currentSteps(a.approvals).some((s) => s.roleId === roleId) || (isBreach(a.limitGate) && (roleId === "cro" || roleId === "board"));
+      return openOperations(a.id).some((op) => op.requestedBy.id !== userId && actingRoles(op).includes(roleId));
     case "Offer":
       return roleId === "account-officer" && a.createdById === userId;
     default:
       return false;
   }
+}
+
+/** Open Operations instances (credit approval, limit exception, override) for an application. */
+export function openOperations(appId: string) {
+  return useOperationsStore.getState().instances.filter((i) => i.subject.id === appId && (i.operationType.startsWith("credit.facility-approval") || i.operationType.startsWith("origination.")) && (i.status === "Pending" || i.status === "In progress"));
 }
 
 /** Stage the application moves to once the Credit Analyst completes analysis. */

@@ -70,6 +70,10 @@ export type OperationInstance = {
   payload: unknown;
   /** Key facts shown to approvers. */
   summary: { label: string; value: string }[];
+  /** Amount (NGN) the decision is about — drives step-up authentication above approvals.stepUpThresholdNgn. */
+  amountNgn?: number;
+  /** Steps captured at submission, so later workflow/rule changes never reshape an in-flight request. */
+  steps?: WorkflowStep[];
   requestedBy: { id: string; name: string; roleId: RoleId };
   requestedAt: string;
   status: OperationStatus;
@@ -139,9 +143,18 @@ export function stepDueAt(instance: OperationInstance): string | undefined {
   return step ? hoursFromNow(instance.stepStartedAt, step.slaHours) : undefined;
 }
 
+/** Steps for an instance: the snapshot taken at submission (falls back to the live definition for old records). */
+export function instanceSteps(instance: OperationInstance): WorkflowStep[] {
+  return instance.steps ?? getDefinition(instance.operationType).steps;
+}
+
 export function currentStep(instance: OperationInstance): WorkflowStep | undefined {
-  const def = getDefinition(instance.operationType);
-  return def.steps[instance.stepIndex];
+  return instanceSteps(instance)[instance.stepIndex];
+}
+
+/** Whether a decision on this instance needs step-up authentication (amount above the tenant threshold). */
+export function requiresStepUp(instance: OperationInstance): boolean {
+  return typeof instance.amountNgn === "number" && instance.amountNgn > getRule<number>("approvals.stepUpThresholdNgn");
 }
 
 /** Roles that may act now (approvers, or the adjudicator after a split). */
@@ -187,7 +200,7 @@ function notifyApprovers(instance: OperationInstance) {
   });
 }
 
-export type SubmitInput<P> = { title: string; subject: EventSubject; payload: P; summary?: { label: string; value: string }[] };
+export type SubmitInput<P> = { title: string; subject: EventSubject; payload: P; summary?: { label: string; value: string }[]; /** Amount (NGN) in question; used for step-up. */ amountNgn?: number };
 export type SubmitResult = { ok: true; instance: OperationInstance; applied: boolean } | { ok: false; reason: string };
 
 /** Submit an operation for approval. Applies immediately if the workflow is disabled or has no steps. */
@@ -207,6 +220,8 @@ export async function submitOperation<P>(type: string, input: SubmitInput<P>): P
     subject: input.subject,
     payload: before.ctx.payload,
     summary: input.summary ?? [],
+    amountNgn: input.amountNgn,
+    steps: def.steps,
     requestedBy: { id: actor.id, name: actor.name, roleId: actor.roleId },
     requestedAt: now,
     status: "Pending",
@@ -247,8 +262,10 @@ async function finalise(id: string, actor: Actor, status: "Approved" | "Rejected
 
 export type DecideResult = { ok: true; instance: OperationInstance } | { ok: false; reason: string };
 
+export type DecideOptions = { /** The UI re-authenticated the approver (OTP / PIN) for this decision. */ stepUpVerified?: boolean };
+
 /** Record a decision for the signed-in actor on the current step. */
-export async function decideOperation(id: string, decision: "approve" | "reject" | "return", comment: string): Promise<DecideResult> {
+export async function decideOperation(id: string, decision: "approve" | "reject" | "return", comment: string, options: DecideOptions = {}): Promise<DecideResult> {
   const instance = get(id);
   if (!instance) return { ok: false, reason: "Operation not found." };
   const actor = currentActor();
@@ -257,7 +274,10 @@ export async function decideOperation(id: string, decision: "approve" | "reject"
   if ((decision !== "approve" || getRule<boolean>("operations.commentAlwaysRequired")) && comment.trim().length < getRule<number>("operations.minCommentLength")) {
     return { ok: false, reason: `Add a comment of at least ${getRule<number>("operations.minCommentLength")} characters.` };
   }
-  const hook = await runHooks("operations.decide.before", { instance, decision, comment, actor });
+  if (decision === "approve" && requiresStepUp(instance) && !options.stepUpVerified) {
+    return { ok: false, reason: "This amount needs step-up authentication. Verify with your one-time code to approve." };
+  }
+  const hook = await runHooks("operations.decide.before", { instance, decision, comment, actor, stepUpVerified: options.stepUpVerified === true });
   if (!hook.ok) return { ok: false, reason: `Blocked by ${hook.vetoedBy}: ${hook.reason}` };
 
   const step = currentStep(instance)!;
@@ -273,9 +293,8 @@ export async function decideOperation(id: string, decision: "approve" | "reject"
   }
 
   const advance = async () => {
-    const def = getDefinition(instance.operationType);
     const next = instance.stepIndex + 1;
-    if (next >= def.steps.length) {
+    if (next >= instanceSteps(instance).length) {
       update(id, { decisions, awaitingAdjudication: false });
       await finalise(id, actor, "Approved", comment);
     } else {

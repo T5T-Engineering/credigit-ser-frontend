@@ -1,72 +1,63 @@
-import { SHAREHOLDERS_FUNDS } from "@/lib/params";
 /**
- * Loan-origination parameters for the demo tenant.
+ * Loan-origination parameters — read from business rules at call time (invariant 8).
  *
- * Every value here is tenant configuration held in the Rules & Parameters Engine (Admin → Rules & parameters).
- * Where the PRD states a value (CBN single-obligor 20%, off-balance-sheet 33⅓% weighting, the example COP bands)
- * it is used as written; everything else is an illustrative demo default and is labelled as such in the UI.
+ * Rules are defined in ./platform.ts (`origination.*`) and the chart-flow in src/lib/workflow.ts. These helpers
+ * parse the rule values into domain shapes. Never call them at module top level.
  */
-import type { CollateralType, ProductType } from "@/lib/data/types";
+import { getRule } from "@/lib/platform/rules";
+import type { CollateralType, DocumentRecord, ProductType } from "@/lib/data/types";
+import type { RoleId } from "@/lib/rbac/roles";
 
 /** Shown next to any value that is a demo default rather than a PRD rule. */
-export const TENANT_PARAM_NOTE = "Parameter — set by tenant (demo default)";
+export const TENANT_PARAM_NOTE = "Business rule — set by tenant (demo default)";
 
-/** Where these values are maintained. */
-export const PARAMS_HREF = "/admin/parameters/";
+/** Where these values are maintained (Operations → Business rules). */
+export const PARAMS_HREF = "/operations/rules";
 
-export const originationParams = {
-  /** Step-up authentication above this amount (PRD §4.2). Fallback only — the live value comes from Admin → Rules & parameters (useStepUpThreshold). */
-  highValueThreshold: 100_000_000,
-  /** SLA targets in calendar days from initiation to final approval. Demo defaults. */
-  slaDays: { Standard: 10, "Fast-Track": 3 } as const,
-  /** COP Ratio banding (PRD §6.1.4 example banding). */
-  copBands: { high: 0.85, medium: 0.6 },
-  /** Shareholders' funds unimpaired by losses (NGN). Demo default — would come from the tenant's latest audited accounts. */
-  shareholdersFunds: SHAREHOLDERS_FUNDS,
-  /** Single-obligor limit as % of shareholders' funds (CBN 3.2(a), PRD §5.6). */
-  singleObligorPct: 20,
-  /** Weighting applied to off-balance-sheet engagements (CBN 3.2(b), PRD §5.6). */
-  offBalanceWeight: 1 / 3,
-  /** Large-exposure definition: ≥ 10% of shareholders' funds (CBN 3.2(d)). */
-  largeExposurePct: 10,
-} as const;
+export const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-/** Off-balance-sheet (contingent) products — weighted at 33⅓% for the single-obligor test. */
-export const offBalanceProducts: ProductType[] = ["Bank guarantee", "Advance payment guarantee", "Trade finance (LC)"];
+/** Calendar days from initiation to final approval for a flow. */
+export function slaDays(flow: "Standard" | "Fast-Track"): number {
+  return getRule<number>(flow === "Fast-Track" ? "origination.sla.fastTrackDays" : "origination.sla.standardDays");
+}
 
-/** Fast-Track eligible product variants (PRD §6.1.3) and the catalogue product each maps to. */
-export const fastTrackVariants: { id: string; label: string; product: ProductType }[] = [
-  { id: "apg", label: "APG issuance", product: "Advance payment guarantee" },
-  { id: "bid-bond", label: "Bid bond", product: "Bank guarantee" },
-  { id: "custom-bond", label: "Custom bond", product: "Bank guarantee" },
-  { id: "tod", label: "Temporary overdraft (TOD)", product: "Overdraft" },
-  { id: "cash-backed", label: "Cash-backed facility", product: "Term loan" },
-];
+/** Products offered for origination (tenant catalogue). */
+export function productOptions(): ProductType[] {
+  return getRule<string[]>("origination.products") as ProductType[];
+}
 
-export const productOptions: ProductType[] = [
-  "Term loan",
-  "Overdraft",
-  "Revolving credit",
-  "Lease finance",
-  "Trade finance (LC)",
-  "Bank guarantee",
-  "Advance payment guarantee",
-  "Invoice discounting",
-  "Mortgage",
-  "Asset finance",
-];
+/** Off-balance-sheet (contingent) products — weighted for the single-obligor test (CBN 3.2(b)). */
+export function offBalanceProducts(): ProductType[] {
+  return getRule<string[]>("origination.offBalanceProducts") as ProductType[];
+}
 
-/** Collateral haircuts by type (demo defaults, matching the seeded register; tenant-configurable). */
-export const collateralHaircuts: Record<CollateralType, number> = {
-  "Legal mortgage": 30,
-  "Equitable mortgage": 40,
-  Debenture: 50,
-  "Quoted shares": 40,
-  "Cash / lien on deposit": 0,
-  Vehicle: 40,
-  Equipment: 45,
-  "Domiciliation of proceeds": 60,
-  "Personal guarantee": 100,
-  "Corporate guarantee": 70,
-  "Insurance policy": 50,
-};
+/** Fast-Track eligible product variants (PRD §6.1.3): rule entries "Label = Catalogue product". */
+export function fastTrackVariants(): { id: string; label: string; product: ProductType }[] {
+  return getRule<string[]>("origination.fastTrack.variants")
+    .map((entry) => entry.split("=").map((x) => x.trim()))
+    .filter((parts) => parts.length === 2 && parts[0] && parts[1])
+    .map(([label, product]) => ({ id: slug(label!), label: label!, product: product as ProductType }));
+}
+
+/** Haircut % applied to a newly pledged collateral item of this type. */
+export function haircutFor(type: CollateralType): number {
+  return getRule<number>(`origination.haircut.${slug(type)}`);
+}
+
+/** Documents required for an obligor type. */
+export function requiredKinds(obligorType: string): DocumentRecord["kind"][] {
+  const base = getRule<string[]>("origination.docs.required") as DocumentRecord["kind"][];
+  const extra = getRule<string[]>("origination.docs.requiredNonRetail") as DocumentRecord["kind"][];
+  return obligorType === "Retail" ? base : [...base, ...extra.filter((k) => !base.includes(k))];
+}
+
+/** Role groups (tenant role mappings). */
+export type RoleGroup = "initiators" | "analysts" | "recommenders" | "releasers" | "uploaders";
+export function rolesFor(group: RoleGroup): RoleId[] {
+  return getRule<string[]>(`origination.roles.${group}`) as RoleId[];
+}
+export const inGroup = (group: RoleGroup, roleId: RoleId | undefined) => Boolean(roleId && rolesFor(group).includes(roleId));
+
+/** Rule shortcuts. */
+export const num = (key: string) => getRule<number>(`origination.${key}`);
+export const text = (key: string) => getRule<string>(`origination.${key}`);

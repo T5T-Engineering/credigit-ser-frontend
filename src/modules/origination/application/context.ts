@@ -8,6 +8,7 @@ import type { RoleId } from "@/lib/rbac/roles";
 import { bureauAdverse, bureauReports, reconciliation, seedComments, useExtra, useOriginationStore, type ApplicationExtra, type BureauReport, type OriginationComment, type Reconciliation } from "../data";
 import { lendingValue, limitGate, runEngine, tagCovenants, type EngineOutput, type LibraryClause, type LimitGateResult } from "../logic";
 import { useMe } from "../use-me";
+import { useRulesVersion } from "../use-params";
 
 export type AppCtx = {
   app: Application;
@@ -48,6 +49,7 @@ export function useApplicationContext(app: Application | undefined): AppCtx | un
   const extra = useExtra(app?.id);
   const patch = useOriginationStore((s) => s.patch);
   const db = useDbActions();
+  const rulesVersion = useRulesVersion();
 
   const log = useCallback(
     (action: string, before?: string, after?: string, entityType = "Application", entityId?: string) => {
@@ -104,5 +106,6 @@ export function useApplicationContext(app: Application | undefined): AppCtx | un
       patchExtra,
       log,
     };
-  }, [app, obligors, sectors, docsAll, collateralAll, facilities, users, me, roleId, canEdit, extra, change, patchExtra, log]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- business rules are read at call time; re-derive when they change
+  }, [app, obligors, sectors, docsAll, collateralAll, facilities, users, me, roleId, canEdit, extra, change, patchExtra, log, rulesVersion]);
 }

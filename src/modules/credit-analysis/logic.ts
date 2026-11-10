@@ -11,6 +11,8 @@
  *    recomputed with the shared formula in `@/lib/rar` (never forked here).
  */
 import { createSeed } from "@/lib/data/seed";
+import { getRule } from "@/lib/platform/rules";
+import type { Application } from "@/lib/data/types";
 import { rarPosition, rarMidpoint, type RarPosition } from "@/lib/rar";
 import type { Obligor, Posture, RarScores } from "@/lib/data/types";
 import {
@@ -51,30 +53,21 @@ export function seedRar(id: string): RarScores | undefined {
 
 export type CopBand = "High Confidence" | "Medium Confidence" | "Low Confidence";
 
-/** PRD example banding (tenant-configurable): ≥0.85 High, 0.60–0.84 Medium, <0.60 Low (requires explanation). */
-export const copBands = [
-  {
-    band: "High Confidence" as const,
-    from: 0.85,
-    tone: "success" as const,
-    penalty: 0,
-  },
-  {
-    band: "Medium Confidence" as const,
-    from: 0.6,
-    tone: "warning" as const,
-    penalty: 0.5,
-  },
-  {
-    band: "Low Confidence" as const,
-    from: 0,
-    tone: "danger" as const,
-    penalty: 1.0,
-  },
-];
+/**
+ * COP bands from business rules (PRD §6.1.4 example banding ≥0.85 High, 0.60–0.84 Medium, <0.60 Low) and the
+ * Confidence-Overlay dampening of the North average per band (RAR3 — demo values).
+ */
+export function copBands() {
+  return [
+    { band: "High Confidence" as const, from: getRule<number>("credit-analysis.cop.highFrom"), tone: "success" as const, penalty: getRule<number>("credit-analysis.cop.dampenHigh") },
+    { band: "Medium Confidence" as const, from: getRule<number>("credit-analysis.cop.mediumFrom"), tone: "warning" as const, penalty: getRule<number>("credit-analysis.cop.dampenMedium") },
+    { band: "Low Confidence" as const, from: 0, tone: "danger" as const, penalty: getRule<number>("credit-analysis.cop.dampenLow") },
+  ];
+}
 
 export function copBandFor(cop: number) {
-  return copBands.find((b) => cop >= b.from) ?? copBands[copBands.length - 1]!;
+  const list = copBands();
+  return list.find((b) => cop >= b.from) ?? list[list.length - 1]!;
 }
 
 export const copRatio = (o: Pick<Obligor, "verifiedTurnover" | "declaredTurnover">) => (o.declaredTurnover ? o.verifiedTurnover / o.declaredTurnover : 0);
@@ -86,6 +79,9 @@ export type ParamOverride = {
   rationale: string;
   by: string;
   at: string;
+  /** Second analyst / CCO who approved the change in Operations. */
+  approvedBy?: string;
+  operationId?: string;
 };
 
 export type ParameterReading = {
@@ -100,6 +96,7 @@ export type ParameterReading = {
   updatedAt: string;
 };
 
+// PRD §6.2 fixed 1–10 score scale (TD-120).
 const clamp = (n: number, lo = 1, hi = 10) => Math.min(hi, Math.max(lo, n));
 
 /** n scores (1 decimal) whose mean is exactly `target`, with optional pinned values. */
@@ -139,7 +136,7 @@ export function baselineScores(o: Obligor): Record<string, number> {
     const target = cp.key === "internal" ? Math.min(10, round(base.internal + penalty)) : base[cp.key];
     const pinned = list.map((p) => {
       if (!ngx || !p.sectorPinned) return undefined;
-      if (p.sectorPinned === "lifecycle") return lifeCycleScore[ngx.lifeCycle];
+      if (p.sectorPinned === "lifecycle") return lifeCycleScore(ngx.lifeCycle);
       return round(scoreFromObserved(p.observed!, ngx.trailingCagr));
     });
     balancedScores(`${o.id}:${cp.key}`, list.length, target, pinned).forEach((v, i) => (out[list[i]!.id] = v));
@@ -154,6 +151,28 @@ function observedText(p: RarParameter, score: number, ngx: NgxSector | undefined
   if (p.qualitative) return qualitativeLabel(p, score);
   return undefined;
 }
+
+// ---------------- Weighting (§6.2 "tenant-configurable weighting") ----------------
+
+export const weightingLabels: Record<string, string> = { equal: "equal weighting within each cardinal point" };
+
+/** Parameter weight (per parameter, once a weight table exists) under the tenant weighting scheme (business rule `credit-analysis.weightingScheme`). */
+export function parameterWeight(): number {
+  // Only "equal" is defined until the tenant weight table is specified (TD-121, docs/OPEN-QUESTIONS.md RAR4).
+  return getRule<string>("credit-analysis.weightingScheme") === "equal" ? 1 : 1;
+}
+
+/** Weighted cardinal-point average (1 decimal). */
+export function cardinalAverage(readings: { param: RarParameter; score: number }[]): number {
+  const w = readings.map(() => parameterWeight());
+  const total = w.reduce((a, b) => a + b, 0) || 1;
+  return round(readings.reduce((a, r, i) => a + r.score * w[i]!, 0) / total);
+}
+
+export const weightingText = () => {
+  const scheme = getRule<string>("credit-analysis.weightingScheme");
+  return weightingLabels[scheme] ?? scheme;
+};
 
 // ---------------- Full assessment ----------------
 
@@ -200,7 +219,7 @@ export function assess(o: Obligor, overrides: Record<string, ParamOverride> = {}
           updatedAt: ov?.at ?? at,
         };
       });
-    const average = round(readings.reduce((a, r) => a + r.score, 0) / readings.length);
+    const average = cardinalAverage(readings);
     points[cp.key] = { key: cp.key, average, readings };
   }
   const internalRaw = points.internal.average;
@@ -225,8 +244,8 @@ export function assess(o: Obligor, overrides: Record<string, ParamOverride> = {}
   };
 }
 
-/** Tenant parameter: an assessment older than this is stale and due for refresh (demo: 90 days). */
-export const STALE_AFTER_DAYS = 90;
+/** Refresh cycle: an assessment older than this is stale (business rule `credit-analysis.staleAfterDays`). */
+export const staleAfterDays = () => getRule<number>("credit-analysis.staleAfterDays");
 
 export function ageDays(iso: string, now: Date): number {
   return Math.floor((now.getTime() - new Date(iso).getTime()) / 86_400_000);
@@ -236,16 +255,17 @@ export function ageDays(iso: string, now: Date): number {
 
 export type Band = "Low" | "Medium" | "High";
 export const bands: Band[] = ["Low", "Medium", "High"];
-export const bandRange: Record<Band, string> = {
-  Low: "1-3",
-  Medium: "4-7",
-  High: "8-10",
-};
+/** Score range label per band, from business rules `credit-analysis.band.lowMax` / `.mediumMax` (PRD §6.2.12). */
+export function bandRange(b: Band): string {
+  const low = getRule<number>("credit-analysis.band.lowMax");
+  const mid = getRule<number>("credit-analysis.band.mediumMax");
+  return b === "Low" ? `1–${low}` : b === "Medium" ? `${low + 1}–${mid}` : `${mid + 1}–10`;
+}
 
 /** PRD bands are integer (1-3 / 4-7 / 8-10); decimal scores are rounded to the nearest whole point first. */
 export function bandOf(score: number): Band {
   const s = Math.round(score);
-  return s <= 3 ? "Low" : s <= 7 ? "Medium" : "High";
+  return s <= getRule<number>("credit-analysis.band.lowMax") ? "Low" : s <= getRule<number>("credit-analysis.band.mediumMax") ? "Medium" : "High";
 }
 
 export const interpretiveTables: Record<
@@ -355,30 +375,34 @@ export function interpretiveCell(posture: Posture, s: RarScores): InterpretiveCe
 
 // ---------------- Recommended outcomes by posture (§6.2.6) ----------------
 
-export const postureGuidance: Record<Posture, { rule: string; recommendation: string; talkingPoints: string }> = {
+/** Quadrant rule text for a posture around the live midpoint (business rule `rar.midpoint`). */
+export function postureRule(p: Posture): string {
+  const m = rarMidpoint();
+  const x = p === "Aggressive" || p === "Competitive" ? ">" : "<";
+  const y = p === "Aggressive" || p === "Conservative" ? ">" : "<";
+  return `X ${x} ${m} · Y ${y} ${m}`;
+}
+
+export const postureGuidance: Record<Posture, { recommendation: string; talkingPoints: string }> = {
   Aggressive: {
-    rule: "X > 5.5, Y > 5.5",
     recommendation:
       "Supports growth/expansion facilities, longer tenor, and higher single-obligor utilisation within limit; maintain momentum but require standard financial-reporting covenants to preserve visibility as exposure grows.",
     talkingPoints:
       "This is a business and a sector both performing well. Where the customer is also expanding capacity, this is the moment to discuss additional facilities or better pricing for loyalty — but confirm the expansion request is proportionate to the industry's actual growth runway (§6.2.8), not just the customer's ambition.",
   },
   Competitive: {
-    rule: "X > 5.5, Y < 5.5",
     recommendation:
       "Attractive industry but financially stretched or exposed to an unstable environment — favour secured structures, shorter tenor, tighter covenants (minimum-turnover, debt-service-coverage), and closer monitoring frequency; avoid open-ended overdraft growth.",
     talkingPoints:
       "The market opportunity is real, but the customer's balance sheet cannot yet fully capitalise on it alone. Advise on working-capital discipline and, where appropriate, discuss additional equity or subordinated funding from sponsors before extending further debt.",
   },
   Conservative: {
-    rule: "X < 5.5, Y > 5.5",
     recommendation:
       "Financially strong but operating in a less attractive or maturing/declining industry — favour capital preservation, selective/short-tenor facilities, and discourage large long-tenor expansion asks; a mandatory Credit Analyst note is required addressing why an expansion facility is justified if the industry life-cycle stage (§6.2.8) is Maturity or Decline.",
     talkingPoints:
       "This customer is a strong operator in a market that is not growing quickly. The right conversation is about protecting margin, diversification, or redeploying surplus cash — not aggressive capacity expansion in the existing line of business.",
   },
   Defensive: {
-    rule: "X < 5.5, Y < 5.5",
     recommendation:
       "Mandatory CRO referral regardless of facility size; presumption against new/incremental exposure; existing exposure moves to enhanced monitoring (Loan Review, §6.4) with a remediation or exit plan requested from the obligor.",
     talkingPoints:
@@ -400,7 +424,7 @@ export const overlayGuidance = {
 } as const;
 
 /** Parameters with the most leverage to flip the posture across the nearest composite midpoint (for Marginal readings). */
-export function flipCandidates(a: Assessment, limit = 3): { reading: ParameterReading; move: number; axis: "X" | "Y" }[] {
+export function flipCandidates(a: Assessment, limit = getRule<number>("credit-analysis.advisory.flipCandidates")): { reading: ParameterReading; move: number; axis: "X" | "Y" }[] {
   const dx = a.position.x - rarMidpoint();
   const dy = a.position.y - rarMidpoint();
   const axis: "X" | "Y" = Math.abs(dx) <= Math.abs(dy) ? "X" : "Y";
@@ -445,7 +469,7 @@ export function momentumOf(values: number[], higherIsBetter = true): { momentum:
   const slope = recent.reduce((a, b) => a + b, 0) / (recent.length || 1);
   const accel = d.length >= 2 ? d[d.length - 1]! - d[d.length - 2]! : 0;
   const level = Math.max(Math.abs(values[values.length - 1] ?? 1), 1e-6);
-  const flat = Math.abs(slope) < 0.02 * level;
+  const flat = Math.abs(slope) < (getRule<number>("credit-analysis.trend.flatBandPct") / 100) * level;
   const earlier = d.slice(0, -1).reduce((a, b) => a + b, 0);
   const inflection = d.length >= 3 && Math.sign(d[d.length - 1]!) !== 0 && Math.sign(earlier) !== 0 && Math.sign(d[d.length - 1]!) !== Math.sign(earlier);
   const momentum: Momentum = flat
@@ -495,6 +519,8 @@ export type RatioTrend = {
 
 /** Five-year ratio history ending at the current observed value (obligor) next to the NGX sector series. */
 export function ratioTrends(a: Assessment): RatioTrend[] {
+  const inLine = getRule<number>("credit-analysis.trend.inLineTolerance");
+  // Demo history generator (data, not policy): drift is centred on the scale midpoint.
   const trendScore = a.points.internal.readings.find((r) => r.param.id === "N11")?.score ?? 5.5;
   return a.points.internal.readings
     .filter((r) => r.param.corpusMetric && r.param.observed)
@@ -517,11 +543,11 @@ export function ratioTrends(a: Assessment): RatioTrend[] {
       let relative: RatioTrend["relative"];
       if (sectorRoc && sectorRoc.kind === roc.kind) {
         const diff = (roc.value - sectorRoc.value) * (meta.higherIsBetter ? 1 : -1);
-        relative = Math.abs(diff) < 0.5 ? "In line with sector" : diff > 0 ? "Gaining ground" : "Losing ground";
+        relative = Math.abs(diff) < inLine ? "In line with sector" : diff > 0 ? "Gaining ground" : "Losing ground";
       } else if (sector) {
         const own = (obligor[4]! - obligor[0]!) * (meta.higherIsBetter ? 1 : -1);
         const sec = (sector[4]! - sector[0]!) * (meta.higherIsBetter ? 1 : -1);
-        relative = Math.abs(own - sec) < 0.5 ? "In line with sector" : own > sec ? "Gaining ground" : "Losing ground";
+        relative = Math.abs(own - sec) < inLine ? "In line with sector" : own > sec ? "Gaining ground" : "Losing ground";
       }
       return {
         reading,
@@ -555,8 +581,8 @@ export function axisHistory(a: Assessment): { label: string; scores: RarScores; 
 
 // ---------------- Peer benchmarking (§6.2.10) ----------------
 
-/** Tenant parameter: standard deviations from the sector mean that flag an outlier (demo 2.0). */
-export const OUTLIER_SD = 2;
+/** Standard deviations from the sector mean that flag an outlier (business rule `credit-analysis.peer.outlierSd`). */
+export const outlierSd = () => getRule<number>("credit-analysis.peer.outlierSd");
 
 export type RatioBenchmark = {
   reading: ParameterReading;
@@ -566,12 +592,15 @@ export type RatioBenchmark = {
   dist: ReturnType<typeof sectorDistribution>;
   percentile: number;
   higherIsBetter: boolean;
-  outlier: null | "Top decile" | "Bottom decile" | "Beyond 2 SD";
+  outlier: null | "Top decile" | "Bottom decile" | `Beyond ${number} SD`;
   favourable: boolean;
 };
 
 export function ratioBenchmarks(a: Assessment): RatioBenchmark[] {
   if (!a.ngx) return [];
+  const sdLimit = outlierSd();
+  const top = getRule<number>("credit-analysis.peer.topPercentile");
+  const bottom = getRule<number>("credit-analysis.peer.bottomPercentile");
   return a.points.internal.readings
     .filter((r) => r.param.corpusMetric && r.param.observed)
     .map((reading) => {
@@ -581,7 +610,7 @@ export function ratioBenchmarks(a: Assessment): RatioBenchmark[] {
       const dist = sectorDistribution(a.ngx!, metric);
       const percentile = percentileRank(dist, value);
       const z = (value - dist.mean) / (dist.sd || 1);
-      const outlier: RatioBenchmark["outlier"] = percentile >= 90 ? "Top decile" : percentile <= 10 ? "Bottom decile" : Math.abs(z) > OUTLIER_SD ? "Beyond 2 SD" : null;
+      const outlier: RatioBenchmark["outlier"] = percentile >= top ? "Top decile" : percentile <= bottom ? "Bottom decile" : Math.abs(z) > sdLimit ? `Beyond ${sdLimit} SD` : null;
       const favourable = meta.higherIsBetter ? percentile >= 50 : percentile <= 50;
       return {
         reading,
@@ -607,10 +636,11 @@ export function bookPercentile(values: number[], value: number): number {
 
 /** Composite peer positioning against the tenant's own book (same sector and size band; broadens if thin). */
 export function bookPeers(o: Obligor, all: Obligor[]): { scope: string; peers: Obligor[] } {
+  const min = getRule<number>("credit-analysis.peer.minPeers");
   const sameSectorBand = all.filter((x) => x.sectorId === o.sectorId && x.type === o.type && x.id !== o.id);
-  if (sameSectorBand.length >= 3) return { scope: "Same sector and size band", peers: sameSectorBand };
+  if (sameSectorBand.length >= min) return { scope: "Same sector and size band", peers: sameSectorBand };
   const sameSector = all.filter((x) => x.sectorId === o.sectorId && x.id !== o.id);
-  if (sameSector.length >= 3) return { scope: "Same sector (size band too thin)", peers: sameSector };
+  if (sameSector.length >= min) return { scope: "Same sector (size band too thin)", peers: sameSector };
   return {
     scope: "Whole book (sector too thin)",
     peers: all.filter((x) => x.id !== o.id),
@@ -623,12 +653,41 @@ export type GatingCheck = {
   applicationId: string;
   tenorMonths: number;
   purpose: string;
-  /** Long-tenor (>36m) expansion/capex request in a Decline-stage industry — hard exception (§6.2.6). */
+  /** Long-tenor (> rule months) expansion/capex request in a hard-exception-stage industry (§6.2.6). */
   flagged: boolean;
-  /** Conservative posture + expansion request + Maturity/Decline stage — mandatory Credit Analyst note (§6.2.6). */
+  /** Conservative posture + expansion request + analyst-note stage — mandatory Credit Analyst note (§6.2.6). */
   analystNote: boolean;
   stage?: LifeCycleStage;
 };
+
+/** Whether a stated purpose is an expansion/capex request (business rule keyword list). */
+export function isExpansionPurpose(purpose: string): boolean {
+  const words = getRule<string[]>("credit-analysis.gating.expansionKeywords");
+  const text = purpose.toLowerCase();
+  return words.some((w) => w.trim() && text.includes(w.trim().toLowerCase()));
+}
+
+/** Industry Life-Cycle credit gating for an obligor's open applications (§6.2.6); thresholds from business rules. */
+export function gatingChecks(a: Assessment, applications: Application[]): GatingCheck[] {
+  const closed = getRule<string[]>("credit-analysis.gating.closedStages");
+  const longTenor = getRule<number>("credit-analysis.gating.longTenorMonths");
+  const hardStages = getRule<string[]>("credit-analysis.gating.hardExceptionStages");
+  const noteStages = getRule<string[]>("credit-analysis.gating.analystNoteStages");
+  const stage = a.ngx?.lifeCycle;
+  return applications
+    .filter((x) => x.obligorId === a.obligor.id && !closed.includes(x.stage))
+    .map((x) => {
+      const expansion = isExpansionPurpose(x.purpose);
+      return {
+        applicationId: x.id,
+        tenorMonths: x.tenorMonths,
+        purpose: x.purpose,
+        stage,
+        flagged: x.tenorMonths > longTenor && expansion && !!stage && hardStages.includes(stage),
+        analystNote: !a.position.neutral && a.position.base === "Conservative" && expansion && !!stage && noteStages.includes(stage),
+      };
+    });
+}
 
 // ---------------- AI-drafted advisory note (§6.2.6 + overlays) ----------------
 
@@ -695,7 +754,7 @@ export function draftAdvisory({ a, cell, wallet, benchmarks, trends, gating }: A
     );
   }
   const outliers = benchmarks.filter((b) => b.outlier);
-  for (const b of outliers.slice(0, 3)) {
+  for (const b of outliers.slice(0, getRule<number>("credit-analysis.advisory.maxOutlierPoints"))) {
     bullets.push(
       `- Peer benchmark: ${b.label} ${b.format(b.value)} vs sector median ${b.format(b.dist.median)} — ${b.percentile}th percentile (${b.outlier}); ${b.favourable ? "a genuine strength that supports a pricing-power or expansion conversation" : "a structural weakness that points to a working-capital-efficiency conversation rather than expansion"}.`,
     );
@@ -719,9 +778,9 @@ export function draftAdvisory({ a, cell, wallet, benchmarks, trends, gating }: A
   if (a.ngx) bullets.push(`- Industry Life-Cycle: ${a.ngx.lifeCycle} (${a.ngx.name}, ${a.ngx.lifeCycleReason.toLowerCase()}).`);
   for (const g of gating.filter((x) => x.flagged))
     bullets.push(
-      `- HARD EXCEPTION ${g.applicationId}: ${g.tenorMonths}-month ${g.purpose.toLowerCase()} in a Decline-stage industry — CCO/CRO override with documented rationale required before passing the Credit Analyst tier.`,
+      `- HARD EXCEPTION ${g.applicationId}: ${g.tenorMonths}-month ${g.purpose.toLowerCase()} in a ${g.stage}-stage industry — CCO/CRO override with documented rationale required before passing the Credit Analyst tier.`,
     );
   parts.push(bullets.join("\n"));
-  parts.push(`Sector benchmark used: ${a.ngx ? `${a.ngx.name} (NGX corpus)` : "none — no listed proxy"}. Weighting: tenant-configurable (demo: equal).`);
+  parts.push(`Sector benchmark used: ${a.ngx ? `${a.ngx.name} (NGX corpus)` : "none — no listed proxy"}. Weighting: ${weightingText()} (tenant parameter).`);
   return parts.join("\n\n");
 }

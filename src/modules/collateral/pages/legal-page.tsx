@@ -21,13 +21,16 @@ import {
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { useRole } from "@/lib/auth/session";
-import { useApplications, useDbActions, useLookups } from "@/lib/data/hooks";
+import { useApplications, useLookups } from "@/lib/data/hooks";
+import { useOperationsStore } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
 import { DEMO_NOW } from "@/lib/data/seed";
-import { date, dateTime, moneyShort, number } from "@/lib/format";
-import { useActor, useAuditLog } from "@/modules/monitoring/audit";
+import { date, moneyShort, number } from "@/lib/format";
+import { PendingApproval } from "@/modules/monitoring/pending-approval";
 import { daysBetween } from "@/modules/monitoring/logic";
 import { collateralAbilities, perfectionIndex, perfectionSteps, perfectionTones } from "../logic";
-import { useCollateralStore, useCollateralView, type CollateralView } from "../store";
+import { advancePerfection, checkOutDocuments, recordSearch as recordSearchCmd, requestLegalSignoff, returnDocuments } from "../service";
+import { useCollateralView, type CollateralView } from "../store";
 
 type Row = CollateralView & { obligorName: string; applicationId?: string; stepOwner: string; ageDays: number };
 
@@ -39,10 +42,8 @@ export function LegalReviewPage() {
   const { obligor } = useLookups();
   const role = useRole();
   const can = collateralAbilities(role?.id);
-  const store = useCollateralStore();
-  const { update } = useDbActions();
-  const audit = useAuditLog();
-  const actor = useActor();
+  const instances = useOperationsStore((s) => s.instances);
+  const [message, setMessage] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
   const [signFor, setSignFor] = useState<Row | null>(null);
   const [checkoutFor, setCheckoutFor] = useState<Row | null>(null);
 
@@ -66,11 +67,17 @@ export function LegalReviewPage() {
   const vaulted = rows.filter((r) => r.legalRecord.vaultRef);
   const signoff = rows.filter((r) => !r.legalRecord.signOff && (r.perfection === "Registration" || r.perfection === "Perfected"));
 
-  const recordSearch = (r: Row, result: "Clean" | "Encumbrance found") => {
-    store.patchLegal(r.id, { searchStatus: result, searchAt: new Date().toISOString() });
-    if (result === "Encumbrance found") update("collateral", r.id, { perfection: "Defective" });
-    else if (r.perfection === "Not started" || r.perfection === "Search in progress") update("collateral", r.id, { perfection: "Documentation" });
-    audit({ action: "Recorded legal search result", entityType: "Collateral", entityId: r.id, before: r.legalRecord.searchStatus, after: result });
+  /** Open legal sign-off operation per collateral (Operations workflow). */
+  const pendingSignoff = useMemo(
+    () => new Set(instances.filter((i) => i.operationType === "collateral.legal.signoff" && ["Pending", "In progress"].includes(i.status)).map((i) => i.subject.id)),
+    [instances],
+  );
+
+  const recordSearch = async (r: Row, result: "Clean" | "Encumbrance found") => {
+    recordSearchCmd(r, r.legalRecord.searchStatus, result);
+    // A clean search on a new security moves it on to documentation.
+    if (result === "Clean" && (r.perfection === "Not started" || r.perfection === "Search in progress"))
+      await advancePerfection({ ...r, perfection: "Search in progress" }, "Documentation", "Clean search — advanced perfection to documentation");
   };
 
   const idCol: DataTableColumn<Row> = { id: "id", header: "Collateral", accessor: "id", sortable: true, cell: (r) => <TextLink as={Link} href={`/collateral/item?id=${r.id}`}>{r.id}</TextLink> };
@@ -155,10 +162,7 @@ export function LegalReviewPage() {
             <Button
               size="small"
               variant="tertiary"
-              onClick={() => {
-                store.patchLegal(r.id, { checkedOut: undefined });
-                audit({ action: "Returned documents to vault", entityType: "Collateral", entityId: r.id, after: r.legalRecord.vaultRef });
-              }}
+              onClick={() => returnDocuments(r, r.legalRecord.vaultRef)}
             >
               Return to vault
             </Button>
@@ -182,7 +186,9 @@ export function LegalReviewPage() {
       header: <span className="sr-only">Actions</span>,
       exportable: false,
       cell: (r) =>
-        can.legal ? (
+        pendingSignoff.has(r.id) ? (
+          <PendingApproval subjectType="Collateral" subjectId={r.id} compact />
+        ) : can.legal ? (
           <Button size="small" onClick={() => setSignFor(r)} disabled={r.legalRecord.searchStatus !== "Clean" || r.legalRecord.genuineness !== "Confirmed"}>
             Sign off
           </Button>
@@ -193,6 +199,11 @@ export function LegalReviewPage() {
   return (
     <ModulePage module="collateral" description="Legal workflow — collateral search at origination (in parallel with BDM review), genuineness of security documents, vaulting and legal sufficiency sign-off (PRD §6.5).">
       <Stack gap="large">
+        {message && (
+          <Alert tone={message.tone} title={message.tone === "danger" ? "Not completed" : "Submitted"}>
+            {message.text}
+          </Alert>
+        )}
         {!can.legal && (
           <Alert tone="info" title="View only">
             Legal actions are performed by the Legal Officer. Your role can view the queue.
@@ -253,11 +264,11 @@ export function LegalReviewPage() {
           subject={`${signFor.id} · ${signFor.obligorName}`}
           label="Legal opinion"
           initial="Security documents genuine; perfection complete; legally sufficient."
-          cta="Sign off"
+          cta="Submit for acceptance"
           onClose={() => setSignFor(null)}
-          onSave={(note) => {
-            store.patchLegal(signFor.id, { signOff: { by: actor.name, at: new Date().toISOString(), opinion: note } });
-            audit({ action: "Legal sufficiency sign-off", entityType: "Collateral", entityId: signFor.id, after: note });
+          onSave={async (note) => {
+            const r = await requestLegalSignoff(signFor, note);
+            setMessage(r.ok ? { tone: "success", text: `Legal sufficiency opinion submitted for Credit Administration acceptance (${r.operationId}).` } : { tone: "danger", text: r.reason });
           }}
         />
       )}
@@ -269,10 +280,7 @@ export function LegalReviewPage() {
           initial=""
           cta="Check out"
           onClose={() => setCheckoutFor(null)}
-          onSave={(purpose) => {
-            store.patchLegal(checkoutFor.id, { checkedOut: { by: actor.name, at: new Date().toISOString(), purpose } });
-            audit({ action: "Checked out vaulted documents", entityType: "Collateral", entityId: checkoutFor.id, after: `${checkoutFor.legalRecord.vaultRef} · ${purpose} · ${dateTime(new Date())}` });
-          }}
+          onSave={(purpose) => checkOutDocuments(checkoutFor, checkoutFor.legalRecord.vaultRef, purpose)}
         />
       )}
     </ModulePage>
@@ -281,6 +289,7 @@ export function LegalReviewPage() {
 
 function NoteModal({ title, subject, label, initial, cta, onClose, onSave }: { title: string; subject: string; label: string; initial: string; cta: string; onClose: () => void; onSave: (v: string) => void }) {
   const [v, setV] = useState(initial);
+  const minText = useRule<number>("collateral.legal.minOpinionLength");
   return (
     <Modal
       open
@@ -293,7 +302,7 @@ function NoteModal({ title, subject, label, initial, cta, onClose, onSave }: { t
             Cancel
           </Button>
           <Button
-            disabled={v.trim().length < 4}
+            disabled={v.trim().length < minText}
             onClick={() => {
               onSave(v.trim());
               onClose();

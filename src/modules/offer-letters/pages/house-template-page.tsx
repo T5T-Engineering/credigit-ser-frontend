@@ -24,14 +24,20 @@ import {
   Textarea,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan, useSession } from "@/lib/auth/session";
+import { useCan } from "@/lib/auth/session";
 import { useApplications, useCollateral, useFacilities, useObligors, useTenant, useUsers } from "@/lib/data/hooks";
 import { date } from "@/lib/format";
-import { demoNowIso, useActor, useAuditLog } from "../../credit-admin/common";
+import { canDecide, decideOperation, usePendingFor } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import type { RoleId } from "@/lib/rbac/roles";
+import { demoNowIso, useActor } from "../../credit-admin/common";
+import { PendingOperationNotice } from "../../credit-admin/operations-ui";
+import { saveTemplateDraft, submitTemplate } from "../actions";
 import { mergeFields } from "../library";
 import { LetterDocument } from "../letter-document";
 import { buildMergeContext, facilityTerms, securityLines } from "../merge";
-import { templateFor, useClauses, useOfferLetterStore, useOfferLetters, useTemplates } from "../store";
+import { templateFor, useClauses, useOfferLetters, useTemplates } from "../store";
 import { productLines, type HouseTemplate, type TemplateSection } from "../template";
 
 const templateTones = { Approved: "success", Draft: "neutral", "Pending Legal sign-off": "warning", Retired: "neutral" } as const;
@@ -47,33 +53,36 @@ const kindLabel: Record<TemplateSection["kind"], string> = {
 
 export function HouseTemplatePage() {
   const templates = useTemplates();
-  const saveTemplate = useOfferLetterStore((s) => s.saveTemplate);
-  const canEdit = useCan("offer-letters", "edit");
-  const roleId = useSession((s) => s.roleId);
-  const isLegal = roleId === "legal-officer";
+  const { actor: scopeActor } = useScope();
+  const editorRoles = useRule<RoleId[]>("offer-letters.libraryEditorRoles");
+  const canEdit = useCan("offer-letters", "edit") && editorRoles.includes(scopeActor.roleId);
   const actor = useActor();
-  const audit = useAuditLog();
   const [line, setLine] = useState<HouseTemplate["productLine"]>("All products");
   const [focus, setFocus] = useState<string | undefined>();
   const [highlight, setHighlight] = useState(true);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
 
   const versions = templates.filter((t) => t.productLine === line).sort((a, b) => b.version - a.version);
   const current = versions.find((t) => t.status === "Approved")!;
   const working = versions.find((t) => t.status === "Draft" || t.status === "Pending Legal sign-off");
   const shown = working ?? current;
   const editable = canEdit && working?.status === "Draft";
+  const pending = usePendingFor("HouseTemplate", working?.id ?? "-");
+  const mayDecide = pending ? canDecide(pending, scopeActor).ok : false;
 
-  const save = (t: HouseTemplate, msg?: string) => {
-    saveTemplate(t);
-    if (msg) setNotice(msg);
+  const save = (t: HouseTemplate, msg?: string, action?: { label: string; before?: string; after?: string }) => {
+    saveTemplateDraft(t, action);
+    if (msg) setNotice({ tone: "success", text: msg });
   };
 
   const createDraft = () => {
     const version = Math.max(...versions.map((v) => v.version)) + 1;
     const id = `${current.id.replace(/-\d+$/, "")}-${version}`;
-    save({ ...current, id, version, status: "Draft", changeNote: "", createdByName: actor.actorName, createdAt: demoNowIso(), approvedByName: undefined, approvedAt: undefined }, `Draft v${version} created from approved v${current.version}`);
-    audit("Created house-template draft", "Offer-letter template", id, `v${current.version}`, `v${version} (draft)`);
+    save({ ...current, id, version, status: "Draft", changeNote: "", createdByName: actor.actorName, createdAt: demoNowIso(), approvedByName: undefined, approvedAt: undefined }, `Draft v${version} created from approved v${current.version}`, {
+      label: "Created house-template draft",
+      before: `v${current.version}`,
+      after: `v${version} (draft)`,
+    });
   };
 
   const updateSection = (id: string, changes: Partial<TemplateSection>) => {
@@ -109,58 +118,43 @@ export function HouseTemplatePage() {
                 <Button
                   variant="text"
                   iconBefore={<Trash2 aria-hidden className="size-4" />}
-                  onClick={() => {
-                    save({ ...working!, status: "Retired", changeNote: working!.changeNote || "Discarded draft" }, `Draft v${working!.version} discarded`);
-                    audit("Discarded house-template draft", "Offer-letter template", working!.id);
-                  }}
+                  onClick={() => save({ ...working!, status: "Retired", changeNote: working!.changeNote || "Discarded draft" }, `Draft v${working!.version} discarded`, { label: "Discarded house-template draft", before: "Draft", after: "Retired" })}
                 >
                   Discard draft
                 </Button>
                 <Button
                   iconBefore={<Send aria-hidden className="size-4" />}
                   disabled={!working!.changeNote.trim()}
-                  onClick={() => {
-                    save({ ...working!, status: "Pending Legal sign-off" }, `v${working!.version} submitted for Legal sign-off`);
-                    audit("Submitted house template for Legal sign-off", "Offer-letter template", working!.id, "Draft", "Pending Legal sign-off");
-                  }}
+                  onClick={() => void submitTemplate(working!, current).then((r) => setNotice(r.ok ? { tone: "success", text: r.message } : { tone: "danger", text: r.reason }))}
                 >
                   Submit for Legal sign-off
                 </Button>
               </>
             ) : null}
-            {isLegal && working?.status === "Pending Legal sign-off" ? (
-              <>
-                <Button
-                  variant="text"
-                  onClick={() => {
-                    save({ ...working, status: "Draft" }, `v${working.version} returned to draft`);
-                    audit("Returned house template to draft", "Offer-letter template", working.id, "Pending Legal sign-off", "Draft");
-                  }}
-                >
-                  Return to draft
-                </Button>
-                <Button
-                  iconBefore={<ShieldCheck aria-hidden className="size-4" />}
-                  onClick={() => {
-                    const at = demoNowIso();
-                    save({ ...current, status: "Retired" });
-                    save({ ...working, status: "Approved", approvedByName: actor.actorName, approvedAt: at }, `v${working.version} approved — used for every new letter from now on`);
-                    audit("Legal-approved house template", "Offer-letter template", working.id, `v${current.version}`, `v${working.version}`);
-                  }}
-                >
-                  Approve v{working.version}
-                </Button>
-              </>
+            {pending && mayDecide && working ? (
+              <Button
+                iconBefore={<ShieldCheck aria-hidden className="size-4" />}
+                onClick={() =>
+                  void decideOperation(pending.id, "approve", "").then((r) =>
+                    setNotice(r.ok ? { tone: "success", text: `v${working.version} approved — used for every new letter from now on` } : { tone: "danger", text: r.reason }),
+                  )
+                }
+              >
+                Approve v{working.version}
+              </Button>
             ) : null}
           </Stack>
         </div>
 
         {notice ? (
-          <Alert tone="success" title="Template updated" action={<Button size="small" variant="text" onClick={() => setNotice(null)}>Dismiss</Button>}>
-            {notice}. Recorded in the audit trail.
+          <Alert tone={notice.tone} title={notice.tone === "success" ? "Template updated" : "Not saved"} action={<Button size="small" variant="text" onClick={() => setNotice(null)}>Dismiss</Button>}>
+            {notice.text}
+            {notice.tone === "success" ? ". Recorded in the audit trail." : ""}
           </Alert>
         ) : null}
-        {working ? (
+        {pending ? <PendingOperationNotice instance={pending} title={`v${working?.version} is awaiting Legal sign-off`}>To return it for changes, decide it in Operations. </PendingOperationNotice> : null}
+        {working && !pending ? (
+
           <Alert tone={working.status === "Draft" ? "info" : "warning"} title={working.status === "Draft" ? `Editing draft v${working.version}` : `v${working.version} is awaiting Legal sign-off`}>
             New letters keep using approved v{current.version} until Legal approves this version. Letters already issued always retain the version they were issued on.
           </Alert>

@@ -24,10 +24,12 @@ import { ModulePage } from "@/components/module-page";
 import { useLookups, useObligors } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { useHydrated } from "@/lib/auth/session";
-import { rarPosition, rarMidpoint, type RarPosition } from "@/lib/rar";
+import { useRule, useRulesStore } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import { rarPosition, type RarPosition } from "@/lib/rar";
 import type { Obligor } from "@/lib/data/types";
 import { date } from "@/lib/format";
-import { ageDays, copBandFor, copRatio, STALE_AFTER_DAYS } from "../logic";
+import { ageDays, copBandFor, copRatio, postureRule } from "../logic";
 import { assessmentHref, PostureBadge, postureOrder, score1 } from "../shared";
 
 type Row = {
@@ -40,6 +42,8 @@ type Row = {
   copTone: "success" | "warning" | "danger";
   age: number;
   stale: boolean;
+  /** Obligor's relationship manager is the signed-in user. */
+  mine: boolean;
 };
 
 const postureSeriesTone = {
@@ -53,6 +57,11 @@ export function AssessmentsPage() {
   const hydrated = useHydrated();
   const obligors = useObligors();
   const { sector } = useLookups();
+  const { actor } = useScope();
+  const staleAfter = useRule<number>("credit-analysis.staleAfterDays");
+  const midpoint = useRule<number>("rar.midpoint");
+  // Re-derive postures and bands when tenant business rules change.
+  const ruleValues = useRulesStore((s) => s.values);
 
   const rows = useMemo<Row[]>(
     () =>
@@ -70,10 +79,12 @@ export function AssessmentsPage() {
           copBand: band.band,
           copTone: band.tone,
           age,
-          stale: age > STALE_AFTER_DAYS,
+          stale: age > staleAfter,
+          mine: o.relationshipManagerId === actor.id,
         };
       }),
-    [obligors, sector],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ruleValues: recompute when business rules change
+    [obligors, sector, staleAfter, actor.id, ruleValues],
   );
 
   const counts = useMemo(() => {
@@ -257,7 +268,7 @@ export function AssessmentsPage() {
             value={String(counts.stale)}
             icon={<TimerReset aria-hidden />}
             tone="warning"
-            hint={`Older than ${STALE_AFTER_DAYS} days (tenant parameter) · ${counts.lowCop} low-confidence COP`}
+            hint={`Older than ${staleAfter} days (tenant parameter) · ${counts.lowCop} low-confidence COP`}
           />
         </Grid>
 
@@ -266,7 +277,7 @@ export function AssessmentsPage() {
             <div>
               <CardTitle>Portfolio composite positions</CardTitle>
               <CardDescription>
-                X-Composite (Operating Industry + Comparative) against Y-Composite (Internal Risk + Macro-Economic); quadrants split at the {rarMidpoint()} midpoint.
+                X-Composite (Operating Industry + Comparative) against Y-Composite (Internal Risk + Macro-Economic); quadrants split at the {midpoint} midpoint.
               </CardDescription>
             </div>
           </CardHeader>
@@ -280,8 +291,8 @@ export function AssessmentsPage() {
                   xLabel="X-Composite — external & comparative position"
                   yLabel="Y-Composite — internal & macro stability"
                   referenceLines={[
-                    { axis: "x", value: rarMidpoint(), label: "X 5.5" },
-                    { axis: "y", value: rarMidpoint(), label: "Y 5.5" },
+                    { axis: "x", value: midpoint, label: `X ${midpoint}` },
+                    { axis: "y", value: midpoint, label: `Y ${midpoint}` },
                   ]}
                   height={320}
                   xFormatter={(v) => v.toFixed(1)}
@@ -292,10 +303,10 @@ export function AssessmentsPage() {
               <div className="lg:col-span-3">
                 <Grid columns={2} gap="small">
                   {[
-                    { p: "Conservative", where: "X < 5.5 · Y > 5.5" },
-                    { p: "Aggressive", where: "X > 5.5 · Y > 5.5" },
-                    { p: "Defensive", where: "X < 5.5 · Y < 5.5" },
-                    { p: "Competitive", where: "X > 5.5 · Y < 5.5" },
+                    { p: "Conservative" as const, where: postureRule("Conservative") },
+                    { p: "Aggressive" as const, where: postureRule("Aggressive") },
+                    { p: "Defensive" as const, where: postureRule("Defensive") },
+                    { p: "Competitive" as const, where: postureRule("Competitive") },
                   ].map((q) => (
                     <div key={q.p} className="squircle rounded-3xl bg-surface-sunken p-3">
                       <Badge tone={postureSeriesTone[q.p as keyof typeof postureSeriesTone]} dot>
@@ -308,7 +319,7 @@ export function AssessmentsPage() {
                 </Grid>
                 <Text variant="small" tone="muted" className="mt-3">
                   {counts.neutral} obligor
-                  {counts.neutral === 1 ? " sits" : "s sit"} inside the Neutral / Transitional radius around (5.5, 5.5). Intensity bands and the neutral threshold are tenant
+                  {counts.neutral === 1 ? " sits" : "s sit"} inside the Neutral / Transitional radius around ({midpoint}, {midpoint}). Intensity bands and the neutral threshold are tenant
                   parameters (demo defaults).
                 </Text>
               </div>
@@ -347,8 +358,15 @@ export function AssessmentsPage() {
               label: "Freshness",
               options: [
                 { value: "Current", label: "Current" },
-                { value: "Stale", label: `Stale (>${STALE_AFTER_DAYS}d)` },
+                { value: "Stale", label: `Stale (>${staleAfter}d)` },
               ],
+            },
+            {
+              id: "scope",
+              label: "Scope",
+              allLabel: "All obligors",
+              options: [{ value: "mine", label: "My relationships" }],
+              filterFn: (r: Row, v: string) => (v === "mine" ? r.mine : true),
             },
             { id: "confidence", label: "Confidence" },
           ]}

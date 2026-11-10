@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowUpCircle, CheckCircle2, RefreshCw } from "lucide-react";
 import {
   ActivityFeed,
@@ -36,9 +37,14 @@ import { ModulePage } from "@/components/module-page";
 import { useCan, useRole } from "@/lib/auth/session";
 import { useLookups } from "@/lib/data/hooks";
 import { dateTime, moneyShort, number } from "@/lib/format";
-import { useActor, useAuditLog } from "../audit";
-import { addBusinessDays, daysBetween, DEMO_SLA_BUSINESS_DAYS, escalationLadder, levelTones, regulatoryRelevant, type EscalationLevel } from "../logic";
-import { useMonitoring, type ExceptionStatus, type MonitoringException } from "../store";
+import { useOperationsStore } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import { useLadder } from "../hooks";
+import { daysBetween, levelTones, rolesUpTo, type EscalationLevel } from "../logic";
+import { PendingApproval } from "../pending-approval";
+import { changeExceptionStatus, commentOnException, requestEscalation, requestResolution, runEscalationSweep, slaLapsed } from "../service";
+import { useMonitoring, type MonitoringException } from "../store";
 
 const columns: KanbanColumn[] = [
   { id: "Raised", title: "Raised", tone: "info" },
@@ -49,26 +55,45 @@ const columns: KanbanColumn[] = [
 
 const statusTones = { Raised: "info", "Under review": "accent", Escalated: "danger", Resolved: "success" } as const;
 
+type Scope = "all" | "assigned" | "notified";
+
 export function ExceptionsPage() {
+  return (
+    <Suspense fallback={null}>
+      <ExceptionsInner />
+    </Suspense>
+  );
+}
+
+function ExceptionsInner() {
   const exceptions = useMonitoring((s) => s.exceptions);
-  const patch = useMonitoring((s) => s.patchException);
   const { obligor, user } = useLookups();
   const canEdit = useCan("monitoring", "edit");
-  const role = useRole();
-  const audit = useAuditLog();
-  const actor = useActor();
+  const { actor } = useScope();
+  const ladder = useLadder();
+  const params = useSearchParams();
+  const router = useRouter();
+  const instances = useOperationsStore((s) => s.instances);
   const [view, setView] = useState<"board" | "report">("board");
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [resolveId, setResolveId] = useState<string | null>(null);
+  const [scope, setScope] = useState<Scope>("all");
+  const [openIdState, setOpenId] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<{ kind: "resolve" | "escalate"; id: string } | null>(null);
+  const [notice, setNotice] = useState<{ tone: "success" | "danger" | "info"; text: string } | null>(null);
+  const [sweeping, setSweeping] = useState(false);
   const now = new Date();
+  const openId = openIdState ?? params.get("id");
 
-  const lapsed = (e: MonitoringException) => e.status !== "Resolved" && new Date(e.slaDueAt) < now;
-  const open = exceptions.filter((e) => e.status !== "Resolved");
-  const mine = role ? open.filter((e) => escalationLadder.filter((l) => l.level <= e.level).some((l) => l.roles.includes(role.id))) : [];
+  /** Exception id → open Operations instance (resolution / escalation sign-off). */
+  const pendingOps = useMemo(() => new Map(instances.filter((i) => i.subject.type === "Exception" && ["Pending", "In progress"].includes(i.status)).map((i) => [i.subject.id, i])), [instances]);
+
+  const notifiedToMe = (e: MonitoringException) => rolesUpTo(e.level, e.amount).includes(actor.roleId);
+  const inScope = (e: MonitoringException) => (scope === "assigned" ? e.assigneeId === actor.id : scope === "notified" ? notifiedToMe(e) : true);
+  const scoped = exceptions.filter(inScope);
+  const open = scoped.filter((e) => e.status !== "Resolved");
 
   const cards: KanbanCard[] = useMemo(
     () =>
-      exceptions.map((e) => ({
+      scoped.map((e) => ({
         id: e.id,
         columnId: e.status,
         title: obligor.get(e.obligorId)?.name ?? e.obligorId,
@@ -77,87 +102,110 @@ export function ExceptionsPage() {
         badges: [
           { label: `Level ${e.level}`, tone: levelTones[e.level] },
           ...(e.source === "AI-flagged" ? [{ label: "AI-flagged", tone: "warning" as const }] : []),
-          ...(lapsed(e) ? [{ label: "SLA lapsed", tone: "danger" as const }] : []),
+          ...(slaLapsed(e, now) ? [{ label: "SLA lapsed", tone: "danger" as const }] : []),
+          ...(pendingOps.has(e.id) ? [{ label: "Awaiting sign-off", tone: "accent" as const }] : []),
         ],
         assignee: e.assigneeId ? { name: user.get(e.assigneeId)?.name ?? "Officer" } : undefined,
         footer: `${e.amount ? `${moneyShort(e.amount)} · ` : ""}open ${Math.max(0, daysBetween(e.raisedAt, now))}d · ${e.comments.length} comment${e.comments.length === 1 ? "" : "s"}`,
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [exceptions, obligor, user],
+    [scoped, obligor, user, pendingOps],
   );
-
-  const escalate = (e: MonitoringException, reason = "Escalated manually") => {
-    if (e.level >= 4) {
-      patch(e.id, { slaDueAt: addBusinessDays(new Date(), DEMO_SLA_BUSINESS_DAYS).toISOString(), status: "Escalated" }, { by: actor.name, action: "Level 4 — re-timestamped and re-notified (remains open until cured)", level: 4, status: "Escalated" });
-      audit({ action: "Re-notified exception at Level 4", entityType: "Exception", entityId: e.id });
-      return;
-    }
-    const level = (e.level + 1) as EscalationLevel;
-    patch(e.id, { level, status: "Escalated", slaDueAt: addBusinessDays(new Date(), DEMO_SLA_BUSINESS_DAYS).toISOString() }, { by: actor.name, action: `${reason} — Level ${level} notified: ${escalationLadder[level - 1]!.notified}`, level, status: "Escalated" });
-    audit({ action: "Escalated exception", entityType: "Exception", entityId: e.id, before: `Level ${e.level}`, after: `Level ${level}` });
-  };
 
   const move = (id: string, to: string) => {
     const e = exceptions.find((x) => x.id === id);
     if (!e || e.status === to) return;
-    if (to === "Resolved") return setResolveId(id);
-    if (to === "Escalated") return escalate(e);
-    patch(id, { status: to as ExceptionStatus }, { by: actor.name, action: e.status === "Resolved" ? "Re-opened" : `Moved to ${to}`, status: to as ExceptionStatus });
-    audit({ action: "Changed exception status", entityType: "Exception", entityId: id, before: e.status, after: to });
+    if (pendingOps.has(id)) return setNotice({ tone: "info", text: `${id} is awaiting sign-off (${pendingOps.get(id)!.id}) — decide it in Operations first.` });
+    if (to === "Resolved") return setDialog({ kind: "resolve", id });
+    if (to === "Escalated") return setDialog({ kind: "escalate", id });
+    changeExceptionStatus(id, to as "Raised" | "Under review");
   };
 
-  const sweep = () => {
-    const due = exceptions.filter(lapsed);
-    due.forEach((e) => escalate(e, `Level ${e.level} SLA lapsed uncured`));
-    audit({ action: "Ran escalation sweep", entityType: "Exception", entityId: "-", after: `${due.length} escalated / re-notified` });
+  const sweep = async () => {
+    setSweeping(true);
+    const r = await runEscalationSweep();
+    setSweeping(false);
+    setNotice({ tone: "success", text: `Escalation sweep: ${r.escalated} escalated / re-notified${r.held ? `, ${r.held} held by an extension hook` : ""}.` });
   };
 
-  type Row = MonitoringException & { name: string; age: number; isLapsed: boolean };
-  const rows: Row[] = exceptions.map((e) => ({ ...e, name: obligor.get(e.obligorId)?.name ?? e.obligorId, age: Math.max(0, daysBetween(e.raisedAt, now)), isLapsed: lapsed(e) }));
+  const closeDrawer = () => {
+    setOpenId(null);
+    if (params.get("id")) router.replace("/monitoring/exceptions");
+  };
+
+  type Row = MonitoringException & { name: string; age: number; isLapsed: boolean; pending?: string };
+  const rows: Row[] = scoped.map((e) => ({ ...e, name: obligor.get(e.obligorId)?.name ?? e.obligorId, age: Math.max(0, daysBetween(e.raisedAt, now)), isLapsed: slaLapsed(e, now), pending: pendingOps.get(e.id)?.id }));
   const reportCols: DataTableColumn<Row>[] = [
     { id: "id", header: "Exception", accessor: "id", sortable: true, cell: (r) => <span className="font-mono">{r.id}</span> },
     { id: "name", header: "Obligor", accessor: "name", sortable: true, cell: (r) => <Stack gap="none"><span className="font-medium text-fg">{r.name}</span><Text variant="caption" tone="subtle">{r.facilityId ?? r.collateralId ?? ""}</Text></Stack> },
     { id: "type", header: "Type", accessor: "type", sortable: true },
     { id: "level", header: "Level", accessor: "level", numeric: true, sortable: true },
-    { id: "status", header: "Status", accessor: "status", sortable: true, cell: (r) => <StatusBadge status={r.status} tones={statusTones} /> },
+    { id: "status", header: "Status", accessor: "status", sortable: true, cell: (r) => <Stack gap="none"><StatusBadge status={r.status} tones={statusTones} />{r.pending && <Text variant="caption" tone="subtle">Sign-off {r.pending}</Text>}</Stack> },
     { id: "age", header: "Age (days)", accessor: "age", numeric: true, sortable: true },
     { id: "sla", header: "SLA to cure", accessor: "slaDueAt", sortable: true, cell: (r) => (r.status === "Resolved" ? "Cured" : <Stack gap="none"><span>{dateTime(r.slaDueAt)}</span>{r.isLapsed && <Text variant="caption" tone="accent">Lapsed</Text>}</Stack>) },
+    { id: "assignee", header: "Assigned", accessor: (r) => (r.assigneeId ? (user.get(r.assigneeId)?.name ?? "") : ""), sortable: true },
     { id: "source", header: "Source", accessor: "source", sortable: true },
   ];
 
   const selected = exceptions.find((e) => e.id === openId) ?? null;
+  const dialogFor = dialog ? exceptions.find((x) => x.id === dialog.id) : undefined;
 
   return (
     <ModulePage
       module="monitoring"
-      description="Every exception enters one tenant-configurable escalation protocol that runs until the exception is cured and evidenced — not merely acknowledged (PRD §6.4.4)."
+      description="Every exception enters one tenant-configurable escalation protocol that runs until the exception is cured and evidenced — not merely acknowledged (PRD §6.4.4). Resolutions and out-of-cycle escalations are signed off through Operations."
       actions={
         canEdit ? (
-          <Button variant="secondary" iconBefore={<RefreshCw aria-hidden className="size-4" />} onClick={sweep} disabled={!exceptions.some(lapsed)}>
+          <Button variant="secondary" iconBefore={<RefreshCw aria-hidden className="size-4" />} onClick={sweep} loading={sweeping} disabled={!exceptions.some((e) => slaLapsed(e, now))}>
             Run escalation sweep
           </Button>
         ) : undefined
       }
     >
       <Stack gap="large">
+        {notice && (
+          <Alert
+            tone={notice.tone}
+            action={
+              <Button size="small" variant="text" onClick={() => setNotice(null)}>
+                Dismiss
+              </Button>
+            }
+          >
+            {notice.text}
+          </Alert>
+        )}
         <Grid columns={{ base: 2, lg: 4 }} gap="medium">
           <StatCard label="Open exceptions" value={number(open.length)} hint={`${open.filter((e) => e.source === "AI-flagged").length} AI-flagged`} />
-          <StatCard label="At Level 3–4" value={number(open.filter((e) => e.level >= 3).length)} hint="CCO / Head of Risk / CRO notified" tone="danger" />
-          <StatCard label="SLA lapsed" value={number(exceptions.filter(lapsed).length)} hint="Due for escalation" tone="warning" />
-          <StatCard label="Notified to your role" value={number(mine.length)} hint={role?.name} tone="info" />
+          <StatCard label="At Level 3–4" value={number(open.filter((e) => e.level >= 3).length)} hint={ladder[2]!.notified} tone="danger" />
+          <StatCard label="SLA lapsed" value={number(scoped.filter((e) => slaLapsed(e, now)).length)} hint="Due for escalation" tone="warning" />
+          <StatCard label="Awaiting sign-off" value={number(open.filter((e) => pendingOps.has(e.id)).length)} hint="Operations workflow" tone="info" />
         </Grid>
 
         <Stack gap="medium">
-          <SegmentedControl
-            label="View"
-            size="small"
-            value={view}
-            onChange={setView}
-            options={[
-              { value: "board", label: "Exception queue" },
-              { value: "report", label: "Exception-ageing report" },
-            ]}
-          />
+          <Stack direction="horizontal" gap="medium" wrap>
+            <SegmentedControl
+              label="View"
+              size="small"
+              value={view}
+              onChange={setView}
+              options={[
+                { value: "board", label: "Exception queue" },
+                { value: "report", label: "Exception-ageing report" },
+              ]}
+            />
+            <SegmentedControl
+              label="Scope"
+              size="small"
+              value={scope}
+              onChange={setScope}
+              options={[
+                { value: "all", label: "All exceptions" },
+                { value: "assigned", label: `Assigned to me (${exceptions.filter((e) => e.assigneeId === actor.id && e.status !== "Resolved").length})` },
+                { value: "notified", label: `Notified to my role (${exceptions.filter((e) => e.status !== "Resolved" && notifiedToMe(e)).length})` },
+              ]}
+            />
+          </Stack>
           {view === "board" ? (
             <KanbanBoard className="[&_[role=listitem]]:w-auto [&_[role=listitem]]:min-w-64 [&_[role=listitem]]:flex-1" label="Exception workflow" columns={columns} cards={cards} onMove={canEdit ? (id, to) => move(id, to) : undefined} onCardClick={(c) => setOpenId(c.id)} emptyColumnMessage="Nothing here" />
           ) : (
@@ -185,13 +233,16 @@ export function ExceptionsPage() {
             <div>
               <CardTitle>Escalation protocol</CardTitle>
               <CardDescription>
-                Alerts fire to the in-app dashboard and by email to the named officers tagged to the obligor at each level — never to a generic list only. SLAs are tenant parameters. Past-due,
-                covenant-breach and limit-breach exceptions close only with curing evidence attached and time-stamped.
+                Alerts fire to the in-app dashboard and by email to the named officers tagged to the obligor at each level — never to a generic list only. Roles and SLAs are business rules (
+                <TextLink as={Link} href="/monitoring/escalation">
+                  view protocol
+                </TextLink>
+                ). Exception types listed in the evidence rule close only with curing evidence attached, time-stamped and signed off.
               </CardDescription>
             </div>
           </CardHeader>
           <Grid columns={{ base: 1, md: 2, xl: 4 }} gap="medium" className="mt-4">
-            {escalationLadder.map((l) => (
+            {ladder.map((l) => (
               <Card key={l.level} padding="small">
                 <Stack gap="xsmall">
                   <Stack direction="horizontal" gap="small" align="center">
@@ -219,14 +270,16 @@ export function ExceptionsPage() {
           name={obligor.get(selected.obligorId)?.name ?? selected.obligorId}
           assignee={selected.assigneeId ? user.get(selected.assigneeId)?.name : undefined}
           canEdit={canEdit}
-          lapsed={lapsed(selected)}
-          onClose={() => setOpenId(null)}
-          onEscalate={() => escalate(selected)}
-          onResolve={() => setResolveId(selected.id)}
-          onReview={() => move(selected.id, "Under review")}
+          lapsed={slaLapsed(selected, now)}
+          pending={pendingOps.has(selected.id)}
+          onClose={closeDrawer}
+          onEscalate={() => setDialog({ kind: "escalate", id: selected.id })}
+          onResolve={() => setDialog({ kind: "resolve", id: selected.id })}
+          onReview={() => changeExceptionStatus(selected.id, "Under review")}
         />
       )}
-      {resolveId && <ResolveModal e={exceptions.find((x) => x.id === resolveId)!} onClose={() => setResolveId(null)} />}
+      {dialog?.kind === "resolve" && dialogFor && <ResolveModal e={dialogFor} onClose={() => setDialog(null)} onDone={(text) => setNotice({ tone: "success", text })} />}
+      {dialog?.kind === "escalate" && dialogFor && <EscalateModal e={dialogFor} onClose={() => setDialog(null)} onDone={(text) => setNotice({ tone: "success", text })} />}
     </ModulePage>
   );
 }
@@ -237,6 +290,7 @@ function ExceptionDrawer({
   assignee,
   canEdit,
   lapsed,
+  pending,
   onClose,
   onEscalate,
   onResolve,
@@ -247,15 +301,15 @@ function ExceptionDrawer({
   assignee?: string;
   canEdit: boolean;
   lapsed: boolean;
+  pending: boolean;
   onClose: () => void;
   onEscalate: () => void;
   onResolve: () => void;
   onReview: () => void;
 }) {
-  const comment = useMonitoring((s) => s.comment);
-  const audit = useAuditLog();
-  const actor = useActor();
+  const { actor } = useScope();
   const role = useRole();
+  const ladder = useLadder();
   const resolved = e.status === "Resolved";
   return (
     <Drawer
@@ -265,7 +319,7 @@ function ExceptionDrawer({
       description={name}
       size="large"
       footer={
-        canEdit && !resolved ? (
+        canEdit && !resolved && !pending ? (
           <>
             {e.status === "Raised" && (
               <Button variant="tertiary" onClick={onReview}>
@@ -273,16 +327,21 @@ function ExceptionDrawer({
               </Button>
             )}
             <Button variant="secondary" iconBefore={<ArrowUpCircle aria-hidden className="size-4" />} onClick={onEscalate}>
-              {e.level >= 4 ? "Re-notify Level 4" : `Escalate to Level ${e.level + 1}`}
+              {e.level >= 4 ? "Request Level 4 re-notification" : `Request escalation to Level ${e.level + 1}`}
             </Button>
             <Button iconBefore={<CheckCircle2 aria-hidden className="size-4" />} onClick={onResolve}>
-              Attach evidence & resolve
+              Submit curing evidence
             </Button>
           </>
+        ) : canEdit && resolved ? (
+          <Button variant="tertiary" onClick={() => changeExceptionStatus(e.id, "Raised")}>
+            Re-open
+          </Button>
         ) : undefined
       }
     >
       <Stack gap="large">
+        <PendingApproval subjectType="Exception" subjectId={e.id} />
         {lapsed && (
           <Alert tone="danger" title={`Level ${e.level} SLA lapsed`}>
             The cure window ended {dateTime(e.slaDueAt)}. The escalation sweep will move it to the next level.
@@ -316,7 +375,7 @@ function ExceptionDrawer({
           <Text variant="eyebrow">Escalation path</Text>
           <Steps
             orientation="vertical"
-            items={escalationLadder.map((l) => ({
+            items={ladder.map((l) => ({
               title: `Level ${l.level}`,
               description: l.notified,
               status: resolved || l.level < e.level ? ("complete" as const) : l.level === e.level ? ("current" as const) : ("upcoming" as const),
@@ -328,10 +387,7 @@ function ExceptionDrawer({
           title="Comments"
           comments={e.comments.map((c) => ({ id: c.id, author: { name: c.authorName, role: c.authorRole }, body: c.body, time: dateTime(c.at) }))}
           currentUser={{ name: actor.name, role: role?.name }}
-          onSubmit={(body) => {
-            comment(e.id, { authorName: actor.name, authorRole: role?.name, body });
-            audit({ action: "Commented on exception", entityType: "Exception", entityId: e.id, after: body.slice(0, 120) });
-          }}
+          onSubmit={(body) => commentOnException(e.id, body, role?.name)}
           placeholder="Add an update — use @name to mention an officer"
         />
         <ActivityFeed
@@ -343,52 +399,100 @@ function ExceptionDrawer({
   );
 }
 
-function ResolveModal({ e, onClose }: { e: MonitoringException; onClose: () => void }) {
-  const patch = useMonitoring((s) => s.patchException);
-  const audit = useAuditLog();
-  const actor = useActor();
+function ResolveModal({ e, onClose, onDone }: { e: MonitoringException; onClose: () => void; onDone: (text: string) => void }) {
   const [evidence, setEvidence] = useState("");
   const [note, setNote] = useState("");
-  const regulatory = regulatoryRelevant.includes(e.type);
-  const valid = evidence.trim().length > 2;
-  const save = () => {
-    const at = new Date().toISOString();
-    patch(e.id, { status: "Resolved", evidence: { name: evidence.trim(), at, by: actor.name, note } }, { by: actor.name, action: `Cured — evidence attached: ${evidence.trim()}`, status: "Resolved" });
-    audit({ action: "Resolved exception with evidence", entityType: "Exception", entityId: e.id, before: e.status, after: `Resolved · ${evidence.trim()}` });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const required = useRule<string[]>("monitoring.exceptions.evidenceRequiredTypes").includes(e.type);
+  const minEvidence = useRule<number>("monitoring.exceptions.minEvidenceLength");
+  const valid = !required || evidence.trim().length >= minEvidence;
+  const save = async () => {
+    setBusy(true);
+    const r = await requestResolution(e.id, evidence, note || undefined);
+    setBusy(false);
+    if (!r.ok) return setError(r.reason);
+    onDone(r.applied ? `${e.id} closed as cured.` : `Curing evidence for ${e.id} sent for sign-off (${r.operationId}).`);
     onClose();
   };
   return (
     <Modal
       open
       onOpenChange={(o) => !o && onClose()}
-      title="Attach curing evidence"
+      title="Submit curing evidence"
       description={`${e.id} · ${e.type}`}
       footer={
         <>
           <Button variant="tertiary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={!valid}>
-            Resolve exception
+          <Button onClick={save} loading={busy} disabled={!valid}>
+            Submit for sign-off
           </Button>
         </>
       }
     >
       <Stack gap="medium">
-        {regulatory && (
+        {error && <Alert tone="danger">{error}</Alert>}
+        {required && (
           <Alert tone="warning" title="Regulatory-relevant exception">
             A manual “mark as resolved” without evidence is not permitted for {e.type.toLowerCase()} exceptions.
           </Alert>
         )}
-        <Field label="Evidence" htmlFor="evidence" description="Payment received, document submitted, covenant re-tested and passed, or reconciliation matched." required>
+        <Field label="Evidence" htmlFor="evidence" description="Payment received, document submitted, covenant re-tested and passed, or reconciliation matched." required={required} optional={!required}>
           <Input id="evidence" value={evidence} onChange={(ev) => setEvidence(ev.target.value)} placeholder="e.g. CBA credit ref FT26314XK2 — arrears cleared" />
         </Field>
         <Field label="Note" htmlFor="evidence-note" optional>
           <Textarea id="evidence-note" rows={3} value={note} onChange={(ev) => setNote(ev.target.value)} />
         </Field>
         <Text variant="caption" tone="subtle">
-          The evidence is time-stamped on save and kept in the exception’s escalation history.
+          The exception stays open until the resolution is signed off in Operations. The evidence is time-stamped on sign-off and kept in the escalation history.
         </Text>
+      </Stack>
+    </Modal>
+  );
+}
+
+function EscalateModal({ e, onClose, onDone }: { e: MonitoringException; onClose: () => void; onDone: (text: string) => void }) {
+  const ladder = useLadder();
+  const minReason = useRule<number>("monitoring.exceptions.minReasonLength");
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const to = Math.min(4, e.level + 1) as EscalationLevel;
+  const save = async () => {
+    setBusy(true);
+    const r = await requestEscalation(e.id, reason);
+    setBusy(false);
+    if (!r.ok) return setError(r.reason);
+    onDone(`Escalation of ${e.id} sent for sign-off (${r.operationId}).`);
+    onClose();
+  };
+  return (
+    <Modal
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title={e.level >= 4 ? "Request Level 4 re-notification" : `Request escalation to Level ${to}`}
+      description={`${e.id} · ${e.type}`}
+      footer={
+        <>
+          <Button variant="tertiary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={save} loading={busy} disabled={reason.trim().length < minReason}>
+            Submit for sign-off
+          </Button>
+        </>
+      }
+    >
+      <Stack gap="medium">
+        {error && <Alert tone="danger">{error}</Alert>}
+        <Alert tone="info" title="Out-of-cycle escalation">
+          SLA lapses escalate automatically. Escalating early needs sign-off; once approved, Level {to} is notified: {ladder[to - 1]!.notified}.
+        </Alert>
+        <Field label="Reason" htmlFor="esc-reason" required description={`At least ${minReason} characters.`}>
+          <Textarea id="esc-reason" rows={3} value={reason} onChange={(ev) => setReason(ev.target.value)} placeholder="e.g. Obligor has stopped responding; further arrears expected this week" />
+        </Field>
       </Stack>
     </Modal>
   );

@@ -29,10 +29,11 @@ import {
 import { ModulePage } from "@/components/module-page";
 import { useFacilities, useLookups, useObligors } from "@/lib/data/hooks";
 import { useHydrated } from "@/lib/auth/session";
+import { useRule } from "@/lib/platform/rules";
 import { rarPosition, type RarPosition } from "@/lib/rar";
 import type { Obligor } from "@/lib/data/types";
 import { moneyShort } from "@/lib/format";
-import { walletFor, walletPositionMeta, WALLET_HIGH_THRESHOLD, type WalletData, type WalletPosition } from "../data";
+import { walletFor, walletPositionMeta, type WalletData, type WalletPosition } from "../data";
 import { assessmentHref, PostureBadge } from "../shared";
 
 type Row = { o: Obligor; sector: string; w: WalletData; pos: RarPosition };
@@ -57,6 +58,7 @@ function ShareOfWalletView() {
   const router = useRouter();
   const initial = useSearchParams().get("id");
   const [selectedId, setSelectedId] = useState<string | null>(initial);
+  const highPct = useRule<number>("credit-analysis.sow.highSharePct");
 
   const rows = useMemo<Row[]>(
     () =>
@@ -69,7 +71,8 @@ function ShareOfWalletView() {
           pos: rarPosition(o.rar),
         };
       }),
-    [obligors, facilities, sector],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- highPct: wallet quadrant threshold is a business rule
+    [obligors, facilities, sector, highPct],
   );
   const withData = rows.filter((r) => r.w.available);
   const count = (p: WalletPosition) => withData.filter((r) => r.w.position === p).length;
@@ -185,7 +188,7 @@ function ShareOfWalletView() {
             <CardHeader>
               <div>
                 <CardTitle>Wallet Share Matrix</CardTitle>
-                <CardDescription>Turnover wallet share (X) against loan wallet share (Y); “high” at ≥ {pctS(WALLET_HIGH_THRESHOLD)} (tenant parameter, demo)</CardDescription>
+                <CardDescription>Turnover wallet share (X) against loan wallet share (Y); “high” at ≥ {highPct}% (tenant business rule)</CardDescription>
               </div>
             </CardHeader>
             <CardContent>
@@ -208,8 +211,8 @@ function ShareOfWalletView() {
                 xFormatter={(v) => `${Math.round(v)}%`}
                 yFormatter={(v) => `${Math.round(v)}%`}
                 referenceLines={[
-                  { axis: "x", value: WALLET_HIGH_THRESHOLD * 100 },
-                  { axis: "y", value: WALLET_HIGH_THRESHOLD * 100 },
+                  { axis: "x", value: highPct },
+                  { axis: "y", value: highPct },
                 ]}
                 height={300}
                 label="Wallet share matrix"

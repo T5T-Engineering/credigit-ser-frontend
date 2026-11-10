@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   ActivityFeed,
   AiInsightCard,
@@ -23,18 +24,31 @@ import {
   StatusBadge,
   Text,
   Textarea,
+  Input,
+  useToast,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { date, dateTime } from "@/lib/format";
 import { DEMO_NOW } from "@/lib/data/seed";
-import { APPROVING_ROLES, useActorName, useAuditLog } from "../common";
-import { sourceMapping, type ModelStatus, type RiskModel } from "../data";
+import { publish } from "@/lib/platform/events";
+import { runHooks } from "@/lib/platform/hooks";
+import { useOperationsStore } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { useActorName, useAuditLog } from "../common";
+import { sourceMapping, type RiskModel } from "../data";
+import { ModuleApprovals, operationHref, PendingNotice, useSubmitOperation } from "../governance";
+import type { ModelApprovalPayload } from "../platform";
 import { useIfrs9 } from "../store";
 
 const statusTones = { Approved: "success", "Pending validation": "info", "Validation findings": "danger", "Pending approval": "warning", Retired: "neutral" } as const;
 
-type Action = { model: RiskModel; to: ModelStatus; label: string };
+/** Next review date: last calibration + the model refresh interval (business rule, CBN 12.15). */
+const nextReviewOf = (m: RiskModel, months: number) => {
+  const d = new Date(m.lastCalibrated);
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString();
+};
 
 export function Ifrs9ModelsPage() {
   const models = useIfrs9((s) => s.models);
@@ -44,29 +58,58 @@ export function Ifrs9ModelsPage() {
   const signOffAi = useIfrs9((s) => s.signOffAi);
   const canEdit = useCan("ifrs9", "edit");
   const actor = useActorName();
-  const isApprover = actor.roleId ? APPROVING_ROLES.includes(actor.roleId) : false;
   const audit = useAuditLog();
+  const { toast } = useToast();
+  const submitOperation = useSubmitOperation();
+  const interval = useRule<number>("ifrs9.model.reviewIntervalMonths");
+  const instances = useOperationsStore((s) => s.instances);
   const [open, setOpen] = useState<RiskModel | null>(null);
-  const [action, setAction] = useState<Action | null>(null);
+  const [submitFor, setSubmitFor] = useState<RiskModel | null>(null);
+  const [change, setChange] = useState("");
+  const [version, setVersion] = useState("");
   const [note, setNote] = useState("");
 
-  const overdue = models.filter((m) => new Date(m.nextReview) < DEMO_NOW && m.status !== "Retired");
+  const pendingOp = (m: RiskModel) => instances.find((i) => i.subject.type === "RiskModel" && i.subject.id === m.id && (i.status === "Pending" || i.status === "In progress"));
+  const overdue = models.filter((m) => new Date(nextReviewOf(m, interval)) < DEMO_NOW && m.status !== "Retired");
+  const mine = instances.filter((i) => i.operationType === "ifrs9.model.approval" && i.requestedBy.id === actor.id);
+  const canSubmit = (m: RiskModel) => canEdit && (m.status === "Approved" || m.status === "Validation findings") && !pendingOp(m);
 
-  const actionsFor = (m: RiskModel): Action[] => {
-    const out: Action[] = [];
-    if (canEdit && (m.status === "Approved" || m.status === "Validation findings")) out.push({ model: m, to: "Pending validation", label: "Submit for validation" });
-    if (canEdit && m.status === "Pending validation") out.push({ model: m, to: "Pending approval", label: "Record validation passed" });
-    if (canEdit && m.status === "Pending validation") out.push({ model: m, to: "Validation findings", label: "Record findings" });
-    if (isApprover && m.status === "Pending approval") out.push({ model: m, to: "Approved", label: "Approve for production" });
-    return out;
+  const startSubmit = (m: RiskModel) => {
+    setSubmitFor(m);
+    setVersion(m.version);
+    setChange("");
+    setNote("");
   };
 
-  const confirm = () => {
-    if (!action) return;
-    setModelStatus(action.model.id, action.to, { by: `${actor.name} (${actor.role})`, action: action.label, note: note || undefined });
-    audit(`Model governance: ${action.label}`, "RiskModel", `${action.model.id} v${action.model.version}`, action.model.status, action.to);
-    setAction(null);
-    setNote("");
+  /** Model governance through Operations: independent validation (2nd line) → approval for production. */
+  const confirm = async () => {
+    const m = submitFor;
+    if (!m) return;
+    const payload: ModelApprovalPayload = { modelId: m.id, modelName: m.name, currentVersion: m.version, version: version.trim() || m.version, change: change.trim(), note: note.trim() || undefined };
+    const hook = await runHooks("ifrs9.model.submit.before", { model: m, payload });
+    if (!hook.ok) {
+      toast({ title: "Submission blocked", description: `${hook.vetoedBy}: ${hook.reason}`, tone: "danger" });
+      return;
+    }
+    const p = hook.ctx.payload;
+    const res = await submitOperation<ModelApprovalPayload>("ifrs9.model.approval", {
+      title: `${m.name} v${p.version}: ${p.change}`,
+      subject: { type: "RiskModel", id: m.id, title: m.name, href: "/ifrs9/models" },
+      payload: p,
+      summary: [
+        { label: "Model", value: `${m.name} (${m.id})` },
+        { label: "Version", value: p.version === m.version ? `v${m.version} (revalidation)` : `v${m.version} → v${p.version}` },
+        { label: "Change", value: p.change },
+        { label: "Performance", value: m.performance },
+        ...(p.note ? [{ label: "Note", value: p.note }] : []),
+      ],
+    });
+    if (!res.ok) return;
+    setModelStatus(m.id, "Pending validation", { by: `${actor.name} (${actor.role})`, action: `Submitted v${p.version} for validation`, note: p.change });
+    audit("Model governance: submitted for validation", "RiskModel", `${m.id} v${p.version}`, m.status, `Pending validation — Operations ${res.instance.id}`);
+    publish("ifrs9.model.submitted", { module: "ifrs9", subject: { type: "RiskModel", id: m.id, title: m.name, href: "/ifrs9/models" }, payload: { version: p.version, operationId: res.instance.id } });
+    await runHooks("ifrs9.model.submit.after", { model: m, payload: p, operationId: res.instance.id });
+    setSubmitFor(null);
     setOpen(null);
   };
 
@@ -79,8 +122,8 @@ export function Ifrs9ModelsPage() {
     {
       id: "review",
       header: "Next review",
-      accessor: "nextReview",
-      cell: (m) => <span className={new Date(m.nextReview) < DEMO_NOW ? "font-semibold text-danger-strong" : undefined}>{date(m.nextReview)}</span>,
+      accessor: (m) => nextReviewOf(m, interval),
+      cell: (m) => <span className={new Date(nextReviewOf(m, interval)) < DEMO_NOW ? "font-semibold text-danger-strong" : undefined}>{date(nextReviewOf(m, interval))}</span>,
     },
     { id: "perf", header: "Performance", accessor: "performance", cell: (m) => <span className="font-mono text-sm">{m.performance}</span> },
     { id: "status", header: "Status", accessor: "status", cell: (m) => <StatusBadge status={m.status} tones={statusTones} /> },
@@ -97,7 +140,7 @@ export function Ifrs9ModelsPage() {
             value={String(models.filter((m) => m.status === "Pending validation" || m.status === "Pending approval").length)}
             tone="warning"
           />
-          <StatCard label="Past annual review" value={String(overdue.length)} hint="CBN 12.15: refresh at least annually" tone={overdue.length ? "danger" : "success"} />
+          <StatCard label="Past review date" value={String(overdue.length)} hint={`Refresh every ${interval} months (CBN 12.15)`} tone={overdue.length ? "danger" : "success"} />
         </Grid>
 
         <Card variant="outlined">
@@ -130,7 +173,7 @@ export function Ifrs9ModelsPage() {
                     <StatusBadge status={m.status} tones={statusTones} />
                   </Stack>
                   <Text variant="caption" tone="muted">
-                    {m.parameter} · v{m.version} · next review {date(m.nextReview)}
+                    {m.parameter} · v{m.version} · next review {date(nextReviewOf(m, interval))}
                   </Text>
                 </Stack>
               )}
@@ -160,6 +203,42 @@ export function Ifrs9ModelsPage() {
             />
           </CardContent>
         </Card>
+
+        {mine.length > 0 && (
+          <Card variant="outlined">
+            <CardHeader>
+              <Stack gap="xsmall">
+                <CardTitle>My model submissions</CardTitle>
+                <CardDescription>Your submissions and where they are in the validation / approval workflow.</CardDescription>
+              </Stack>
+            </CardHeader>
+            <CardContent>
+              <DataTable
+                label="My model submissions"
+                data={mine}
+                getRowId={(i) => i.id}
+                paginate={false}
+                columns={[
+                  { id: "title", header: "Submission", accessor: "title" },
+                  { id: "at", header: "Submitted", accessor: "requestedAt", cell: (i) => dateTime(i.requestedAt) },
+                  { id: "status", header: "Status", accessor: "status" },
+                  {
+                    id: "open",
+                    header: "",
+                    exportable: false,
+                    cell: (i) => (
+                      <Button as={Link} href={operationHref(i.id)} size="small" variant="secondary">
+                        Open
+                      </Button>
+                    ),
+                  },
+                ]}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        <ModuleApprovals modules={["ifrs9"]} title="IFRS 9 approvals in Operations" limit={5} />
 
         <Grid columns={{ base: 1, lg: 12 }} gap="large">
           <Card variant="outlined" className="lg:col-span-7">
@@ -208,6 +287,7 @@ export function Ifrs9ModelsPage() {
                       const by = `${actor.name}, ${dateTime(new Date())}`;
                       signOffAi("lgd-drift", `Accepted by ${by}`);
                       audit("Signed off AI-flagged model finding", "RiskModel", "MDL-LGD-UNS", "AI-flagged", "Accepted — recalibration scheduled");
+                      publish("ifrs9.ai-finding.reviewed", { module: "ifrs9", subject: { type: "RiskModel", id: "MDL-LGD-UNS", href: "/ifrs9/models" }, payload: { finding: "lgd-drift", outcome: "accepted" } });
                     }
                   : undefined
               }
@@ -216,6 +296,7 @@ export function Ifrs9ModelsPage() {
                   ? () => {
                       signOffAi("lgd-drift", `Dismissed by ${actor.name}, ${dateTime(new Date())}`);
                       audit("Dismissed AI-flagged model finding", "RiskModel", "MDL-LGD-UNS", "AI-flagged", "Dismissed");
+                      publish("ifrs9.ai-finding.reviewed", { module: "ifrs9", subject: { type: "RiskModel", id: "MDL-LGD-UNS", href: "/ifrs9/models" }, payload: { finding: "lgd-drift", outcome: "dismissed" } });
                     }
                   : undefined
               }
@@ -231,13 +312,9 @@ export function Ifrs9ModelsPage() {
         description={open ? `${open.id} · v${open.version}` : undefined}
         size="large"
         footer={
-          open && actionsFor(open).length ? (
+          open && canSubmit(open) ? (
             <Stack direction="horizontal" gap="small" wrap>
-              {actionsFor(open).map((a) => (
-                <Button key={a.label} variant={a.to === "Validation findings" ? "tertiary" : "primary"} onClick={() => setAction(a)}>
-                  {a.label}
-                </Button>
-              ))}
+              <Button onClick={() => startSubmit(open)}>Submit for validation &amp; approval</Button>
             </Stack>
           ) : undefined
         }
@@ -255,12 +332,13 @@ export function Ifrs9ModelsPage() {
                 { label: "Performance", value: open.performance, mono: true },
                 { label: "Owner", value: open.owner },
                 { label: "Last calibrated", value: date(open.lastCalibrated) },
-                { label: "Next review", value: date(open.nextReview) },
+                { label: "Next review", value: date(nextReviewOf(open, interval)), hint: `Last calibrated + ${interval} months` },
               ]}
             />
+            <PendingNotice subjectType="RiskModel" subjectId={open.id} />
             <Text variant="small" tone="muted">
-              Governance: the Predictive Analytics Officer submits and records validation; a tenant-configured approving officer (demo: CRO or Head of Risk) approves a version for
-              production. Maker and approver must differ.
+              Governance: the model owner submits a version; independent validation (2nd line) and approval for production are decided in Operations by the configured approvers. The
+              submitter can never decide their own submission.
             </Text>
             <ActivityFeed
               label="History"
@@ -283,29 +361,32 @@ export function Ifrs9ModelsPage() {
       </Drawer>
 
       <Modal
-        open={!!action}
-        onOpenChange={(o) => !o && setAction(null)}
-        title={action?.label ?? ""}
-        description={action ? `${action.model.name} v${action.model.version}: ${action.model.status} → ${action.to}` : undefined}
+        open={!!submitFor}
+        onOpenChange={(o) => !o && setSubmitFor(null)}
+        title="Submit for validation & approval"
+        description={submitFor ? `${submitFor.name} · current v${submitFor.version} (${submitFor.status})` : undefined}
         footer={
           <Stack direction="horizontal" gap="small" justify="end">
-            <Button variant="tertiary" onClick={() => setAction(null)}>
+            <Button variant="tertiary" onClick={() => setSubmitFor(null)}>
               Cancel
             </Button>
-            <Button onClick={confirm} disabled={action?.to === "Validation findings" && note.trim().length < 5}>
-              Confirm
+            <Button onClick={() => void confirm()} disabled={change.trim().length < 5}>
+              Submit to Operations
             </Button>
           </Stack>
         }
       >
-        <Field
-          label="Note"
-          description="Recorded in the model change log and the audit trail."
-          optional={action?.to !== "Validation findings"}
-          required={action?.to === "Validation findings"}
-        >
-          <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
-        </Field>
+        <Stack gap="medium">
+          <Field label="Change" required description="What changed (recalibration, new segment, remediation of findings).">
+            <Input value={change} onChange={(e) => setChange(e.target.value)} />
+          </Field>
+          <Field label="Version" description="Leave unchanged for a revalidation of the current version.">
+            <Input value={version} onChange={(e) => setVersion(e.target.value)} />
+          </Field>
+          <Field label="Note" optional description="Recorded in the model change log and the audit trail.">
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
+          </Field>
+        </Stack>
       </Modal>
     </ModulePage>
   );

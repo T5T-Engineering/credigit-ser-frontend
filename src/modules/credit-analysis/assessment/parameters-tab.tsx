@@ -3,7 +3,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, DataTable, Input, ProgressBar, Stack, Text, Tooltip, type DataTableColumn } from "@credigit/web-ui";
 import { date } from "@/lib/format";
-import type { Assessment, ParameterReading } from "../logic";
+import { bandOf, type Assessment, type ParameterReading } from "../logic";
 import { cardinalPoints, isEnrichable } from "../parameters";
 
 type Props = {
@@ -13,7 +13,8 @@ type Props = {
   setDraft: Dispatch<SetStateAction<Record<string, string>>>;
 };
 
-const scoreTone = (s: number) => (s >= 7 ? "success" : s >= 4 ? "info" : "danger");
+/** Tone by interpretive band (business rules `credit-analysis.band.*`). */
+const scoreTone = (s: number) => ({ High: "success", Medium: "info", Low: "danger" } as const)[bandOf(s)];
 
 export function ParametersTab({ a, editing, draft, setDraft }: Props) {
   const columns: DataTableColumn<ParameterReading>[] = [

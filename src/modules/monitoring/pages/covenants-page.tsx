@@ -36,14 +36,17 @@ import { useCan } from "@/lib/auth/session";
 import { useFacilities, useLookups, useObligors } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { date, dateTime, money, moneyShort, number, pct } from "@/lib/format";
-import { useActor, useAuditLog } from "../audit";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import { roleById, type RoleId } from "@/lib/rbac/roles";
+import { useActor } from "../audit";
+import { raiseException, recordCovenantTest, recordPeriodicFinancials, signOffAiFlag } from "../service";
 import {
   buildAgentFees,
   buildCovenants,
   buildInflowProfiles,
   buildPeriodicReviews,
   covenantStatusTones,
-  ENVELOPE_BAND,
   inflowMonthLabels,
   inflowStatusTones,
   type Covenant,
@@ -67,6 +70,8 @@ export function CovenantsPage() {
   const exceptions = useMonitoring((s) => s.exceptions);
   const [raiseTarget, setRaiseTarget] = useState<RaiseExceptionTarget | null>(null);
   const [testFor, setTestFor] = useState<CovRow | null>(null);
+  const { actor } = useScope();
+  const dueSoon = useRule<number>("monitoring.covenant.dueSoonDays");
   // Deep link: /monitoring/covenants?tab=inflows (used by notifications and demo scripts).
   const [initialTab] = useState(() => (typeof window === "undefined" ? "register" : (new URLSearchParams(window.location.search).get("tab") ?? "register")));
 
@@ -88,7 +93,7 @@ export function CovenantsPage() {
   const counts = {
     total: covenants.length,
     compliant: covenants.filter((c) => c.status === "Compliant").length,
-    due: covenants.filter((c) => c.status === "Due").length,
+    due: covenants.filter((c) => (c.status === "Due" || c.status === "Compliant") && c.daysToTest >= 0 && c.daysToTest <= dueSoon).length,
     overdue: covenants.filter((c) => c.status === "Overdue").length,
     breached: covenants.filter((c) => c.status === "Breached").length,
   };
@@ -201,7 +206,7 @@ export function CovenantsPage() {
               <Stack gap="large">
                 <Grid columns={{ base: 2, lg: 4 }} gap="medium">
                   <StatCard label="Covenants tracked" value={number(counts.total)} hint={`${pct((counts.compliant / counts.total) * 100, 0)} compliant`} />
-                  <StatCard label="Test due ≤ 30 days" value={number(counts.due)} tone="info" />
+                  <StatCard label={`Test due ≤ ${dueSoon} days`} value={number(counts.due)} tone="info" />
                   <StatCard label="Overdue evidence" value={number(counts.overdue)} tone="warning" />
                   <StatCard label="Breached" value={number(counts.breached)} tone="danger" hint="Enter the escalation protocol" />
                 </Grid>
@@ -221,11 +226,10 @@ export function CovenantsPage() {
                       id: "owner",
                       label: "Owner",
                       options: [
-                        { value: "loan-review-officer", label: "Loan Review" },
-                        { value: "credit-admin-officer", label: "Credit Admin" },
-                        { value: "account-officer", label: "Account Officer" },
+                        { value: "mine", label: `My role (${roleById[actor.roleId]?.name ?? actor.roleId})` },
+                        ...[...new Set(covenants.map((c) => c.ownerRole))].map((r) => ({ value: r, label: roleById[r as RoleId]?.name ?? r })),
                       ],
-                      filterFn: (c, v) => c.ownerRole === v,
+                      filterFn: (c, v) => (v === "mine" ? c.ownerRole === actor.roleId : c.ownerRole === v),
                     },
                   ]}
                   exportFilename="covenant-register.csv"
@@ -248,19 +252,17 @@ export function CovenantsPage() {
 /* ---------------- Covenant test ---------------- */
 
 function CovenantTestModal({ covenant, onClose, onBreach }: { covenant: CovRow; onClose: () => void; onBreach: (c: CovRow) => void }) {
-  const record = useMonitoring((s) => s.recordCovenantTest);
-  const audit = useAuditLog();
-  const actor = useActor();
   const [outcome, setOutcome] = useState<"pass" | "fail">("pass");
   const [evidence, setEvidence] = useState("");
   const [note, setNote] = useState("");
-  const save = () => {
-    const status = outcome === "pass" ? "Compliant" : "Breached";
-    const result = outcome === "pass" ? `Passed${note ? ` — ${note}` : ""}` : `Failed — ${note || "covenant not met"}`;
-    record(covenant.id, { status, at: new Date().toISOString(), by: actor.name, result, evidence, nextTestAt: outcome === "pass" ? new Date(DEMO_NOW.getTime() + 90 * 864e5).toISOString() : covenant.nextTestAt });
-    audit({ action: "Recorded covenant test", entityType: "Covenant", entityId: covenant.id, before: covenant.status, after: `${status} · evidence: ${evidence || "—"}` });
+  const [error, setError] = useState<string | null>(null);
+  const minEvidence = useRule<number>("monitoring.exceptions.minEvidenceLength");
+  const save = async () => {
+    const r = await recordCovenantTest(covenant, { outcome, evidence, note });
+    if (!r.ok) return setError(r.reason);
     onClose();
-    if (outcome === "fail" && !covenant.exceptionId) onBreach({ ...covenant, status, lastResult: result });
+    const result = outcome === "pass" ? `Passed${note ? ` — ${note}` : ""}` : `Failed — ${note || "covenant not met"}`;
+    if (outcome === "fail" && !covenant.exceptionId) onBreach({ ...covenant, status: "Breached", lastResult: result });
   };
   return (
     <Modal
@@ -273,13 +275,14 @@ function CovenantTestModal({ covenant, onClose, onBreach }: { covenant: CovRow; 
           <Button variant="tertiary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={!evidence.trim()}>
+          <Button onClick={save} disabled={evidence.trim().length < minEvidence}>
             Save result
           </Button>
         </>
       }
     >
       <Stack gap="medium">
+        {error && <Alert tone="danger">{error}</Alert>}
         <RadioGroup
           name="outcome"
           label="Result"
@@ -315,11 +318,9 @@ function InflowsTab({ obligors, canEdit, onRaise }: { obligors: ReturnType<typeo
   const flagged = profiles.filter((p) => p.aiFlag);
   const [selected, setSelected] = useState(flagged[0]?.obligorId ?? profiles[0]?.obligorId ?? "");
   const signoff = useMonitoring((s) => s.aiSignoffs[AI_KEY]);
-  const signOffAi = useMonitoring((s) => s.signOffAi);
-  const raise = useMonitoring((s) => s.raise);
   const exceptions = useMonitoring((s) => s.exceptions);
-  const audit = useAuditLog();
   const actor = useActor();
+  const bandPct = useRule<number>("monitoring.inflow.envelopeBandPct");
   const p = profiles.find((x) => x.obligorId === selected);
   const o = p ? obligor.get(p.obligorId) : undefined;
 
@@ -329,27 +330,21 @@ function InflowsTab({ obligors, canEdit, onRaise }: { obligors: ReturnType<typeo
     return { ...x, name: ob.name, sectorName: sector.get(ob.sectorId)?.name ?? "" };
   });
 
-  const accept = () => {
+  const accept = async () => {
     for (const f of flagged) {
       if (exceptions.some((e) => e.obligorId === f.obligorId && e.type === "Inflow-envelope deviation" && e.status !== "Resolved")) continue;
       const ob = obligor.get(f.obligorId)!;
-      const ex = raise({
+      await raiseException({
         type: "Inflow-envelope deviation",
         title: "Inflow below AI envelope",
         detail: `${ob.name}: net verified inflow over the last 3 months is ${Math.round(f.ratio3m * 100)}% of the expected ${f.nature.toLowerCase()} pattern (AI-flagged, signed off by ${actor.name}).`,
         obligorId: f.obligorId,
         source: "AI-flagged",
-        by: actor.name,
       });
-      audit({ action: "Raised exception (AI-flagged, human sign-off)", entityType: "Exception", entityId: ex.id, after: `Inflow-envelope deviation · ${ob.name}` });
     }
-    signOffAi(AI_KEY, actor.name, "accepted");
-    audit({ action: "Signed off AI flag", entityType: "AI output", entityId: AI_KEY, after: "Accepted — exceptions raised" });
+    signOffAiFlag(AI_KEY, "accepted");
   };
-  const dismiss = () => {
-    signOffAi(AI_KEY, actor.name, "dismissed");
-    audit({ action: "Dismissed AI flag", entityType: "AI output", entityId: AI_KEY, after: "Dismissed" });
-  };
+  const dismiss = () => signOffAiFlag(AI_KEY, "dismissed");
 
   const inColumns: DataTableColumn<InRow>[] = [
     { id: "name", header: "Obligor", accessor: "name", sortable: true, cell: (r) => <span className="font-medium text-fg">{r.name}</span> },
@@ -368,7 +363,7 @@ function InflowsTab({ obligors, canEdit, onRaise }: { obligors: ReturnType<typeo
           kind="flagged"
           title="Inflow shortfall against the Nature-of-Business envelope"
           model="Credigit trend engine (simulated)"
-          generatedAt={dateTime(new Date("2026-11-10T06:30:00+01:00"))}
+          generatedAt={dateTime(DEMO_NOW)}
           confidence={0.82}
           paragraphs={[
             `${flagged.length} obligors show net verified account inflows well below their rolling expected envelope for the last three months. Their Nature-of-Business profiles expect regular monthly turnover, so the silence is an exception rather than seasonality.`,
@@ -391,7 +386,7 @@ function InflowsTab({ obligors, canEdit, onRaise }: { obligors: ReturnType<typeo
           <div>
             <CardTitle>Expected vs actual inflow</CardTitle>
             <CardDescription>
-              Monthly net verified credit turnover against the AI-built envelope (expected ± {ENVELOPE_BAND * 100}% — tenant parameter). Expected pattern comes from declared turnover shaped by the
+              Monthly net verified credit turnover against the AI-built envelope (expected ± {bandPct}% — business rule). Expected pattern comes from declared turnover shaped by the
               Nature-of-Business profile.
             </CardDescription>
           </div>
@@ -498,9 +493,6 @@ function PeriodicTab({ canEdit, onRaise }: { canEdit: boolean; onRaise: (t: Rais
   const facilities = useFacilities();
   const { obligor } = useLookups();
   const tests = useMonitoring((s) => s.covenantTests);
-  const record = useMonitoring((s) => s.recordCovenantTest);
-  const audit = useAuditLog();
-  const actor = useActor();
   type PRow = PeriodicReview & { name: string };
   const rows: PRow[] = useMemo(
     () =>
@@ -511,8 +503,7 @@ function PeriodicTab({ canEdit, onRaise }: { canEdit: boolean; onRaise: (t: Rais
     [obligors, facilities, obligor, tests],
   );
   const markReceived = (r: PRow) => {
-    record(`PR-${r.obligorId}`, { status: "Compliant", at: new Date().toISOString(), by: actor.name, result: `${r.type} received and analysed`, nextTestAt: new Date(DEMO_NOW.getTime() + 92 * 864e5).toISOString() });
-    audit({ action: "Recorded periodic financials", entityType: "Obligor", entityId: r.obligorId, before: r.status, after: `Received · ${r.type}` });
+    recordPeriodicFinancials(r.obligorId, r.type, r.status);
   };
   const cols: DataTableColumn<PRow>[] = [
     { id: "name", header: "Obligor", accessor: "name", sortable: true, cell: (r) => <span className="font-medium text-fg">{r.name}</span> },

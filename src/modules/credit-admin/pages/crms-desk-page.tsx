@@ -14,6 +14,7 @@ import {
   Form,
   Grid,
   Modal,
+  SegmentedControl,
   Select,
   Spinner,
   Stack,
@@ -24,53 +25,58 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan, useSession } from "@/lib/auth/session";
+import { useCan } from "@/lib/auth/session";
 import { useObligors } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { newId } from "@/lib/data/store";
 import { date, dateTime, moneyShort, number } from "@/lib/format";
-import { daysBetween, demoNowIso, hash, useAuditLog } from "../common";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import type { RoleId } from "@/lib/rbac/roles";
+import { logCrmsSearch, resolveCrmsException, submitCrmsBatch, type ActionResult } from "../actions";
+import { daysBetween, demoNowIso, hash } from "../common";
 import { crmsReportTones, crmsResultTones, simulateCrms, useCrms, type CrmsReportRow } from "../crms";
 import { useFacilityRows } from "../logic";
-import { useCreditAdminStore, type CrmsBatch, type CrmsSearch } from "../store";
+import type { CrmsBatch, CrmsSearch } from "../store";
+
+/** TD-855: simulated CRMS connector latency (demo only — the real connector responds asynchronously). */
+const SIMULATED_LATENCY_MS = 1400;
 
 export function CrmsDeskPage() {
   const rows = useFacilityRows();
   const obligors = useObligors();
   const { searches, batches, reports } = useCrms(rows);
-  const canEdit = useCan("credit-admin", "edit");
-  const user = useSession((s) => s.user);
-  const saveBatch = useCreditAdminStore((s) => s.saveBatch);
-  const resolveCrms = useCreditAdminStore((s) => s.resolveCrms);
-  const log = useAuditLog();
+  const { actor } = useScope();
+  const deskRoles = useRule<RoleId[]>("credit-admin.cpConfirmerRoles");
+  const canEdit = useCan("credit-admin", "edit") && deskRoles.includes(actor.roleId);
+  const recentDays = useRule<number>("credit-admin.crmsRecentWindowDays");
+  const cadence = useRule<string>("credit-admin.crmsReportingCadence");
+  const [result, setResult] = useState<ActionResult | null>(null);
+  const [scope, setScope] = useState<"all" | "mine">("all");
   const [tab, setTab] = useState("searches");
   const [searchOpen, setSearchOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const obName = useMemo(() => new Map(obligors.map((o) => [o.id, o.name])), [obligors]);
 
-  const recent = searches.filter((s) => daysBetween(s.requestedAt) <= 30);
+  const recent = searches.filter((s) => daysBetween(s.requestedAt) <= recentDays);
+  const shownSearches = scope === "mine" ? searches.filter((s) => s.requestedByName === actor.name) : searches;
   const pendingReports = reports.filter((r) => r.status === "Pending submission");
   const exceptions = reports.filter((r) => r.status === "Exception");
 
   const submitBatch = () => {
     setSubmitting(true);
     window.setTimeout(() => {
-      const b: CrmsBatch = {
-        id: newId("CRMS-B"),
-        label: `Ad-hoc submission ${date(DEMO_NOW)}`,
-        submittedAt: demoNowIso(),
-        submittedByName: user?.name ?? "Credit Administration",
-        facilityIds: pendingReports.map((r) => r.row.facility.id),
-        status: "Accepted by CBN",
-        rejected: 0,
-      };
-      saveBatch(b);
-      log("Submitted CRMS batch (simulated)", "CRMS batch", b.id, undefined, `${b.facilityIds.length} facilities`);
-      setSubmitting(false);
-      setSubmitOpen(false);
-      setTab("batches");
-    }, 1400);
+      void submitCrmsBatch(
+        pendingReports.map((r) => r.row.facility.id),
+        `Ad-hoc submission ${date(DEMO_NOW)}`,
+      ).then((r) => {
+        setResult(r);
+        setSubmitting(false);
+        setSubmitOpen(false);
+        if (r.ok) setTab("batches");
+      });
+    }, SIMULATED_LATENCY_MS);
   };
 
   const searchColumns: DataTableColumn<CrmsSearch>[] = [
@@ -105,10 +111,7 @@ export function CrmsDeskPage() {
           <Button
             size="small"
             variant="tertiary"
-            onClick={() => {
-              resolveCrms(r.row.facility.id, user?.name ?? "Credit Administration", demoNowIso());
-              log("Resolved CRMS reporting exception", "Facility", r.row.facility.id, r.reason, "Pending submission");
-            }}
+            onClick={() => resolveCrmsException(r.row.facility.id, r.reason)}
           >
             Mark resolved
           </Button>
@@ -140,15 +143,20 @@ export function CrmsDeskPage() {
     >
       <Stack gap="large">
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
-          <StatCard label="Searches (30 days)" value={number(recent.length)} icon={<FileSearch aria-hidden />} hint={`${searches.length} logged in total`} />
-          <StatCard label="Adverse findings" value={number(recent.filter((s) => s.result.startsWith("Adverse")).length)} icon={<AlertOctagon aria-hidden />} tone="danger" hint="Delinquent credit at other institutions (30 days)" />
-          <StatCard label="Pending submission" value={number(pendingReports.length)} icon={<CloudUpload aria-hidden />} tone="info" hint={`Last batch ${batches[0] ? date(batches[0].submittedAt) : "—"}`} />
+          <StatCard label={`Searches (${recentDays} days)`} value={number(recent.length)} icon={<FileSearch aria-hidden />} hint={`${searches.length} logged in total`} />
+          <StatCard label="Adverse findings" value={number(recent.filter((s) => s.result.startsWith("Adverse")).length)} icon={<AlertOctagon aria-hidden />} tone="danger" hint={`Delinquent credit at other institutions (${recentDays} days)`} />
+          <StatCard label="Pending submission" value={number(pendingReports.length)} icon={<CloudUpload aria-hidden />} tone="info" hint={`Last batch ${batches[0] ? date(batches[0].submittedAt) : "—"} · cadence: ${cadence}`} />
           <StatCard label="Reporting exceptions" value={number(exceptions.length)} icon={<ShieldCheck aria-hidden />} tone="warning" hint="Must be fixed before submission" />
         </Grid>
 
         <Alert tone="info" title="Simulated CRMS connector">
-          In production the CRMS desk calls the CBN CRMS through the Credit Bureau + CRMS connector (§5). In this prototype responses are simulated and labelled as such.
+          In production the CRMS desk calls the CBN CRMS through the Credit Bureau + CRMS connector (§5). In this prototype responses are simulated and labelled as such. Batch submissions are recorded as Operations requests (approval steps are optional per tenant).
         </Alert>
+        {result ? (
+          <Alert tone={result.ok ? "success" : "danger"} title={result.ok ? "Done" : "Not done"} action={<Button size="small" variant="text" onClick={() => setResult(null)}>Dismiss</Button>}>
+            {result.ok ? result.message : result.reason}
+          </Alert>
+        ) : null}
 
         <Tabs
           value={tab}
@@ -160,10 +168,22 @@ export function CrmsDeskPage() {
               label: "Search log",
               badge: String(searches.length),
               content: (
+                <Stack gap="medium">
+                <div className="overflow-x-auto">
+                  <SegmentedControl
+                    label="Show"
+                    value={scope}
+                    onChange={(v) => setScope(v as "all" | "mine")}
+                    options={[
+                      { value: "all", label: `All searches (${searches.length})` },
+                      { value: "mine", label: `My searches (${searches.filter((s) => s.requestedByName === actor.name).length})` },
+                    ]}
+                  />
+                </div>
                 <DataTable
                   label="CRMS search log"
                   columns={searchColumns}
-                  data={searches}
+                  data={shownSearches}
                   getRowId={(s) => s.id}
                   searchable
                   searchPlaceholder="Search obligor, reference…"
@@ -187,6 +207,7 @@ export function CrmsDeskPage() {
                     </Stack>
                   )}
                 />
+                </Stack>
               ),
             },
             {
@@ -261,9 +282,7 @@ export function CrmsDeskPage() {
 
 function NewSearchModal({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const obligors = useObligors();
-  const user = useSession((s) => s.user);
-  const saveSearch = useCreditAdminStore((s) => s.saveSearch);
-  const log = useAuditLog();
+  const { actor } = useScope();
   const [obligorId, setObligorId] = useState("");
   const [purpose, setPurpose] = useState<CrmsSearch["purpose"]>("New application");
   const [pending, setPending] = useState<CrmsSearch | null>(null);
@@ -276,18 +295,17 @@ function NewSearchModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
     const o = obligors.find((x) => x.id === obligorId);
     if (!o) return;
     const at = demoNowIso();
-    const s: CrmsSearch = { id: newId("CRS"), obligorId: o.id, purpose, requestedByName: user?.name ?? "Credit Administration", requestedAt: at, result: "Awaiting response", facilitiesElsewhere: 0, outstandingElsewhere: 0, reference: `CRMS/${String(hash(o.id + at) % 10_000_000).padStart(7, "0")}` };
-    saveSearch(s);
-    log("Requested CRMS search", "Obligor", o.id, undefined, purpose);
+    const s: CrmsSearch = { id: newId("CRS"), obligorId: o.id, purpose, requestedByName: actor.name, requestedAt: at, result: "Awaiting response", facilitiesElsewhere: 0, outstandingElsewhere: 0, reference: `CRMS/${String(hash(o.id + at) % 10_000_000).padStart(7, "0")}` };
+    logCrmsSearch(s, "requested");
     setPending(s);
     setDone(null);
     timer.current = window.setTimeout(() => {
       const result: CrmsSearch = { ...s, ...simulateCrms(o, s.id), respondedAt: demoNowIso() };
-      saveSearch(result);
-      log("Received CRMS result (simulated)", "Obligor", o.id, "Awaiting response", result.result);
+      logCrmsSearch(result, "received");
       setPending(null);
       setDone(result);
-    }, 1500);
+    }, SIMULATED_LATENCY_MS);
+
   };
 
   const close = (o: boolean) => {

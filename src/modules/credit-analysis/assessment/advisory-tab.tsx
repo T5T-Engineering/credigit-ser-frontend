@@ -1,27 +1,31 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import {
   AiDraftPanel,
   Alert,
   Badge,
+  Button,
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
   DescriptionList,
+  Field,
   Grid,
   List,
   Matrix,
   SegmentedControl,
   Stack,
   Text,
+  Textarea,
   type MatrixCell,
 } from "@credigit/web-ui";
-import { useDbActions } from "@/lib/data/hooks";
-import { useRole, useSession } from "@/lib/auth/session";
-import type { Posture } from "@/lib/data/types";
+import { usePendingFor } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import type { Obligor, Posture } from "@/lib/data/types";
 import { dateTime } from "@/lib/format";
 import { CORPUS_VERSION, type WalletData } from "../data";
 import {
@@ -33,6 +37,7 @@ import {
   interpretiveTables,
   overlayGuidance,
   postureGuidance,
+  postureRule,
   type Assessment,
   type GatingCheck,
   type InterpretiveCell,
@@ -40,7 +45,8 @@ import {
   type RatioTrend,
 } from "../logic";
 import { cardinalByKey } from "../parameters";
-import { useAdvisorySignOff, useCreditAnalysis } from "../store";
+import { useAdvisorySignOff, useGatingOverrides, type GatingOverride } from "../store";
+import { requestGatingOverride, submitAdvisorySignOff, SUBJECT_ADVISORY, SUBJECT_GATING } from "../actions";
 import { postureOrder } from "../shared";
 import { postureTone } from "@/lib/rar";
 
@@ -53,18 +59,22 @@ type Props = {
   gating: GatingCheck[];
   canEdit: boolean;
   editing: boolean;
+  /** Approved (committed) posture label — what a sign-off is recorded against. */
+  committedLabel: string;
 };
 
 const cellTone = (r: number, c: number) => (r + c >= 3 ? "success" : r + c === 2 ? "info" : r + c === 1 ? "warning" : "danger");
 
-export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEdit, editing }: Props) {
+export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEdit, editing, committedLabel }: Props) {
   const p = a.position;
   const [table, setTable] = useState<Posture>(p.base);
   const signOff = useAdvisorySignOff(a.obligor.id);
-  const signAdvisory = useCreditAnalysis((s) => s.signAdvisory);
-  const user = useSession((s) => s.user);
-  const role = useRole();
-  const { log } = useDbActions();
+  const pendingSignOff = usePendingFor(SUBJECT_ADVISORY, a.obligor.id);
+  const gatingOverrides = useGatingOverrides();
+  const [message, setMessage] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
+  const confHigh = useRule<number>("credit-analysis.advisory.confidenceHigh");
+  const confMedium = useRule<number>("credit-analysis.advisory.confidenceMedium");
+  const confLow = useRule<number>("credit-analysis.advisory.confidenceLow");
 
   const draft = useMemo(
     () =>
@@ -102,24 +112,9 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
   const activeHere = cell && cell.posture === table ? { row: cell.rowBand, column: cell.colBand } : null;
   const stale = signOff && signOff.postureLabel !== p.label;
 
-  function accept(text: string) {
-    const at = new Date().toISOString();
-    signAdvisory(a.obligor.id, {
-      text,
-      signedOffBy: user?.name ?? "Credit Analyst",
-      at,
-      postureLabel: p.label,
-    });
-    log({
-      actorId: user?.id ?? "demo",
-      actorName: user?.name ?? "Demo user",
-      roleId: role?.id ?? "credit-analyst",
-      action: "Signed off 360 RAR advisory note",
-      entityType: "Obligor",
-      entityId: a.obligor.id,
-      before: signOff ? `Previous sign-off ${signOff.at.slice(0, 10)}` : "AI-drafted (unsigned)",
-      after: `${p.label} · ${text.length} chars${text !== draft ? " · edited by analyst" : ""}`,
-    });
+  async function accept(text: string) {
+    const res = await submitAdvisorySignOff(a.obligor, text, committedLabel, draft);
+    setMessage(res.ok ? { tone: "success", text: res.message } : { tone: "danger", text: res.reason });
   }
 
   return (
@@ -135,7 +130,7 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
               <Badge>Neutral / Transitional</Badge>
             ) : (
               <Badge tone={postureTone[p.base]}>
-                {p.base} · {postureGuidance[p.base].rule}
+                {p.base} · {postureRule(p.base)}
               </Badge>
             )}
           </CardHeader>
@@ -197,7 +192,7 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
             <div>
               <CardTitle>36-cell interpretive layer</CardTitle>
               <CardDescription>
-                {cardinalByKey[t.rows].short} (rows) × {cardinalByKey[t.columns].short} (columns), banded Low 1–3 · Medium 4–7 · High 8–10 · PRD {t.prd}
+                {cardinalByKey[t.rows].short} (rows) × {cardinalByKey[t.columns].short} (columns), banded Low {bandRange("Low")} · Medium {bandRange("Medium")} · High {bandRange("High")} · PRD {t.prd}
               </CardDescription>
             </div>
           </CardHeader>
@@ -214,11 +209,11 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
                 label={`${table} interpretive table`}
                 rows={bands.map((b) => ({
                   id: b,
-                  label: `${b} (${bandRange[b]})`,
+                  label: `${b} (${bandRange(b)})`,
                 }))}
                 columns={bands.map((b) => ({
                   id: b,
-                  label: `${b} (${bandRange[b]})`,
+                  label: `${b} (${bandRange(b)})`,
                 }))}
                 rowAxisLabel={cardinalByKey[t.rows].short}
                 columnAxisLabel={cardinalByKey[t.columns].short}
@@ -252,19 +247,29 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
             </div>
           </CardHeader>
           <CardContent>
-            <List
-              items={gating.map((g) => (
-                <span key={g.applicationId} className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono">{g.applicationId}</span> {g.purpose} · {g.tenorMonths} months · stage {g.stage ?? "n/a"}
-                  {g.flagged ? <Badge tone="danger">Hard exception — CCO/CRO override</Badge> : <Badge tone="success">Passes gating rule</Badge>}
-                  {g.analystNote && <Badge tone="warning">Mandatory analyst note — Conservative posture, {g.stage} industry</Badge>}
-                </span>
-              ))}
-            />
+            <List items={gating.map((g) => <GatingRow key={g.applicationId} obligor={a.obligor} g={g} override={gatingOverrides[g.applicationId]} canEdit={canEdit} />)} />
           </CardContent>
         </Card>
       )}
 
+      {message && (
+        <Alert tone={message.tone} title={message.tone === "success" ? "Done" : "Couldn’t submit"}>
+          {message.text}
+        </Alert>
+      )}
+      {pendingSignOff && (
+        <Alert
+          tone="info"
+          title="Sign-off awaiting approval"
+          action={
+            <Button size="small" variant="tertiary" href={`/operations/item?id=${pendingSignOff.id}`} as={Link}>
+              Open request
+            </Button>
+          }
+        >
+          {pendingSignOff.requestedBy.name} submitted this note for second-analyst / CCO sign-off ({pendingSignOff.id}). It becomes the signed-off note once approved.
+        </Alert>
+      )}
       {stale && (
         <Alert tone="warning" title="Signed-off note predates the current posture">
           Signed off as “{signOff.postureLabel}”; the assessment now reads “{p.label}”. Review the refreshed draft and sign off again.
@@ -276,15 +281,15 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
         title="Advisory note — credit analyst to relationship manager"
         model="Credigit Risk Copilot (simulated)"
         generatedAt={dateTime(a.refreshedAt)}
-        confidence={a.copBand.band === "High Confidence" ? 0.86 : a.copBand.band === "Medium Confidence" ? 0.74 : 0.61}
+        confidence={a.copBand.band === "High Confidence" ? confHigh : a.copBand.band === "Medium Confidence" ? confMedium : confLow}
         draft={signOff && !stale ? signOff.text : draft}
-        defaultEditing={p.neutral && canEdit && !signOff}
-        onAccept={canEdit && !editing ? accept : undefined}
-        signedOffBy={signOff && !stale ? `${signOff.signedOffBy} · ${dateTime(signOff.at)}` : undefined}
+        defaultEditing={p.neutral && canEdit && !signOff && !pendingSignOff}
+        onAccept={canEdit && !editing && !pendingSignOff ? accept : undefined}
+        signedOffBy={signOff && !stale ? `${signOff.signedOffBy}${signOff.approvedBy ? `, approved by ${signOff.approvedBy}` : ""} · ${dateTime(signOff.at)}` : undefined}
         signOffNote={
           canEdit
-            ? "AI output is advisory. The Credit Analyst reviews, edits and signs off before the note is used in the credit memo or shared with the front office."
-            : "AI-drafted and view-only for your role — a Credit Analyst must sign it off before use."
+            ? "AI output is advisory. The Credit Analyst reviews and edits the note, then submits it for sign-off by a second Credit Analyst or the CCO (Operations) before it is used in the credit memo or shared with the front office."
+            : "AI-drafted and view-only for your role — a Credit Analyst prepares it and a second analyst or the CCO signs it off before use."
         }
         sources={[
           {
@@ -306,5 +311,70 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
         ]}
       />
     </Stack>
+  );
+}
+
+/** One open request checked by life-cycle gating, with the CCO/CRO override request (Operations "rar.gating-override"). */
+function GatingRow({ obligor, g, override, canEdit }: { obligor: Obligor; g: GatingCheck; override?: GatingOverride; canEdit: boolean }) {
+  const pending = usePendingFor(SUBJECT_GATING, g.applicationId);
+  const [open, setOpen] = useState(false);
+  const [rationale, setRationale] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    setBusy(true);
+    const res = await requestGatingOverride(obligor, g, rationale);
+    setBusy(false);
+    if (!res.ok) return setError(res.reason);
+    setOpen(false);
+    setRationale("");
+    setError(null);
+  }
+
+  return (
+    <span className="flex flex-col gap-2">
+      <span className="flex flex-wrap items-center gap-2">
+        <span className="font-mono">{g.applicationId}</span> {g.purpose} · {g.tenorMonths} months · stage {g.stage ?? "n/a"}
+        {!g.flagged ? (
+          <Badge tone="success">Passes gating rule</Badge>
+        ) : override ? (
+          <Badge tone="info">Overridden by {override.approvedBy}</Badge>
+        ) : (
+          <Badge tone="danger">Hard exception — CCO/CRO override</Badge>
+        )}
+        {g.analystNote && <Badge tone="warning">Mandatory analyst note — Conservative posture, {g.stage} industry</Badge>}
+        {g.flagged && !override && pending && (
+          <Button size="small" variant="text" href={`/operations/item?id=${pending.id}`} as={Link}>
+            Override awaiting approval ({pending.id})
+          </Button>
+        )}
+        {g.flagged && !override && !pending && canEdit && !open && (
+          <Button size="small" variant="tertiary" onClick={() => setOpen(true)}>
+            Request CCO/CRO override
+          </Button>
+        )}
+      </span>
+      {override && (
+        <Text variant="small" tone="muted">
+          Rationale: {override.rationale} — requested by {override.requestedBy}, approved {dateTime(override.at)} ({override.operationId}).
+        </Text>
+      )}
+      {open && (
+        <Stack gap="small">
+          <Field label="Documented rationale for the override" required error={error ?? undefined} description="Sent to the CCO / CRO through Operations and kept in the audit trail.">
+            <Textarea value={rationale} onChange={(e) => setRationale(e.target.value)} rows={2} />
+          </Field>
+          <span className="flex flex-wrap gap-2">
+            <Button size="small" onClick={submit} loading={busy}>
+              Submit override request
+            </Button>
+            <Button size="small" variant="tertiary" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </span>
+        </Stack>
+      )}
+    </span>
   );
 }

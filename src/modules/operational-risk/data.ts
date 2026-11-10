@@ -1,10 +1,10 @@
 /**
  * Operational Risk module data (PRD §6.9): KRI framework (§6.9.1), indicator inventory (§6.9.2),
- * loss-event register, RCSA and BCM. Deterministic demo data; thresholds are illustrative demo defaults —
- * in the product they are tenant-configurable in the Rules & Parameters Engine.
+ * loss-event register, RCSA and BCM. Deterministic demo data. The `amber`/`red`, RTO/RPO values here are only the
+ * DEFAULTS of the business rules registered in ../platform.ts — read live values through logic.ts, never these fields.
  */
 import { format } from "date-fns";
-import { branches } from "@/lib/data/seed";
+import { branches, DEMO_NOW } from "@/lib/data/seed";
 import { isoDaysAgo, isoDaysAhead, monthLabels, rng, round, type Rag } from "./shared";
 
 // ---------------------------------------------------------------- Indicator categories (§6.9.2)
@@ -144,13 +144,7 @@ export function fmtKri(k: Pick<Kri, "unit" | "decimals">, v: number): string {
 
 // ---------------------------------------------------------------- Loss Limit Framework (parameters)
 
-/** Demo values — Operational Risk Loss Limit Framework thresholds are tenant parameters (PRD gives none). */
-export const lossLimits = {
-  annualNet: 1_200_000_000,
-  monthlyNet: 100_000_000,
-  singleEventEscalation: 25_000_000,
-  boardMateriality: 100_000_000,
-};
+// Loss Limit Framework thresholds are business rules (operational-risk.loss.*) — see ../platform.ts.
 
 // ---------------------------------------------------------------- Loss events
 
@@ -188,7 +182,12 @@ export type LossEvent = {
   status: LossEventStatus;
   source: LossEventSource;
   reportedBy: string;
+  /** Signed-in user who logged it (user-scoped "Reported by me" view). */
+  reportedById?: string;
   actionPlan?: string;
+  /** Unrecovered amount written off on approved closure. */
+  writeOff?: number;
+  closedBy?: string;
 };
 
 const lossTemplates: { title: string; type: BaselEventType; cat: IndicatorCategory; line: string; root: string; ctl: string; min: number; max: number }[] = [
@@ -261,12 +260,18 @@ export function monthlyNetLoss(events: LossEvent[], n = 12): { label: string; va
   });
 }
 
-// Patch KRI-LE-01 history from the loss register (net loss ÷ monthly limit), back-filled before the register window.
+/**
+ * KRI-LE-01 (net loss ÷ monthly loss limit) is computed at read time from the live loss register and the
+ * current `operational-risk.loss.monthlyNetLimitNgn` rule (see logic.ts `readKris`). These are the 36 monthly
+ * readings before the register window (demo back-fill).
+ */
+export const lossKriBackfill: number[] = (() => {
+  const r = rng(77);
+  return Array.from({ length: 36 }, () => r.int(20, 70));
+})();
 {
   const k = kris.find((x) => x.id === "KRI-LE-01")!;
-  const months = monthlyNetLoss(seedLossEvents, 12).slice(0, 12).map((m) => round((m.value / lossLimits.monthlyNet) * 100, 0));
-  const r = rng(77);
-  k.history = [...Array.from({ length: 36 }, () => r.int(20, 70)), ...months];
+  k.history = [...lossKriBackfill, ...Array.from({ length: 12 }, () => 0)];
 }
 
 // ---------------------------------------------------------------- RCSA
@@ -291,6 +296,9 @@ export type RcsaRisk = {
   status: AssessmentStatus;
   actions: RcsaAction[];
   assessedAt?: string;
+  submittedById?: string;
+  submittedBy?: string;
+  reviewedBy?: string;
 };
 
 const rcsaSpecs: [string, IndicatorCategory, string, string, [number, number], [number, number], ControlEffectiveness][] = [
@@ -365,7 +373,8 @@ function buildRcsa(): RcsaRisk[] {
 
 export const seedRcsa: RcsaRisk[] = buildRcsa();
 
-export const rcsaCycle = { name: "RCSA cycle 2026 H2", cadence: "Semi-annual (configurable)", opensAt: "2026-09-01", closesAt: "2026-12-15" };
+/** Current RCSA cycle instance (data). The cadence is the `operational-risk.rcsa.cycleMonths` rule. */
+export const rcsaCycle = { name: "RCSA cycle 2026 H2", opensAt: "2026-09-01", closesAt: "2026-12-15" };
 
 /** Overall control effectiveness = weakest operating rating of the risk's controls. */
 export function overallEffectiveness(r: RcsaRisk): ControlEffectiveness {
@@ -393,6 +402,8 @@ export type BcmPlan = {
   lastTest?: string;
   lastResult: TestResult;
   alternateSite: string;
+  /** Last approved plan review (Operations workflow). */
+  approvedBy?: string;
 };
 
 const bcmSpecs: [string, 1 | 2 | 3, string, number, number, string][] = [
@@ -408,6 +419,9 @@ const bcmSpecs: [string, 1 | 2 | 3, string, number, number, string][] = [
   ["Procurement & vendor management", 3, "Sola Adebanjo", 72, 1440, "Work-from-home"],
   ["Marketing & corporate communications", 3, "Zainab Usman", 48, 1440, "Work-from-home"],
 ];
+
+/** Seed-time review cycle used only to generate demo next-review dates (TD-901). */
+const DEMO_REVIEW_CYCLE_DAYS = 365;
 
 function buildBcm(): BcmPlan[] {
   const r = rng(2201);
@@ -426,7 +440,7 @@ function buildBcm(): BcmPlan[] {
       rpoTargetMins: rpo,
       rpoAchievedMins: tested ? Math.round(rpo * (ratio > 1 ? ratio : r.float(0.4, 0.9))) : undefined,
       lastReviewed: isoDaysAgo(reviewedAgo),
-      nextReview: isoDaysAhead(365 - reviewedAgo),
+      nextReview: isoDaysAhead(DEMO_REVIEW_CYCLE_DAYS - reviewedAgo), // TD-901: seed only — live cycle is a rule
       lastTest: tested ? isoDaysAgo(r.int(15, 300)) : undefined,
       lastResult: result,
       alternateSite: site,
@@ -436,10 +450,10 @@ function buildBcm(): BcmPlan[] {
 
 export const seedBcmPlans: BcmPlan[] = buildBcm();
 
-/** Plan currency from next-review date (review cadence = annual, demo default; within 60 days = due). */
-export function planCurrency(p: Pick<BcmPlan, "nextReview">): PlanCurrency {
-  const days = (new Date(p.nextReview).getTime() - Date.parse("2026-11-10T09:00:00+01:00")) / 86_400_000;
-  return days < 0 ? "Overdue" : days <= 60 ? "Due for review" : "Current";
+/** Plan currency from next-review date; "due" window is the `operational-risk.bcm.reviewDueWindowDays` rule. */
+export function planCurrency(p: Pick<BcmPlan, "nextReview">, dueWindowDays: number): PlanCurrency {
+  const days = (new Date(p.nextReview).getTime() - DEMO_NOW.getTime()) / 86_400_000;
+  return days < 0 ? "Overdue" : days <= dueWindowDays ? "Due for review" : "Current";
 }
 
 export type BcmExercise = { id: string; type: "DR failover" | "Tabletop crisis simulation" | "Call-tree test" | "Fire drill & evacuation" | "Alternate-site walkthrough"; scope: string; date: string; result: TestResult; findings: number };
@@ -455,10 +469,10 @@ export const seedExercises: BcmExercise[] = [
   { id: "EX-2604", type: "Tabletop crisis simulation", scope: "Branch flood / civil unrest scenario", date: isoDaysAgo(210), result: "Passed", findings: 2 },
 ];
 
-/** Fire drill & evacuation compliance by branch (Fire Drill & Evacuation Framework). Required: 2 drills a year (demo default). */
+/** Fire drill & evacuation record by branch (Fire Drill & Evacuation Framework). Required count = `operational-risk.bcm.fireDrillsPerYear` rule. */
 export const fireDrills = branches.map((b, i) => {
   const done = [2, 2, 1, 2, 2, 0, 1, 2, 1, 2][i]!;
-  return { branch: b, required: 2, completed: done, lastDrill: done ? isoDaysAgo([30, 6, 190, 75, 44, 0, 150, 98, 150, 60][i]!) : undefined, wardensTrained: [100, 100, 80, 100, 90, 60, 85, 100, 75, 95][i]! };
+  return { branch: b, completed: done, lastDrill: done ? isoDaysAgo([30, 6, 190, 75, 44, 0, 150, 98, 150, 60][i]!) : undefined, wardensTrained: [100, 100, 80, 100, 90, 60, 85, 100, 75, 95][i]! };
 });
 
 export const crisisReadiness = [

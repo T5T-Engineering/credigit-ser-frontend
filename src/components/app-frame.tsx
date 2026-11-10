@@ -23,7 +23,9 @@ import { roles, canAccess } from "@/lib/rbac/roles";
 import { useRole, useSession } from "@/lib/auth/session";
 import { useApplications, useDbActions, useNotifications, useObligors, useTenant } from "@/lib/data/hooks";
 import { ago } from "@/lib/format";
-import { useRule } from "@/lib/platform/rules";
+import { useRule, useRulesStore } from "@/lib/platform/rules";
+import { roleIdleTimeoutMinutes } from "@/modules/admin/rule-keys";
+import { TenantBrandSync } from "@/modules/settings/brand-store";
 import { demoAccessEnabled } from "./auth-guard";
 
 /** Normalise "/origination/" → "/origination". */
@@ -56,7 +58,11 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const applications = useApplications();
   const { update, resetDemo } = useDbActions();
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const IDLE_LIMIT_MS = useRule<number>("session.idleTimeoutMinutes") * 60_000;
+  // Per-role idle timeout (PRD §4.2), falling back to the tenant default; re-read when rules change.
+  const rulesVersion = useRulesStore((s) => s.values);
+  const tenantIdle = useRule<number>("session.idleTimeoutMinutes");
+  const IDLE_LIMIT_MS = (role ? roleIdleTimeoutMinutes(role.id) : tenantIdle) * 60_000;
+  void rulesVersion;
   const WARNING_SECONDS = useRule<number>("session.warningSeconds");
 
   const groups: SideNavGroup[] = useMemo(
@@ -207,6 +213,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
         limit={12}
       />
       <Toaster />
+      <TenantBrandSync />
       <SessionTimeoutDialog
         open={warnAt !== null}
         expiresAt={(warnAt ?? 0) + WARNING_SECONDS * 1000}

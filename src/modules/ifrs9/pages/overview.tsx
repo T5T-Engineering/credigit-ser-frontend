@@ -26,11 +26,16 @@ import {
   useToast,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { newId } from "@/lib/data/store";
 import { useCan } from "@/lib/auth/session";
-import { dateTime, money, pct } from "@/lib/format";
-import { CalcPopover, CalcRegister, DemoNote, sum, useActorName, useAuditLog, type CalcSpec, ms } from "../common";
-import { FLI_OVERLAY, GENERAL_PROVISION_RATE, eclMovement, stageTransfers, summariseByStage, type EclRow } from "../data";
+import { date, dateTime, money, pct } from "@/lib/format";
+import { DEMO_NOW } from "@/lib/data/seed";
+import { publish } from "@/lib/platform/events";
+import { runHooks } from "@/lib/platform/hooks";
+import { usePendingFor } from "@/lib/platform/operations";
+import { getRule } from "@/lib/platform/rules";
+import { CalcPopover, CalcRegister, DemoNote, sum, useAuditLog, type CalcSpec, ms } from "../common";
+import { cbnSpecificRate, eclMovement, fliOverlay, generalProvisionRate, reportingPeriod, stageTransfers, summariseByStage, type EclRow } from "../data";
+import { PendingNotice, useSubmitOperation } from "../governance";
 import { EclDetailDrawer, EclTable, StageBadge } from "../parts";
 import { useIfrs9 } from "../store";
 import { useEcl } from "../use-ecl";
@@ -39,11 +44,15 @@ export function Ifrs9OverviewPage() {
   const { input, rows } = useEcl();
   const canEdit = useCan("ifrs9", "edit");
   const audit = useAuditLog();
-  const actor = useActorName();
   const { toast } = useToast();
+  const submitOperation = useSubmitOperation();
   const postings = useIfrs9((s) => s.postings);
-  const addPosting = useIfrs9((s) => s.addPosting);
   const [open, setOpen] = useState<EclRow | null>(null);
+  const period = reportingPeriod();
+  const pendingPost = usePendingFor("Ifrs9ReserveTransfer", period);
+  const gpRate = generalProvisionRate() * 100;
+  const specificRates = (["Substandard", "Doubtful", "Lost"] as const).map((c) => pct(cbnSpecificRate(c) * 100, 0)).join(" / ");
+  const quarterStart = new Date(DEMO_NOW.getTime() - 90 * 864e5);
 
   const stages = useMemo(() => summariseByStage(rows), [rows]);
   const transfers = useMemo(() => stageTransfers(rows, input), [rows, input]);
@@ -81,7 +90,7 @@ export function Ifrs9OverviewPage() {
     {
       metric: "PD",
       formula: "Grade master-scale PD × sector × 360 RAR posture × forward-looking overlay",
-      sources: `CBA default/cure history + Loan Review past-due register; FLI overlay × ${FLI_OVERLAY.toFixed(3)} (demo)`,
+      sources: `CBA default/cure history + Loan Review past-due register; FLI overlay × ${fliOverlay().toFixed(3)} (business rules)`,
       prd: "§6.7.2",
     },
     {
@@ -93,7 +102,7 @@ export function Ifrs9OverviewPage() {
     { metric: "Coverage ratio", formula: "ECL / EAD × 100", sources: "Computed", value: pct((totalEcl / totalEad) * 100, 2) },
     {
       metric: "CBN prudential provision",
-      formula: `General ${(GENERAL_PROVISION_RATE * 100).toFixed(0)}% on performing + specific 10% / 50% / 100% (Sub-Standard / Doubtful / Lost); Lost haircut-adjusted per §6.7.3`,
+      formula: `General ${pct(gpRate, 2)} on performing + specific ${specificRates} (Sub-Standard / Doubtful / Lost); Lost haircut-adjusted per §6.7.3`,
       sources: "CBN classification from Loan Review (§6.4.1); collateral register",
       value: ms(prudential),
       prd: "§6.7.1, §6.7.3",
@@ -108,17 +117,31 @@ export function Ifrs9OverviewPage() {
   ];
 
   const lastPosting = postings[0];
-  const postReserve = () => {
+  /** Post to Finance is an approval (Operations: Head of Risk review → CRO approval); the entry posts on final approval. */
+  const postReserve = async () => {
     const direction = diff > 0 ? "Transfer from general reserve to regulatory risk reserve" : "Release from regulatory risk reserve to general reserve";
-    addPosting({ id: newId("RRT"), at: new Date().toISOString(), by: actor.name, amount: Math.abs(diff), direction, ifrs: totalEcl, prudential });
-    audit(
-      "Posted CBN 12.4 reserve-transfer entry",
-      "Ifrs9ReserveTransfer",
-      "2026-10",
-      lastPosting ? money(lastPosting.amount) : undefined,
-      `${direction}: ${money(Math.abs(diff))}`,
-    );
-    toast({ title: "Reserve-transfer entry posted", description: `${money(Math.abs(diff))} sent to the Finance module (simulated).`, tone: "success" });
+    const posting = { period, amount: Math.abs(diff), direction, ifrs: totalEcl, prudential };
+    const hook = await runHooks("ifrs9.reserve.post.before", { posting, request: true });
+    if (!hook.ok) {
+      toast({ title: "Posting blocked", description: `${hook.vetoedBy}: ${hook.reason}`, tone: "danger" });
+      return;
+    }
+    const res = await submitOperation("ifrs9.ecl.post", {
+      title: `Reserve-transfer entry ${period}: ${money(posting.amount)}`,
+      subject: { type: "Ifrs9ReserveTransfer", id: period, title: `CBN 12.4 reserve transfer ${period}`, href: "/ifrs9" },
+      payload: hook.ctx.posting,
+      summary: [
+        { label: "Period", value: period },
+        { label: "Entry", value: direction },
+        { label: "Amount", value: money(posting.amount) },
+        { label: "IFRS 9 ECL", value: money(totalEcl) },
+        { label: "CBN prudential provision", value: money(prudential) },
+      ],
+    });
+    if (res.ok) {
+      audit("Requested CBN 12.4 reserve-transfer posting", "Ifrs9ReserveTransfer", period, lastPosting ? money(lastPosting.amount) : undefined, `${direction}: ${money(posting.amount)} — Operations ${res.instance.id}`);
+      publish("ifrs9.reserve.post-requested", { module: "ifrs9", subject: { type: "Ifrs9ReserveTransfer", id: period, href: "/ifrs9" }, payload: { operationId: res.instance.id, amount: posting.amount } });
+    }
   };
 
   return (
@@ -202,7 +225,9 @@ export function Ifrs9OverviewPage() {
             <CardHeader>
               <Stack gap="xsmall">
                 <CardTitle>ECL movement — quarter to date</CardTitle>
-                <CardDescription>Opening allowance (1 Aug 2026) to closing allowance (10 Nov 2026). Demo attribution.</CardDescription>
+                <CardDescription>
+                  Opening allowance ({date(quarterStart)}) to closing allowance ({date(DEMO_NOW)}). Demo attribution.
+                </CardDescription>
               </Stack>
             </CardHeader>
             <CardContent>
@@ -244,25 +269,29 @@ export function Ifrs9OverviewPage() {
                       label: "of which general (performing)",
                       value: money(generalProv),
                       mono: true,
-                      hint: `${(GENERAL_PROVISION_RATE * 100).toFixed(0)}% tenant parameter (demo); capped at 1.25% of RWA`,
+                      hint: `${pct(gpRate, 2)} business rule; capped at ${pct(getRule<number>("ifrs9.cbn.generalProvisionCapRwa"), 2)} of RWA (CBN 3.16(d))`,
                     },
-                    { label: "of which specific", value: money(specificProv), mono: true, hint: "10% / 50% / 100%; Lost haircut-adjusted (§6.7.3)" },
+                    { label: "of which specific", value: money(specificProv), mono: true, hint: `${specificRates}; Lost haircut-adjusted (§6.7.3)` },
                     { label: "Difference (prudential − IFRS 9)", value: money(diff), mono: true },
                     { label: "Entry required", value: diff > 0 ? "Transfer to regulatory risk reserve" : "Release from regulatory risk reserve" },
                   ]}
                 />
                 {lastPosting ? (
                   <Alert tone="success" title="Posted to Finance module">
-                    {lastPosting.direction}: {money(lastPosting.amount)} — {lastPosting.by}, {dateTime(lastPosting.at)}.
+                    {lastPosting.period ? `${lastPosting.period} · ` : ""}
+                    {lastPosting.direction}: {money(lastPosting.amount)} — approved by {lastPosting.by}, {dateTime(lastPosting.at)}.
                   </Alert>
                 ) : (
                   <Text variant="small" tone="muted">
-                    Not yet posted for the October 2026 reporting period.
+                    Not yet posted for the {period} reporting period.
                   </Text>
                 )}
-                {canEdit && (
+                <PendingNotice subjectType="Ifrs9ReserveTransfer" subjectId={period}>
+                  The entry posts to Finance when the workflow completes.
+                </PendingNotice>
+                {canEdit && !pendingPost && (
                   <div>
-                    <Button onClick={postReserve}>{lastPosting ? "Re-post entry" : "Post reserve-transfer entry"}</Button>
+                    <Button onClick={() => void postReserve()}>{lastPosting ? "Request re-post" : "Submit entry for approval"}</Button>
                   </div>
                 )}
               </Stack>

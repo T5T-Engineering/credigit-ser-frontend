@@ -7,6 +7,10 @@ import type { Tone } from "@credigit/web-ui";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { useDbActions } from "@/lib/data/hooks";
 import { useSession } from "@/lib/auth/session";
+import { useDb } from "@/lib/data/store";
+import { currentActor } from "@/lib/platform/scope";
+import { useRulesStore } from "@/lib/platform/rules";
+import { roleById, type RoleId } from "@/lib/rbac/roles";
 
 /** Deterministic PRNG (mulberry32) so module data is identical on every machine. */
 export function rng(seed: number) {
@@ -91,6 +95,22 @@ export function useAuditLog() {
     },
     [log, user, roleId],
   );
+}
+
+/** Audit entry for code outside React (operation `apply` handlers, platform services). */
+export function logAudit(action: string, entityType: string, entityId: string, before?: string, after?: string) {
+  const a = currentActor();
+  useDb.getState().log({ actorId: a.id, actorName: a.name, roleId: a.roleId, action, entityType, entityId, before, after });
+}
+
+/** Readable list of role names ("Head of Risk, Chief Risk Officer"). */
+export function roleNames(ids: readonly string[]): string {
+  return ids.map((r) => roleById[r as RoleId]?.name ?? r).join(", ");
+}
+
+/** Tenant rule overrides — use as a memo dependency so derived figures recompute when a rule changes. */
+export function useRuleValues() {
+  return useRulesStore((s) => s.values);
 }
 
 /** Current actor's display name (for "signed off by"). */

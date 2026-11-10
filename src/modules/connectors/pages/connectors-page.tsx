@@ -1,17 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import { Play, Settings2 } from "lucide-react";
 import {
   Alert,
   Badge,
-  BarChart,
   Button,
   Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  DataTable,
   DescriptionList,
   Drawer,
   Field,
@@ -24,123 +20,51 @@ import {
   StatCard,
   StatusBadge,
   Switch,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeaderCell,
-  TableRow,
-  Tabs,
   Text,
-  type DataTableColumn,
+  TextLink,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
-import { dateTime, number, pct } from "@/lib/format";
-import { useActor, useAuditLog } from "@/modules/monitoring/audit";
-import { connectors, projections, seedRuns, staging24h, statusTones, type Connector, type ConnectorStatus, type Run } from "../data";
-import { useConnectors } from "../store";
-
-type View = Connector & { effectiveStatus: ConnectorStatus; lastSyncAt: number; freshness: number; enabled: boolean; scheduleNow: string; isRunning: boolean };
-
-function fmtAge(ms: number) {
-  const m = Math.max(0, Math.round(ms / 60_000));
-  if (m < 1) return "just now";
-  if (m < 60) return `${m} min ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h} h ${m % 60} min ago`;
-  return `${Math.floor(h / 24)} d ${h % 24} h ago`;
-}
-const fmtLatency = (ms: number) => (ms === 0 ? "—" : ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms`);
-const fmtLag = (s: number) => (s < 60 ? `${s} s` : s < 3600 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`);
+import { number, pct } from "@/lib/format";
+import { useOperationsStore } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { PendingApproval } from "@/modules/monitoring/pending-approval";
+import { statusTones } from "../data";
+import { requestConfigChange, runConnector } from "../service";
+import { fmtAge, fmtLag, fmtLatency, useConnectorViews, useLoadedAt, type ConnectorView } from "../views";
 
 export function ConnectorsPage() {
   const canEdit = useCan("connectors", "edit");
-  const [loadedAt] = useState(() => Date.now());
-  const runs = useConnectors((s) => s.runs);
-  const overrides = useConnectors((s) => s.overrides);
-  const running = useConnectors((s) => s.running);
-  const addRun = useConnectors((s) => s.addRun);
-  const setOverride = useConnectors((s) => s.setOverride);
-  const setRunning = useConnectors((s) => s.setRunning);
-  const audit = useAuditLog();
-  const actor = useActor();
+  const loadedAt = useLoadedAt();
+  const views = useConnectorViews(loadedAt);
+  const warnRatio = useRule<number>("connectors.freshness.warnRatio");
+  const errWarn = useRule<number>("connectors.errorRate.warnPct");
+  const errDanger = useRule<number>("connectors.errorRate.dangerPct");
+  const instances = useOperationsStore((s) => s.instances);
+  const pendingIds = new Set(instances.filter((i) => i.subject.type === "Connector" && ["Pending", "In progress"].includes(i.status)).map((i) => i.subject.id));
   const [configId, setConfigId] = useState<string | null>(null);
-
-  const views: View[] = useMemo(
-    () =>
-      connectors.map((c) => {
-        const o = overrides[c.id] ?? {};
-        const lastSyncAt = o.lastRunAt ? new Date(o.lastRunAt).getTime() : loadedAt - c.lastSyncMin * 60_000;
-        const enabled = o.enabled ?? true;
-        const effectiveStatus: ConnectorStatus = !enabled ? "Paused" : (o.status ?? c.status);
-        return { ...c, effectiveStatus, lastSyncAt, freshness: (loadedAt - lastSyncAt) / 60_000 / c.freshnessSlaMin, enabled, scheduleNow: o.schedule ?? c.schedule, isRunning: !!running[c.id] };
-      }),
-    [overrides, running, loadedAt],
-  );
-  const allRuns = useMemo(() => [...runs, ...seedRuns(loadedAt)].sort((a, b) => b.startedAt.localeCompare(a.startedAt)), [runs, loadedAt]);
+  const [notice, setNotice] = useState<{ tone: "danger" | "success" | "info"; text: string } | null>(null);
 
   const healthy = views.filter((v) => v.effectiveStatus === "Healthy" || v.effectiveStatus === "Manual (Phase 1)").length;
   const problems = views.filter((v) => v.effectiveStatus === "Degraded" || v.effectiveStatus === "Failed");
   const stale = views.filter((v) => v.freshness > 1);
   const records = views.reduce((a, v) => a + v.records24h, 0);
-
-  const runNow = (v: View) => {
-    setRunning(v.id, true);
-    audit({ action: "Triggered connector run (manual)", entityType: "Connector", entityId: v.id, after: v.name });
-    window.setTimeout(() => {
-      const failed = v.status === "Failed";
-      const partial = v.status === "Degraded";
-      const at = new Date().toISOString();
-      const run: Run = {
-        id: `RUN-${Date.now().toString(36).toUpperCase()}`,
-        connectorId: v.id,
-        startedAt: at,
-        durationMs: Math.max(900, Math.round(v.latencyMs * (2 + Math.random()))),
-        records: failed ? 0 : Math.max(1, Math.round((v.records24h / 24) * (0.6 + Math.random() * 0.8))),
-        status: failed ? "Failed" : partial ? "Partial" : "Success",
-        trigger: "Manual",
-        by: actor.name,
-        message: failed ? "401 — authentication rejected (tenant credential expired)" : partial ? "Some enquiries timed out — queued for retry" : undefined,
-      };
-      addRun(run);
-      if (!failed) setOverride(v.id, { lastRunAt: at });
-      setRunning(v.id, false);
-    }, 1800);
-  };
-
-  const runCols: DataTableColumn<Run & { name: string }>[] = [
-    { id: "id", header: "Run", accessor: "id", cell: (r) => <span className="font-mono">{r.id}</span> },
-    { id: "name", header: "Connector", accessor: "name", sortable: true },
-    { id: "started", header: "Started", accessor: "startedAt", sortable: true, cell: (r) => dateTime(r.startedAt) },
-    { id: "duration", header: "Duration", accessor: "durationMs", numeric: true, sortable: true, cell: (r) => fmtLatency(r.durationMs) },
-    { id: "records", header: "Records", accessor: "records", numeric: true, sortable: true, cell: (r) => number(r.records) },
-    { id: "trigger", header: "Trigger", accessor: "trigger", sortable: true, cell: (r) => (r.by ? `${r.trigger} · ${r.by}` : r.trigger) },
-    {
-      id: "status",
-      header: "Result",
-      accessor: "status",
-      sortable: true,
-      cell: (r) => (
-        <Stack gap="none">
-          <StatusBadge status={r.status} tones={{ Success: "success", Partial: "warning", Failed: "danger" }} />
-          {r.message && (
-            <Text variant="caption" tone="subtle">
-              {r.message}
-            </Text>
-          )}
-        </Stack>
-      ),
-    },
-  ];
-  const nameOf = new Map(connectors.map((c) => [c.id, c.name]));
   const config = views.find((v) => v.id === configId);
-  const d = staging24h.discounted;
-  const discountedTotal = d.interBranch + d.suspense + d.inAndOut + d.reversals;
+
+  const runNow = async (v: ConnectorView) => {
+    const r = await runConnector(v);
+    if (!r.ok) setNotice({ tone: "danger", text: r.reason });
+    else if (r.run?.status === "Failed") setNotice({ tone: "danger", text: `${v.name}: run ${r.run.id} failed — IT support and system administrators were notified.` });
+  };
 
   return (
     <ModulePage module="connectors" description="Health of the connectors feeding the Risk Data Spine through the staging / reconciliation layer — status, freshness, throughput, latency and errors (PRD §5, §4.6). All telemetry here is simulated.">
       <Stack gap="large">
+        {notice && (
+          <Alert tone={notice.tone} action={<Button size="small" variant="tertiary" onClick={() => setNotice(null)}>Dismiss</Button>}>
+            {notice.text}
+          </Alert>
+        )}
         {problems.length > 0 && (
           <Alert tone={problems.some((p) => p.effectiveStatus === "Failed") ? "danger" : "warning"} title={`${problems.length} connector${problems.length > 1 ? "s need" : " needs"} attention`}>
             {problems.map((p) => `${p.name}: ${p.statusNote ?? p.effectiveStatus}`).join(" · ")}
@@ -166,7 +90,10 @@ export function ConnectorsPage() {
                       PRD {v.prd} · {v.category}
                     </Text>
                   </Stack>
-                  <StatusBadge status={v.isRunning ? "Running…" : v.effectiveStatus} tones={{ ...statusTones, "Running…": "info" }} />
+                  <Stack gap="xsmall" align="end">
+                    <StatusBadge status={v.isRunning ? "Running…" : v.effectiveStatus} tones={{ ...statusTones, "Running…": "info" }} />
+                    {pendingIds.has(v.id) && <Badge variant="outline">Change pending</Badge>}
+                  </Stack>
                 </Stack>
                 <Text variant="small" tone="muted">
                   {v.method}
@@ -181,7 +108,7 @@ export function ConnectorsPage() {
                 )}
                 <ProgressBar
                   value={Math.min(1, v.freshness)}
-                  tone={v.freshness > 1 ? "danger" : v.freshness > 0.75 ? "warning" : "success"}
+                  tone={v.freshness > 1 ? "danger" : v.freshness > warnRatio ? "warning" : "success"}
                   label={`Data freshness — last sync ${fmtAge(loadedAt - v.lastSyncAt)}`}
                   ariaLabel={`Freshness ${Math.round(v.freshness * 100)}% of SLA`}
                   size="small"
@@ -197,7 +124,7 @@ export function ConnectorsPage() {
                 />
                 <Stack direction="horizontal" align="center" gap="small">
                   <div className="min-w-0 flex-1">
-                    <Sparkline values={v.errorSeries} tone={v.errorRatePct > 5 ? "danger" : v.errorRatePct > 1 ? "warning" : "success"} height={24} label={`${v.name} error rate, last 12 hours`} />
+                    <Sparkline values={v.errorSeries} tone={v.errorRatePct > errDanger ? "danger" : v.errorRatePct > errWarn ? "warning" : "success"} height={24} label={`${v.name} error rate, last 12 hours`} />
                   </div>
                   <Text variant="caption" tone="subtle">
                     Errors 12 h
@@ -225,117 +152,9 @@ export function ConnectorsPage() {
             </Card>
           ))}
         </Grid>
-
-        <Tabs
-          label="Connector details"
-          variant="underline"
-          items={[
-            {
-              id: "runs",
-              label: "Recent runs",
-              content: (
-                <DataTable
-                  label="Recent connector runs"
-                  data={allRuns.map((r) => ({ ...r, name: nameOf.get(r.connectorId) ?? r.connectorId }))}
-                  columns={runCols}
-                  getRowId={(r) => r.id}
-                  searchable
-                  density="compact"
-                  defaultSort={{ id: "started", direction: "desc" }}
-                  filters={[
-                    { id: "name", label: "Connector", columnId: "name" },
-                    { id: "status", label: "Result", columnId: "status" },
-                  ]}
-                  exportFilename="connector-runs.csv"
-                />
-              ),
-            },
-            {
-              id: "staging",
-              label: "Staging & reconciliation",
-              content: (
-                <Grid columns={{ base: 1, lg: 2 }} gap="medium">
-                  <Card>
-                    <CardHeader>
-                      <div>
-                        <CardTitle>Discounted before promotion (24 h)</CardTitle>
-                        <CardDescription>
-                          Inter-branch, suspense, in-and-out and reversal entries are detected algorithmically and excluded before data feeds the COP ratio and 360 RAR scoring (PRD §5.1).
-                        </CardDescription>
-                      </div>
-                    </CardHeader>
-                    <BarChart
-                      orientation="horizontal"
-                      tone="warning"
-                      label="Entries discounted by type"
-                      valueFormatter={(n) => number(n)}
-                      data={[
-                        { label: "In-and-out", value: d.inAndOut },
-                        { label: "Inter-branch", value: d.interBranch },
-                        { label: "Reversals", value: d.reversals },
-                        { label: "Suspense", value: d.suspense },
-                      ]}
-                    />
-                    <DescriptionList
-                      className="mt-4"
-                      columns={3}
-                      items={[
-                        { label: "Received", value: number(staging24h.received), mono: true },
-                        { label: "Discounted", value: number(discountedTotal), mono: true },
-                        { label: "Promoted", value: number(staging24h.received - discountedTotal - staging24h.quarantined), mono: true, hint: `${staging24h.quarantined} quarantined for review` },
-                      ]}
-                    />
-                  </Card>
-                  <Card>
-                    <CardHeader>
-                      <div>
-                        <CardTitle>Unreconciled items by age</CardTitle>
-                        <CardDescription>Items ageing past their clearance window raise an exception through the escalation protocol (PRD §6.4.4).</CardDescription>
-                      </div>
-                    </CardHeader>
-                    <BarChart tone="info" label="Unreconciled items by age" data={staging24h.unreconciledAgeing.map((a) => ({ label: a.label, value: a.value }))} valueFormatter={(n) => number(n)} />
-                  </Card>
-                </Grid>
-              ),
-            },
-            {
-              id: "projections",
-              label: "Projection freshness",
-              content: (
-                <Card>
-                  <CardHeader>
-                    <div>
-                      <CardTitle>Read-model projection lag</CardTitle>
-                      <CardDescription>How far each downstream engine’s read model trails the write side. Shown wherever lag affects a decision (PRD §4.3).</CardDescription>
-                    </div>
-                  </CardHeader>
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableHeaderCell>Projection</TableHeaderCell>
-                        <TableHeaderCell numeric>Lag</TableHeaderCell>
-                        <TableHeaderCell numeric>Events (24 h)</TableHeaderCell>
-                        <TableHeaderCell>Status</TableHeaderCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {projections.map((p) => (
-                        <TableRow key={p.name}>
-                          <TableCell>{p.name}</TableCell>
-                          <TableCell numeric>{fmtLag(p.lagSec)}</TableCell>
-                          <TableCell numeric>{number(p.events)}</TableCell>
-                          <TableCell>
-                            <StatusBadge status={p.status} tones={{ [p.status]: p.status === "Current" ? "success" : "danger" }} />
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </Card>
-              ),
-            },
-          ]}
-        />
+        <Text variant="caption" tone="subtle">
+          Run history: <TextLink as={Link} href="/connectors/runs">Recent runs</TextLink> · Data quality: <TextLink as={Link} href="/connectors/staging">Staging & reconciliation</TextLink>
+        </Text>
       </Stack>
 
       {config && (
@@ -343,9 +162,8 @@ export function ConnectorsPage() {
           v={config}
           canEdit={canEdit}
           onClose={() => setConfigId(null)}
-          onSave={(schedule, enabled) => {
-            setOverride(config.id, { schedule, enabled });
-            audit({ action: "Changed connector configuration", entityType: "Connector", entityId: config.id, before: `${config.scheduleNow} · ${config.enabled ? "enabled" : "paused"}`, after: `${schedule} · ${enabled ? "enabled" : "paused"}` });
+          onSubmitted={(text) => {
+            setNotice({ tone: "info", text });
             setConfigId(null);
           }}
         />
@@ -354,11 +172,24 @@ export function ConnectorsPage() {
   );
 }
 
-const scheduleOptions = ["Every 5 minutes (market hours)", "Every 15 minutes + 01:00 batch", "Every 30 minutes + on demand before approval", "Hourly", "Daily 06:00", "Daily 07:00 (series on publisher cadence)", "Daily 08:00", "Daily 02:00", "On demand", "On demand (origination & renewal)", "On upload", "Event-driven (queue)", "Daily close (Phase 2) · on upload (Phase 1)"];
-
-function ConfigDrawer({ v, canEdit, onClose, onSave }: { v: View; canEdit: boolean; onClose: () => void; onSave: (schedule: string, enabled: boolean) => void }) {
+function ConfigDrawer({ v, canEdit, onClose, onSubmitted }: { v: ConnectorView; canEdit: boolean; onClose: () => void; onSubmitted: (text: string) => void }) {
+  const scheduleOptions = useRule<string[]>("connectors.scheduleOptions");
+  const retryPolicy = useRule<string>("connectors.retryPolicy");
+  const pendingOps = useOperationsStore((s) => s.instances.some((i) => i.subject.type === "Connector" && i.subject.id === v.id && ["Pending", "In progress"].includes(i.status)));
   const [schedule, setSchedule] = useState(v.scheduleNow);
   const [enabled, setEnabled] = useState(v.enabled);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const changed = schedule !== v.scheduleNow || enabled !== v.enabled;
+
+  const submit = async () => {
+    setBusy(true);
+    const r = await requestConfigChange(v, { schedule: v.scheduleNow, enabled: v.enabled }, { schedule, enabled });
+    setBusy(false);
+    if (!r.ok) return setError(r.reason);
+    onSubmitted(r.applied ? `${v.name}: configuration applied (workflow disabled).` : `${v.name}: change submitted for approval (${r.operationId}). It applies once approved in Operations.`);
+  };
+
   return (
     <Drawer
       open
@@ -372,12 +203,15 @@ function ConfigDrawer({ v, canEdit, onClose, onSave }: { v: View; canEdit: boole
             <Button variant="tertiary" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={() => onSave(schedule, enabled)}>Save configuration</Button>
+            <Button onClick={submit} disabled={!changed || pendingOps} loading={busy}>
+              Submit for approval
+            </Button>
           </>
         ) : undefined
       }
     >
       <Stack gap="large">
+        <PendingApproval subjectType="Connector" subjectId={v.id} label="Configuration change awaiting approval" />
         <DescriptionList
           columns={1}
           layout="inline"
@@ -386,21 +220,29 @@ function ConfigDrawer({ v, canEdit, onClose, onSave }: { v: View; canEdit: boole
             { label: "Endpoint", value: <Badge variant="outline">Configured by tenant</Badge> },
             { label: "Authentication", value: <Badge variant="outline">Configured by tenant (credential vault)</Badge> },
             { label: "Data format", value: v.dataFormat },
-            { label: "Retry policy", value: "Automatic retry with back-off (tenant parameter)" },
+            { label: "Retry policy", value: retryPolicy, hint: "Business rule" },
             { label: "Writes to", value: "Staging / reconciliation layer → Risk Data Spine" },
             { label: "Consumed by", value: v.consumers.join(" · ") },
-            { label: "Freshness SLA", value: fmtLag(v.freshnessSlaMin * 60), hint: "Tenant parameter — demo value" },
+            { label: "Freshness SLA", value: fmtLag(v.freshnessSlaMin * 60), hint: "Business rule — change in Operations → Business rules" },
           ]}
         />
         {canEdit ? (
           <Stack gap="medium">
             <Field label="Schedule" htmlFor="con-schedule">
-              <Select id="con-schedule" value={schedule} onChange={(e) => setSchedule(e.target.value)} options={[...new Set([v.scheduleNow, ...scheduleOptions])].map((s) => ({ value: s, label: s }))} />
+              <Select id="con-schedule" value={schedule} onChange={(e) => setSchedule(e.target.value)} options={[...new Set([v.scheduleNow, ...scheduleOptions])].map((s) => ({ value: s, label: s }))} disabled={pendingOps} />
             </Field>
-            <Switch label="Connector enabled" description="Pausing stops scheduled runs; downstream data goes stale." checked={enabled} onCheckedChange={setEnabled} />
+            <Switch label="Connector enabled" description="Pausing stops scheduled runs; downstream data goes stale." checked={enabled} onCheckedChange={setEnabled} disabled={pendingOps} />
+            <Text variant="caption" tone="subtle">
+              Configuration changes are approved through the Operations workflow before they take effect; you can’t approve your own request.
+            </Text>
+            {error && (
+              <Alert tone="danger" action={<Button size="small" variant="tertiary" onClick={() => setError(null)}>Dismiss</Button>}>
+                {error}
+              </Alert>
+            )}
           </Stack>
         ) : (
-          <Alert tone="info">Only IT support and system administrators can change connector configuration.</Alert>
+          <Alert tone="info">Only IT support and system administrators can request connector configuration changes.</Alert>
         )}
       </Stack>
     </Drawer>

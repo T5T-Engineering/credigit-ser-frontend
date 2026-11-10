@@ -26,10 +26,16 @@ import {
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { date } from "@/lib/format";
-import { demoNowIso, useActor, useAuditLog } from "../../credit-admin/common";
+import { canDecide, decideOperation, useOperationsStore, usePendingFor } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import type { RoleId } from "@/lib/rbac/roles";
+import { demoNowIso, useActor } from "../../credit-admin/common";
+import { PendingOperationNotice } from "../../credit-admin/operations-ui";
+import { submitClauseChange } from "../actions";
 import { libraryMeta, mergeFields, type Clause, type ClauseLibrary, type TagRule } from "../library";
 import { fieldsIn } from "../merge";
-import { useClauses, useOfferLetterStore, useOfferLetters } from "../store";
+import { useClauses, useOfferLetters } from "../store";
 
 const clauseStatusTones = { "Legal-approved": "success", "Pending Legal approval": "warning", Retired: "neutral" } as const;
 
@@ -49,7 +55,11 @@ export function describeRule(r: TagRule): string {
 export function ClauseLibraryPage() {
   const clauses = useClauses();
   const letters = useOfferLetters();
-  const canEdit = useCan("offer-letters", "edit");
+  const { actor } = useScope();
+  const editorRoles = useRule<RoleId[]>("offer-letters.libraryEditorRoles");
+  const canEdit = useCan("offer-letters", "edit") && editorRoles.includes(actor.roleId);
+  const instances = useOperationsStore((s) => s.instances);
+  const awaitingMe = instances.filter((i) => i.operationType === "offer-letters.clause.change" && canDecide(i, actor).ok).length;
   const [lib, setLib] = useState<ClauseLibrary | "all">("all");
   const [openId, setOpenId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -98,9 +108,10 @@ export function ClauseLibraryPage() {
           <StatCard label="Pending Legal approval" value={String(pending.length)} icon={<CircleDashed aria-hidden />} tone="warning" hint={pending.length ? "Previous approved text stays in use" : "Nothing waiting"} />
         </Grid>
 
-        {pending.length && canEdit ? (
+        {pending.length ? (
           <Alert tone="warning" title={`${pending.length} clause change${pending.length > 1 ? "s" : ""} awaiting Legal approval`}>
-            {pending.map((c) => `${c.id} ${c.title}`).join(" · ")}
+            {pending.map((c) => `${c.id} ${c.title}`).join(" · ")}. Approvals run through the Operations workflow
+            {awaitingMe ? ` — ${awaitingMe} waiting for your decision` : ""}.
           </Alert>
         ) : null}
 
@@ -157,39 +168,27 @@ export function ClauseLibraryPage() {
 }
 
 function ClauseDrawer({ clause, usage, canEdit, onClose }: { clause: Clause; usage: number; canEdit: boolean; onClose: () => void }) {
-  const saveClause = useOfferLetterStore((s) => s.saveClause);
-  const audit = useAuditLog();
-  const actor = useActor();
+  const { actor } = useScope();
+  const pending = usePendingFor("Clause", clause.id);
+  const minText = useRule<number>("offer-letters.minClauseTextLength");
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(clause.text);
   const [note, setNote] = useState("");
+  const [result, setResult] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
   const fields = fieldsIn(clause.text);
+  const mayDecide = pending ? canDecide(pending, actor).ok : false;
 
-  const submitEdit = () => {
-    const at = demoNowIso();
-    saveClause({ ...clause, proposedText: text.trim(), status: "Pending Legal approval", history: [...clause.history, { version: clause.version + 1, text: text.trim(), at, byName: actor.actorName, note: `Proposed: ${note || "wording change"}` }] });
-    audit("Proposed clause change", "Offer-letter clause", clause.id, clause.text, text.trim());
-    setEditing(false);
+  const report = (r: { ok: true; message: string } | { ok: false; reason: string }) => setResult(r.ok ? { tone: "success", text: r.message } : { tone: "danger", text: r.reason });
+  const submitEdit = async () => {
+    const r = await submitClauseChange(clause, "wording", note.trim(), text.trim());
+    report(r);
+    if (r.ok) setEditing(false);
   };
-  const approve = () => {
-    const at = demoNowIso();
-    const isNew = clause.history.length === 1 && !clause.approvedAt;
-    const version = isNew ? clause.version : clause.version + 1;
-    saveClause({
-      ...clause,
-      text: clause.proposedText ?? clause.text,
-      proposedText: undefined,
-      version,
-      status: "Legal-approved",
-      approvedByName: actor.actorName,
-      approvedAt: at,
-      history: [...clause.history, { version, text: clause.proposedText ?? clause.text, at, byName: actor.actorName, note: "Legal-approved" }],
-    });
-    audit("Legal-approved clause", "Offer-letter clause", clause.id, `v${clause.version}`, `Legal-approved v${version}`);
-  };
-  const retire = () => {
-    saveClause({ ...clause, status: clause.status === "Retired" ? "Legal-approved" : "Retired" });
-    audit(clause.status === "Retired" ? "Reinstated clause" : "Retired clause", "Offer-letter clause", clause.id, clause.status, clause.status === "Retired" ? "Legal-approved" : "Retired");
+  const retire = () => void submitClauseChange(clause, clause.status === "Retired" ? "reinstate" : "retire", note.trim()).then(report);
+  const approve = async () => {
+    if (!pending) return;
+    const r = await decideOperation(pending.id, "approve", "");
+    setResult(r.ok ? { tone: "success", text: `Approved (${pending.id}).` } : { tone: "danger", text: r.reason });
   };
 
   return (
@@ -200,26 +199,36 @@ function ClauseDrawer({ clause, usage, canEdit, onClose }: { clause: Clause; usa
       title={`${clause.id} — ${clause.title}`}
       description={`${libraryMeta[clause.library].label} (${libraryMeta[clause.library].prd})`}
       footer={
-        canEdit ? (
+        canEdit || mayDecide ? (
           <Stack direction="horizontal" gap="small" wrap justify="end">
-            {clause.status === "Pending Legal approval" ? <Button onClick={approve}>Approve change</Button> : null}
-            {!editing ? (
-              <Button variant="secondary" onClick={() => setEditing(true)} disabled={clause.status !== "Legal-approved"}>
-                Propose change
-              </Button>
-            ) : (
-              <Button onClick={submitEdit} disabled={text.trim() === clause.text || text.trim().length < 20}>
-                Submit for Legal approval
-              </Button>
-            )}
-            <Button variant="text" onClick={retire}>
-              {clause.status === "Retired" ? "Reinstate" : "Retire"}
-            </Button>
+            {mayDecide ? <Button onClick={() => void approve()}>Approve change</Button> : null}
+            {canEdit && !pending ? (
+              <>
+                {!editing ? (
+                  <Button variant="secondary" onClick={() => setEditing(true)} disabled={clause.status !== "Legal-approved"}>
+                    Propose change
+                  </Button>
+                ) : (
+                  <Button onClick={() => void submitEdit()} disabled={text.trim() === clause.text || text.trim().length < minText}>
+                    Submit for Legal approval
+                  </Button>
+                )}
+                <Button variant="text" onClick={retire}>
+                  {clause.status === "Retired" ? "Propose reinstatement" : "Propose retirement"}
+                </Button>
+              </>
+            ) : null}
           </Stack>
         ) : undefined
       }
     >
       <Stack gap="large">
+        {result ? (
+          <Alert tone={result.tone} title={result.tone === "success" ? "Submitted" : "Not submitted"}>
+            {result.text}
+          </Alert>
+        ) : null}
+        {pending ? <PendingOperationNotice instance={pending} title="Change awaiting approval" /> : null}
         <DescriptionList
           columns={2}
           items={[
@@ -241,22 +250,19 @@ function ClauseDrawer({ clause, usage, canEdit, onClose }: { clause: Clause; usa
               <Input id="clause-note" value={note} onChange={(e) => setNote(e.target.value)} />
             </Field>
           </Stack>
-        ) : (
+        ) : canEdit && !pending ? (
           <Stack gap="medium">
-            <Stack gap="small">
-              <Text variant="eyebrow">{clause.approvedAt ? `Approved text in use (v${clause.version})` : "Clause text"}</Text>
-              <p className="squircle rounded-2xl bg-surface-sunken p-4 text-sm leading-6 text-fg">{clause.text}</p>
-            </Stack>
-            {clause.proposedText ? (
-              <Stack gap="small">
-                <Text variant="eyebrow" tone="accent">Proposed change — awaiting Legal approval</Text>
-                <p className="squircle rounded-2xl bg-warning-soft p-4 text-sm leading-6 text-fg">{clause.proposedText}</p>
-              </Stack>
-            ) : null}
+            <Field label="Reason (for a retirement / reinstatement or wording change)" htmlFor="clause-note-2" optional>
+              <Input id="clause-note-2" value={note} onChange={(e) => setNote(e.target.value)} />
+            </Field>
+            <ClauseText clause={clause} />
           </Stack>
+        ) : (
+          <ClauseText clause={clause} />
         )}
         <Stack gap="small">
           <Text variant="eyebrow">Merge fields</Text>
+
           {fields.length ? (
             <div className="flex flex-wrap gap-1.5">
               {fields.map((f) => (
@@ -277,10 +283,27 @@ function ClauseDrawer({ clause, usage, canEdit, onClose }: { clause: Clause; usa
   );
 }
 
+function ClauseText({ clause }: { clause: Clause }) {
+  return (
+    <Stack gap="medium">
+      <Stack gap="small">
+        <Text variant="eyebrow">{clause.approvedAt ? `Approved text in use (v${clause.version})` : "Clause text"}</Text>
+        <p className="squircle rounded-2xl bg-surface-sunken p-4 text-sm leading-6 text-fg">{clause.text}</p>
+      </Stack>
+      {clause.proposedText ? (
+        <Stack gap="small">
+          <Text variant="eyebrow" tone="accent">Proposed change — awaiting Legal approval</Text>
+          <p className="squircle rounded-2xl bg-warning-soft p-4 text-sm leading-6 text-fg">{clause.proposedText}</p>
+        </Stack>
+      ) : null}
+    </Stack>
+  );
+}
+
 function NewClauseModal({ existing, onClose }: { existing: Clause[]; onClose: () => void }) {
-  const saveClause = useOfferLetterStore((s) => s.saveClause);
-  const audit = useAuditLog();
   const actor = useActor();
+  const minText = useRule<number>("offer-letters.minClauseTextLength");
+  const [error, setError] = useState<string | null>(null);
   const [library, setLibrary] = useState<ClauseLibrary>("pre");
   const [category, setCategory] = useState("Documentation");
   const [title, setTitle] = useState("");
@@ -289,11 +312,12 @@ function NewClauseModal({ existing, onClose }: { existing: Clause[]; onClose: ()
   const prefix = { pre: "CP", post: "PC", general: "GC", special: "SC" }[library];
   const id = `${prefix}-${String(existing.filter((c) => c.library === library).length + 1).padStart(2, "0")}`;
   const nextId = existing.some((c) => c.id === id) ? `${prefix}-${String(existing.length + 1).padStart(2, "0")}` : id;
-  const save = () => {
+  const save = async () => {
     const at = demoNowIso();
-    saveClause({ id: nextId, library, category, title, text: text.trim(), loanTypes, rule: loanTypes.trim() === "All" ? { all: true } : {}, version: 1, status: "Pending Legal approval", history: [{ version: 1, text, at, byName: actor.actorName, note: "New clause" }] });
-    audit("Created clause", "Offer-letter clause", nextId, undefined, title);
-    onClose();
+    const clause: Clause = { id: nextId, library, category, title, text: text.trim(), loanTypes, rule: loanTypes.trim() === "All" ? { all: true } : {}, version: 1, status: "Pending Legal approval", history: [{ version: 1, text: text.trim(), at, byName: actor.actorName, note: "New clause" }] };
+    const r = await submitClauseChange(clause, "new", "New clause", text.trim());
+    if (r.ok) onClose();
+    else setError(r.reason);
   };
   return (
     <Modal
@@ -307,7 +331,7 @@ function NewClauseModal({ existing, onClose }: { existing: Clause[]; onClose: ()
           <Button variant="text" onClick={onClose}>
             Cancel
           </Button>
-          <Button disabled={!title.trim() || text.trim().length < 20} onClick={save}>
+          <Button disabled={!title.trim() || text.trim().length < minText} onClick={() => void save()}>
             Submit for approval
           </Button>
         </>
@@ -331,6 +355,12 @@ function NewClauseModal({ existing, onClose }: { existing: Clause[]; onClose: ()
         <Field label="Clause text" htmlFor="nc-text" description="Parameterise with merge fields, e.g. {{obligor.name}}, {{facility.amount}}, {{validity.days}}.">
           <Textarea id="nc-text" rows={6} value={text} onChange={(e) => setText(e.target.value)} />
         </Field>
+        {error ? (
+          <Alert tone="danger" title="Not submitted">
+            {error}
+          </Alert>
+        ) : null}
+
       </Stack>
     </Modal>
   );

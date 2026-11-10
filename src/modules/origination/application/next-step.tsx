@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { ArrowRight, CircleCheck, FileSignature, Send, Undo2 } from "lucide-react";
-import { Alert, Button, Stack, Text, type ChecklistItem } from "@credigit/web-ui";
+import { Alert, Button, Stack, Text, useToast, type ChecklistItem } from "@credigit/web-ui";
 import { roleById } from "@/lib/rbac/roles";
 import { chainStatus, collateralDueDiligenceDone, copBand, currentSteps, isBreach, recommendationLabel, stageAfterAnalysis } from "../logic";
-import { initiatorRoles } from "../use-me";
+import { inGroup } from "../params";
+import { usePendingFor } from "@/lib/platform/operations";
+import { completeAnalysis, releaseToOffer, sendToAnalysis, submitApplication, submitForApproval, SUBJECT, withdrawApplication, type ActionResult } from "../actions";
 import type { AppCtx } from "./context";
 
 /** Pre-approval gates (PRD §5.2 bureau/CRMS, §5.4 OCR, §6.1.4 COP, §6.1.5 limit gate, §6.1.1 step 3 collateral due diligence). */
@@ -27,14 +29,18 @@ export function gateItems(c: AppCtx): ChecklistItem[] {
 
 export function NextStepCard({ c, onOpenTab }: { c: AppCtx; onOpenTab: (tab: string) => void }) {
   const { app, roleId, canEdit } = c;
-  const isInitiatorRole = Boolean(roleId && initiatorRoles.includes(roleId));
+  const { toast } = useToast();
+  const pending = usePendingFor(SUBJECT.approval, app.id);
+  const isInitiatorRole = inGroup("initiators", roleId);
+  const run = (p: Promise<ActionResult>, ok: string) =>
+    void p.then((r) => toast(r.ok ? { title: ok, description: r.message, tone: "success" } : { title: "Not done", description: r.reason, tone: "danger" }));
   const gates = gateItems(c);
   const gate = (id: string) => gates.find((g) => g.id === id)!;
   const status = chainStatus(app.approvals);
   const steps = currentSteps(app.approvals);
   const withdraw =
     canEdit && isInitiatorRole && ["Draft", "Documents", "Analysis"].includes(app.stage) ? (
-      <Button variant="text" iconBefore={<Undo2 aria-hidden />} onClick={() => c.change({ stage: "Withdrawn" }, "Withdrew application", app.stage, "Withdrawn")}>
+      <Button variant="text" iconBefore={<Undo2 aria-hidden />} onClick={() => run(withdrawApplication(app.id), "Application withdrawn")}>
         Withdraw
       </Button>
     ) : null;
@@ -51,7 +57,7 @@ export function NextStepCard({ c, onOpenTab }: { c: AppCtx; onOpenTab: (tab: str
       const docsReady = gate("docs").status === "met";
       if (canEdit && isInitiatorRole)
         action = (
-          <Button iconBefore={<Send aria-hidden />} onClick={() => c.change({ stage: docsReady ? "Analysis" : "Documents" }, "Submitted application", "Draft", docsReady ? "Analysis" : "Documents")}>
+          <Button iconBefore={<Send aria-hidden />} onClick={() => run(submitApplication(app.id), docsReady ? "Submitted — sent to analysis" : "Submitted — documents in OCR")}>
             Submit application
           </Button>
         );
@@ -60,9 +66,9 @@ export function NextStepCard({ c, onOpenTab }: { c: AppCtx; onOpenTab: (tab: str
     case "Documents": {
       title = "Documents — OCR extraction and verification";
       body = gate("docs").description as string;
-      if (canEdit && (roleId === "credit-analyst" || isInitiatorRole))
+      if (canEdit && (inGroup("analysts", roleId) || isInitiatorRole))
         action = (
-          <Button disabled={gate("docs").status !== "met"} iconAfter={<ArrowRight aria-hidden />} onClick={() => c.change({ stage: "Analysis" }, "Documents complete — sent to analysis", "Documents", "Analysis")}>
+          <Button disabled={gate("docs").status !== "met"} iconAfter={<ArrowRight aria-hidden />} onClick={() => run(sendToAnalysis(app.id), "Sent to analysis")}>
             Send to analysis
           </Button>
         );
@@ -73,10 +79,10 @@ export function NextStepCard({ c, onOpenTab }: { c: AppCtx; onOpenTab: (tab: str
       title = "Analysis — Credit Analyst validation";
       body = needed.length ? `Outstanding before release: ${needed.map((g) => String(g.title).toLowerCase()).join("; ")}.` : "All analysis gates are complete. Release the request for recommendation and approval.";
       tone = needed.length ? "info" : "success";
-      if (canEdit && roleId === "credit-analyst") {
+      if (canEdit && inGroup("analysts", roleId)) {
         const next = stageAfterAnalysis(app.approvals);
         action = (
-          <Button disabled={needed.length > 0} iconBefore={<CircleCheck aria-hidden />} onClick={() => c.change({ stage: next }, "Completed credit analysis", "Analysis", next)}>
+          <Button disabled={needed.length > 0} iconBefore={<CircleCheck aria-hidden />} onClick={() => run(completeAnalysis(app.id, next), "Analysis complete — the initiator is notified")}>
             Complete analysis
           </Button>
         );
@@ -93,15 +99,25 @@ export function NextStepCard({ c, onOpenTab }: { c: AppCtx; onOpenTab: (tab: str
         tone = "success";
         title = "Fully approved";
         body = "All required tiers have signed. Release the request to offer-letter generation (PRD §7).";
-        if (canEdit && (isInitiatorRole || roleId === "cco" || roleId === "credit-analyst"))
+        if (canEdit && inGroup("releasers", roleId))
           action = (
-            <Button iconBefore={<FileSignature aria-hidden />} onClick={() => c.change({ stage: "Offer" }, "Released to offer letter", app.stage, "Offer")}>
+            <Button iconBefore={<FileSignature aria-hidden />} onClick={() => run(releaseToOffer(app.id), "Released to offer letter")}>
               Release to offer letter
             </Button>
           );
+      } else if (!pending) {
+        const mine = canEdit && isInitiatorRole && app.createdById === c.me.id;
+        tone = mine ? "warning" : "info";
+        title = mine ? "Submit for approval" : "Awaiting submission for approval";
+        body = "Analysis is complete. The initiator submits the request into the Operations credit-approval workflow (chart-flow steps for this amount).";
+        action = mine ? (
+          <Button iconBefore={<Send aria-hidden />} onClick={() => run(submitForApproval(app.id), "Submitted for approval")}>
+            Submit for approval
+          </Button>
+        ) : null;
       } else {
         const who = steps.map((s) => `${roleById[s.roleId].name}${s.adjudicates ? " (adjudicator)" : ""}`).join(" and ");
-        const mine = steps.some((s) => s.roleId === roleId);
+        const mine = steps.some((s) => s.roleId === roleId) && pending?.requestedBy.id !== c.me.id;
         tone = mine ? "warning" : "info";
         title = mine ? "Your decision is required" : `Awaiting ${who}`;
         body = app.stage === "Recommendation" ? "BDM concurs, declines or returns for rework; cannot submit until collateral due diligence is complete." : `Co-signer chart-flow in progress — ${app.approvals.filter((s) => s.decision !== "pending").length} of ${app.approvals.length} steps decided.`;

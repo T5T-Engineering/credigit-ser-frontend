@@ -8,7 +8,6 @@ import {
   Banknote,
   BarChart3,
   BriefcaseBusiness,
-  Cable,
   ClipboardList,
   FilePlus2,
   Gauge as GaugeIcon,
@@ -21,12 +20,12 @@ import {
   Timer,
   UserPlus,
   Users,
+  Workflow,
 } from "lucide-react";
 import {
   ActionBlocks,
   ActivityFeed,
   AiInsightCard,
-  Alert,
   Badge,
   BarChart,
   Button,
@@ -56,8 +55,14 @@ import { canAccess, roleById, type Role } from "@/lib/rbac/roles";
 import { useApplications, useAudit, useDbActions, useLookups, useNotifications, useObligors, useTenant, useUsers } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { Application, ApprovalStep } from "@/lib/data/types";
+import { chartFlow } from "@/lib/workflow";
 import { ago, date, moneyShort, pct } from "@/lib/format";
-import { confirmerRoles, flowTierOf, useAdminStore, usePendingChanges, useRoleLimit } from "@/modules/admin/store";
+import { flowTierOf, useOpenAdminOperations, useRoleLimit } from "@/modules/admin/store";
+import { publish } from "@/lib/platform/events";
+import { runHooks } from "@/lib/platform/hooks";
+import { currentStep, stepDueAt, useMyApprovalQueue, useMyRequests, type OperationInstance } from "@/lib/platform/operations";
+import { useRule, useRulesStore } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
 import { classTone, isDueSoon, isOverdue, nowMs, DAY, useApprovalsAwaiting, usePortfolioSnapshot, useRoleTasks, useWorkspaceStore } from "./data";
 import { useAuditLog } from "./use-audit-log";
 
@@ -90,7 +95,16 @@ export function DashboardPage() {
   const tasks = useRoleTasks(role.id);
   const snap = usePortfolioSnapshot();
   const myLimit = useRoleLimit(role.id);
-  const pending = usePendingChanges();
+  const { actor } = useScope();
+  // Credit approvals already listed from the chart-flow aren't repeated as Operations items.
+  const opsQueue = useMyApprovalQueue(actor).filter((i) => !awaiting.some((a) => a.app.id === i.subject.id));
+  const myRequests = useMyRequests(actor.id);
+  const myOpenRequests = myRequests.filter((i) => i.status === "Pending" || i.status === "In progress");
+  const adminOpen = useOpenAdminOperations();
+  const nplAlertPct = useRule<number>("workspace.nplAlertPct");
+  const nearLimitPct = useRule<number>("workspace.nearLimitPct");
+  const decisionsWindowDays = useRule<number>("workspace.decisionsWindowDays");
+  const activityWindowHours = useRule<number>("workspace.activityWindowHours");
   const kind = audience(role);
   const firstName = user.name.split(" ")[0];
   const greeting = DEMO_NOW.getHours() < 12 ? "Good morning" : DEMO_NOW.getHours() < 17 ? "Good afternoon" : "Good evening";
@@ -111,8 +125,8 @@ export function DashboardPage() {
     const tasksKpi: Kpi = {
       id: "tasks",
       label: "My open tasks",
-      value: openTasks.length + awaiting.length,
-      hint: `${openTasks.filter((t) => isOverdue(t.dueAt)).length + awaitingOverdue} overdue`,
+      value: openTasks.length + awaiting.length + opsQueue.length,
+      hint: `${openTasks.filter((t) => isOverdue(t.dueAt)).length + awaitingOverdue} overdue · ${opsQueue.length} in Operations`,
       icon: ic(Inbox),
       tone: "accent",
       href: "/inbox",
@@ -135,23 +149,23 @@ export function DashboardPage() {
       tone: "brand",
       href: "/admin/roles",
     };
-    const decided = apps.flatMap((a) => a.approvals.filter((s) => s.roleId === role.id && s.decidedAt && nowMs - new Date(s.decidedAt).getTime() <= 30 * DAY));
+    const decided = apps.flatMap((a) => a.approvals.filter((s) => s.roleId === role.id && s.decidedAt && nowMs - new Date(s.decidedAt).getTime() <= decisionsWindowDays * DAY));
     const decidedKpi: Kpi = {
       id: "decided",
-      label: "My decisions (30 days)",
+      label: `My decisions (${decisionsWindowDays} days)`,
       value: decided.length,
       hint: `${decided.filter((s) => s.decision === "approved" || s.decision === "recommended").length} approved / recommended · ${decided.filter((s) => s.decision === "declined").length} declined`,
       icon: ic(BadgeCheck),
       tone: "success",
       href: "/origination",
     };
-    const npl: Kpi = { id: "npl", label: "NPL ratio", value: pct(snap.nplRatio), hint: `${moneyShort(snap.npl)} of ${moneyShort(snap.outstanding)} classified`, icon: ic(AlertTriangle), tone: snap.nplRatio > 5 ? "danger" : "success", href: "/portfolio" };
+    const npl: Kpi = { id: "npl", label: "NPL ratio", value: pct(snap.nplRatio), hint: `${moneyShort(snap.npl)} of ${moneyShort(snap.outstanding)} classified`, icon: ic(AlertTriangle), tone: snap.nplRatio > nplAlertPct ? "danger" : "success", href: "/portfolio" };
     const stages: Kpi = { id: "stages", label: "Stage 2 / Stage 3", value: `${moneyShort(snap.stage2)} / ${moneyShort(snap.stage3)}`, hint: "IFRS 9 exposure (outstanding)", icon: ic(BarChart3), tone: "warning", href: "/ifrs9/staging" };
     const breaches: Kpi = {
       id: "breaches",
       label: "Sector limit breaches",
       value: snap.breaches.length,
-      hint: `${snap.nearBreach.length} within 10% of limit`,
+      hint: `${snap.nearBreach.length} within ${100 - nearLimitPct}% of limit`,
       icon: ic(ShieldAlert),
       tone: snap.breaches.length ? "danger" : "success",
       href: "/portfolio/limits",
@@ -180,12 +194,12 @@ export function DashboardPage() {
         ];
       case "admin": {
         const active = users.filter((u) => u.status === "Active").length;
-        const since = nowMs - DAY;
+        const since = nowMs - activityWindowHours * 3_600_000;
         return [
           { id: "users", label: "Active users", value: active, hint: `${users.filter((u) => u.status === "Pending").length} invitations pending`, icon: ic(Users), tone: "accent", href: "/admin" },
           { id: "mfa", label: "MFA not enrolled", value: users.filter((u) => !u.mfa && u.status !== "Suspended").length, hint: "MFA is mandatory on every login", icon: ic(ShieldAlert), tone: users.some((u) => !u.mfa) ? "warning" : "success", href: "/admin" },
-          { id: "conn", label: "Connectors", value: "5 / 6", hint: "Healthy · credit bureau delayed (simulated)", icon: ic(Cable), tone: "warning", href: "/connectors" },
-          { id: "audit", label: "Audit events (24h)", value: audit.filter((e) => new Date(e.at).getTime() >= since).length, hint: `${pending.length} parameter change(s) awaiting confirmation`, icon: ic(ScrollText), tone: "info", href: "/audit" },
+          { id: "audit", label: `Audit events (${activityWindowHours}h)`, value: audit.filter((e) => new Date(e.at).getTime() >= since).length, hint: "Append-only audit trail", icon: ic(ScrollText), tone: "info", href: "/audit" },
+          { id: "ops", label: "Admin changes in Operations", value: adminOpen.length, hint: `${opsQueue.length} awaiting your decision`, icon: ic(Workflow), tone: adminOpen.length ? "warning" : "success", href: "/operations" },
         ];
       }
     }
@@ -196,6 +210,7 @@ export function DashboardPage() {
     [
       canAccess(role, "origination", "edit") && kind !== "admin" ? { title: "New credit application", description: "Start an origination file", icon: <FilePlus2 aria-hidden />, href: "/origination/new" } : null,
       awaiting.length || kind === "approver" ? { title: "Review approvals", description: `${awaiting.length} awaiting you`, icon: <Inbox aria-hidden />, href: "/inbox" } : null,
+      opsQueue.length ? { title: "Operations approvals", description: `${opsQueue.length} awaiting your decision`, icon: <Workflow aria-hidden />, href: "/operations" } : null,
       canAccess(role, "portfolio") ? { title: "Portfolio limits", description: "Sector and obligor limits", icon: <BarChart3 aria-hidden />, href: "/portfolio/limits" } : null,
       canAccess(role, "monitoring") ? { title: "Exceptions", description: "Escalations and past-due", icon: <ShieldAlert aria-hidden />, href: "/monitoring/exceptions" } : null,
       canAccess(role, "disbursement") ? { title: "Disbursement queue", description: "Maker / checker", icon: <Banknote aria-hidden />, href: "/disbursement" } : null,
@@ -259,12 +274,12 @@ export function DashboardPage() {
           ))}
         </Grid>
 
-        {confirmerRoles.includes(role.id) && role.id !== "system-admin" && pending.length ? <PendingConfirmations /> : null}
+        {opsQueue.length || myOpenRequests.length ? <OperationsCard queue={opsQueue} requests={myOpenRequests} /> : null}
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
           <Stack gap="large" className="min-w-0">
             {role.tier !== null || awaiting.length ? <ApprovalsCard awaiting={awaiting} limit={myLimit} /> : null}
-            {kind === "admin" && openTasks.length === 0 ? <ConfigGlance /> : <TasksPreview tasks={openTasks} approvals={awaiting.length} />}
+            {kind === "admin" && openTasks.length === 0 ? <ConfigGlance /> : <TasksPreview tasks={openTasks} approvals={awaiting.length + opsQueue.length} />}
             {canPortfolio ? <PortfolioSnapshotCard /> : kind === "front" ? <PipelineCard apps={myApps} /> : null}
             <Card>
               <CardHeader>
@@ -385,16 +400,20 @@ function ApprovalsCard({ awaiting, limit }: { awaiting: AwaitRow[]; limit: numbe
 // ---------------------------------------------------------------- configuration at a glance (admin roles)
 
 function ConfigGlance() {
-  const params = useAdminStore((s) => s.params);
-  const customRoles = useAdminStore((s) => s.customRoles);
-  const pending = usePendingChanges();
+  const stepUp = useRule<number>("approvals.stepUpThresholdNgn");
+  const neutral = useRule<number>("rar.neutralBelow");
+  const marginal = useRule<number>("rar.marginalBelow");
+  const moderate = useRule<number>("rar.moderateBelow");
+  const offered = useRule<string[]>("origination.products");
+  const overrides = useRulesStore((s) => Object.keys(s.values).length);
+  const open = useOpenAdminOperations();
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3">
         <div>
           <CardTitle>Configuration at a glance</CardTitle>
           <Text variant="small" tone="muted">
-            Rules & Parameters Engine — changes apply without a code release.
+            Business rules — every change is approved in Operations, then applies without a code release.
           </Text>
         </div>
         <TextLink href="/admin/parameters" as={Link}>
@@ -405,12 +424,12 @@ function ConfigGlance() {
         <KeyValueGrid
           columns={3}
           items={[
-            { label: "Step-up threshold", value: moneyShort(params.stepUpThresholdNgn), hint: "PRD §4.2" },
-            { label: "Fast-Track ceiling", value: moneyShort(params.fastTrackCeilingNgn), hint: "PRD §6.1.3" },
-            { label: "RAR intensity bands", value: `${params.rar.neutralBelow} · ${params.rar.marginalBelow} · ${params.rar.moderateBelow}`, hint: "Neutral · Marginal · Moderate" },
-            { label: "Chart-flow tiers", value: params.chartFlow.length, hint: `${params.chartFlow.filter((c) => c.adjudicator).length} with adjudicators` },
-            { label: "Cloned roles", value: customRoles.length, hint: "Roles & limits" },
-            { label: "Awaiting 2nd person", value: pending.length, hint: "Regulatory parameters" },
+            { label: "Step-up threshold", value: moneyShort(stepUp), hint: "PRD §4.2" },
+            { label: "RAR intensity bands", value: `${neutral} · ${marginal} · ${moderate}`, hint: "Neutral · Marginal · Moderate" },
+            { label: "Products offered", value: offered.length, hint: "Product catalogue" },
+            { label: "Chart-flow tiers", value: chartFlow.length, hint: "Approval chart-flow" },
+            { label: "Rules changed from default", value: overrides, hint: "Tenant overrides" },
+            { label: "Awaiting approval", value: open.length, hint: "Admin changes in Operations" },
           ]}
         />
       </CardContent>
@@ -460,6 +479,7 @@ function TasksPreview({ tasks, approvals }: { tasks: ReturnType<typeof useRoleTa
 
 function PortfolioSnapshotCard() {
   const snap = usePortfolioSnapshot();
+  const nearLimitPct = useRule<number>("workspace.nearLimitPct");
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
@@ -497,7 +517,7 @@ function PortfolioSnapshotCard() {
                 value: s.value,
                 href: "/portfolio/concentration",
                 meta: `${pct(s.sharePct)} of book · limit ${pct(s.limitPct, 0)}`,
-                tone: s.sharePct > s.limitPct ? "danger" : s.sharePct >= s.limitPct * 0.9 ? "warning" : "accent",
+                tone: s.sharePct > s.limitPct ? "danger" : s.sharePct >= s.limitPct * (nearLimitPct / 100) ? "warning" : "accent",
               }))}
               valueFormatter={(v) => moneyShort(v)}
               linkComponent={Link}
@@ -543,14 +563,26 @@ function AiFlags({ kind, myObligorIds }: { kind: string; myObligorIds?: Set<stri
   const signOff = useWorkspaceStore((s) => s.signOff);
   const dismiss = useWorkspaceStore((s) => s.dismiss);
   const log = useAuditLog();
+  const shortfallRatio = useRule<number>("workspace.inflowShortfallRatio");
+  const stalledDays = useRule<number>("workspace.stalledStageDays");
+
+  const review = async (id: string, kind: "signed-off" | "dismissed") => {
+    const hook = await runHooks("workspace.ai-flag.review.before", { flagId: id, kind });
+    if (!hook.ok) return;
+    if (kind === "signed-off") signOff(id, user.name);
+    else dismiss(id);
+    log({ action: kind === "signed-off" ? "Signed off AI-flagged exception" : "Dismissed AI-flagged exception", entityType: "AI flag", entityId: id, after: kind === "signed-off" ? "Reviewed — accepted" : "Dismissed" });
+    publish(`workspace.ai-flag.${kind}`, { module: "workspace", subject: { type: "AI flag", id, href: "/dashboard" }, payload: { by: user.name } });
+    await runHooks("workspace.ai-flag.review.after", { flagId: id, kind });
+  };
 
   const flags = useMemo(() => {
     const shortfall = obligors
-      .filter((o) => (!myObligorIds || myObligorIds.has(o.id)) && o.verifiedTurnover / o.declaredTurnover < 0.6)
+      .filter((o) => (!myObligorIds || myObligorIds.has(o.id)) && o.verifiedTurnover / o.declaredTurnover < shortfallRatio)
       .sort((a, b) => a.verifiedTurnover / a.declaredTurnover - b.verifiedTurnover / b.declaredTurnover)
       .slice(0, 3);
     const stalled = apps
-      .filter((a) => ["Documents", "Analysis", "Recommendation", "Approval"].includes(a.stage) && nowMs - new Date(a.updatedAt).getTime() > 7 * DAY)
+      .filter((a) => ["Documents", "Analysis", "Recommendation", "Approval"].includes(a.stage) && nowMs - new Date(a.updatedAt).getTime() > stalledDays * DAY)
       .slice(0, 3);
     const sectors = [...snap.breaches, ...snap.nearBreach].slice(0, 3);
     const out: Array<{ id: string; title: string; bullets: ReactNode[]; sources: Array<{ label: string; href?: string; detail?: string }>; confidence: number }> = [];
@@ -587,7 +619,7 @@ function AiFlags({ kind, myObligorIds }: { kind: string; myObligorIds?: Set<stri
     if (stalled.length)
       out.push({
         id: "flag-stalled",
-        title: "Workflow stages stalled for more than 7 days",
+        title: `Workflow stages stalled for more than ${stalledDays} days`,
         confidence: 0.74,
         bullets: stalled.map((a) => (
           <span key={a.id}>
@@ -600,7 +632,7 @@ function AiFlags({ kind, myObligorIds }: { kind: string; myObligorIds?: Set<stri
         sources: [{ label: "Origination workflow", href: "/origination", detail: "Stage timestamps" }],
       });
     return out.filter((f) => !dismissed.includes(f.id));
-  }, [obligors, apps, snap, myObligorIds, kind, dismissed]);
+  }, [obligors, apps, snap, myObligorIds, kind, dismissed, shortfallRatio, stalledDays]);
 
   return (
     <Stack gap="medium">
@@ -622,14 +654,8 @@ function AiFlags({ kind, myObligorIds }: { kind: string; myObligorIds?: Set<stri
             bullets={f.bullets}
             sources={f.sources}
             signedOffBy={signedOff[f.id] ? `${signedOff[f.id]!.by} · ${ago(signedOff[f.id]!.at)}` : undefined}
-            onAccept={() => {
-              signOff(f.id, user.name);
-              log({ action: "Signed off AI-flagged exception", entityType: "AI flag", entityId: f.id, after: "Reviewed — accepted" });
-            }}
-            onDismiss={() => {
-              dismiss(f.id);
-              log({ action: "Dismissed AI-flagged exception", entityType: "AI flag", entityId: f.id, after: "Dismissed" });
-            }}
+            onAccept={() => void review(f.id, "signed-off")}
+            onDismiss={() => void review(f.id, "dismissed")}
             labels={{ accept: "Sign off", dismiss: "Dismiss" }}
           />
         ))
@@ -638,53 +664,46 @@ function AiFlags({ kind, myObligorIds }: { kind: string; myObligorIds?: Set<stri
   );
 }
 
-// ---------------------------------------------------------------- second-person confirmations (PRD §10.4)
+// ---------------------------------------------------------------- Operations: approvals awaiting me + my requests
 
-function PendingConfirmations() {
-  const pending = usePendingChanges();
-  const resolve = useAdminStore((s) => s.resolveChange);
-  const user = useSession((s) => s.user)!;
-  const log = useAuditLog();
+function OperationsCard({ queue, requests }: { queue: OperationInstance[]; requests: OperationInstance[] }) {
+  const row = (i: OperationInstance, mine: boolean) => {
+    const step = currentStep(i);
+    const due = stepDueAt(i);
+    return (
+      <li key={`${mine ? "r" : "q"}:${i.id}`} className="flex flex-wrap items-center justify-between gap-3 py-3">
+        <span className="flex min-w-0 flex-col">
+          <Link href={`/operations/item?id=${i.id}`} className="font-semibold text-fg hover:text-link focus-visible:outline-2 focus-visible:outline-focus">
+            {i.title}
+          </Link>
+          <span className="text-sm text-fg-muted">{mine ? `Waiting on: ${step?.name ?? "—"}` : `Requested by ${i.requestedBy.name} · ${ago(i.requestedAt)}`}</span>
+        </span>
+        <span className="flex items-center gap-2">
+          {mine ? <Badge variant="outline">My request</Badge> : <Badge tone="info">{step?.name ?? "Decision"}</Badge>}
+          {due ? isOverdue(due) ? <Badge tone="danger">Overdue</Badge> : <Badge variant="outline">Due {date(due)}</Badge> : null}
+        </span>
+      </li>
+    );
+  };
   return (
-    <Alert tone="warning" title={`${pending.length} regulatory parameter change(s) need your confirmation`}>
-      <Stack gap="small">
-        <Text variant="small">Regulatory parameters (e.g. provisioning percentages) need a second person to confirm before they take effect (PRD §10.4).</Text>
-        <ul className="flex flex-col gap-2">
-          {pending.map((p) => (
-            <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-surface p-3">
-              <span>
-                <span className="font-semibold">{p.label}</span>: <span className="font-mono">{p.before}</span> → <span className="font-mono">{p.after}</span>
-                <span className="block text-sm text-fg-muted">
-                  Requested by {p.requestedByName} · {ago(p.requestedAt)}
-                </span>
-              </span>
-              <span className="flex gap-2">
-                <Button
-                  size="small"
-                  variant="tertiary"
-                  onClick={() => {
-                    resolve(p.id, false);
-                    log({ action: "Rejected parameter change", entityType: "Parameter", entityId: String(p.field), before: p.before, after: p.after });
-                  }}
-                >
-                  Reject
-                </Button>
-                <Button
-                  size="small"
-                  disabled={p.requestedById === user.id}
-                  onClick={() => {
-                    resolve(p.id, true);
-                    log({ action: "Confirmed parameter change (second person)", entityType: "Parameter", entityId: String(p.field), before: p.before, after: p.after });
-                  }}
-                >
-                  Confirm
-                </Button>
-              </span>
-            </li>
-          ))}
+    <Card>
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
+        <div>
+          <CardTitle>Operations</CardTitle>
+          <Text variant="small" tone="muted">
+            {queue.length} awaiting your decision · {requests.length} of your requests in progress. Configuration, access and other approvals route through the Operations workflow.
+          </Text>
+        </div>
+        <TextLink href="/operations" as={Link}>
+          Open Operations
+        </TextLink>
+      </CardHeader>
+      <CardContent>
+        <ul className="divide-y divide-line">
+          {queue.slice(0, 5).map((i) => row(i, false))}
+          {requests.slice(0, 3).map((i) => row(i, true))}
         </ul>
-      </Stack>
-    </Alert>
+      </CardContent>
+    </Card>
   );
 }
-

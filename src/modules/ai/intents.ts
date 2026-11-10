@@ -11,9 +11,13 @@ import { DEMO_NOW } from "@/lib/data/seed";
 import { MONTHS_48, baselEventTypes, fmtKri, netLoss, type LossEvent } from "../operational-risk/data";
 import type { KriReading } from "../operational-risk/logic";
 import { bestLag, pearson, round } from "../operational-risk/shared";
-import { fmtMetric, type AppetiteMetric } from "../enterprise-risk/data";
+import { getRule } from "@/lib/platform/rules";
+import { fmtMetric, rasVersion, type AppetiteMetric } from "../enterprise-risk/data";
+import { ermKeys } from "../enterprise-risk/keys";
+import { PLATFORM_INTENTS, aiKeys, type QueryScope } from "./platform";
 
-export type QueryScope = "full" | "platform";
+export type { QueryScope };
+
 export type ValueFormat = "money" | "pct" | "num";
 
 export type ChartSpec =
@@ -51,7 +55,8 @@ export type QueryData = {
   appetite: (AppetiteMetric & { rag: "green" | "amber" | "red" })[];
 };
 
-export const MODEL_VERSION = "SER-NLQ 0.9 (simulated, rules-based)";
+/** Model version label in force (business rule `ai.console.modelVersion`). */
+export const modelVersion = () => getRule<string>(aiKeys.modelVersion);
 
 export const suggestedQuestions: { q: string; scope: QueryScope }[] = [
   { q: "Show resignation trend over the past 4 years and plot it against customer complaints", scope: "full" },
@@ -80,6 +85,7 @@ const has = (q: string, ...words: (string | RegExp)[]) => words.some((w) => (typ
 const isNpl = (f: Facility) => f.cbnClass === "Substandard" || f.cbnClass === "Doubtful" || f.cbnClass === "Lost";
 const live = (fs: Facility[]) => fs.filter((f) => f.status !== "Closed" && f.status !== "Written off");
 
+// TD-905: keyword intent rules and sector aliases are a code map (replaced by the NL→query service).
 const sectorAliases: [RegExp, string][] = [
   [/manufactur/, "SEC-MFG"],
   [/agric|agro|farm/, "SEC-AGR"],
@@ -98,16 +104,16 @@ const sectorAliases: [RegExp, string][] = [
   [/government|public sector|state/, "SEC-GOV"],
 ];
 
-function topN(q: string, def = 10) {
+function topN(q: string, def = getRule<number>(aiKeys.defaultTopN)) {
   const m = q.match(/\b(?:top|largest|biggest)\s+(\d{1,2})\b/) ?? q.match(/\b(\d{1,2})\s+(?:largest|biggest|top)\b/);
-  return m ? Math.max(1, Math.min(50, Number(m[1]))) : def;
+  return m ? Math.max(1, Math.min(getRule<number>(aiKeys.maxTopN), Number(m[1]))) : def;
 }
 
-const platformIntents = new Set(["users", "audit", "connectors"]);
+const platformIntents = new Set<string>(PLATFORM_INTENTS);
 
 export function answerQuery(question: string, scope: QueryScope, d: QueryData): QueryResult {
   const q = question.toLowerCase().trim();
-  if (q.length < 3) return { status: "unknown", reason: "Type a question about the risk data." };
+  if (q.length < getRule<number>(aiKeys.minQuestionLength)) return { status: "unknown", reason: "Type a question about the risk data." };
 
   const intent = detectIntent(q);
   if (!intent) return { status: "unknown", reason: "I couldn't map that question to the platform's data dictionary. Try one of the suggested questions, or name a metric such as exposure, NPL ratio, KRI, loss events or stage." };
@@ -132,7 +138,8 @@ export function answerQuery(question: string, scope: QueryScope, d: QueryData): 
   return builders[intent]!();
 }
 
-function detectIntent(q: string): string | null {
+/** Map a (lower-cased) question to an intent, or null. */
+export function detectIntent(q: string): string | null {
   if (has(q, "resign", "attrition", "staff turnover") || (has(q, "complaint") && has(q, "staff", "trend"))) return "attrition";
   if (has(q, "appetite")) return "appetite";
   if (has(q, /\bkris?\b/, "key risk indicator")) return "kri";
@@ -296,13 +303,15 @@ function concentration(d: QueryData): Answer {
     })
     .sort((a, b) => b.share / b.s.limitPct - a.share / a.s.limitPct);
   const breaches = rows.filter((r) => r.share > r.s.limitPct);
+  const near = getRule<number>(aiKeys.nearBreachPct);
+  const govCeiling = getRule<number>(ermKeys.rasLimit("RA-03"));
   return {
     status: "answered",
     intent: "concentration",
     title: "Sector concentration against internal limits",
     narrative: [
       breaches.length ? `${breaches.length} sector${breaches.length > 1 ? "s are" : " is"} above the internal concentration limit: ${breaches.map((b) => `${b.s.name} ${pct(b.share)} vs ${b.s.limitPct}%`).join("; ")}.` : "All sectors are within internal limits.",
-      `Near-breaches (≥ 90% of limit): ${rows.filter((r) => r.share <= r.s.limitPct && r.share >= 0.9 * r.s.limitPct).map((r) => r.s.name).join(", ") || "none"}. Government exposure is also tested against the 10% CBN ceiling (CBN 3.2(c)).`,
+      `Near-breaches (≥ ${near}% of limit): ${rows.filter((r) => r.share <= r.s.limitPct && r.share >= (near / 100) * r.s.limitPct).map((r) => r.s.name).join(", ") || "none"}. Government exposure is also tested against the ${govCeiling}% CBN ceiling (CBN 3.2(c)).`,
     ],
     chart: { kind: "stacked", mode: "grouped", categories: rows.map((r) => r.s.name), series: [{ name: "Share of book %", values: rows.map((r) => round(r.share, 1)), tone: "accent" }, { name: "Internal limit %", values: rows.map((r) => r.s.limitPct), tone: "info" }], format: "pct", label: "Sector share vs limit" },
     table: { columns: ["Sector", "Exposure", "Share of book", "Limit", "Utilisation"], numeric: [false, true, true, true, true], rows: rows.map((r) => [r.s.name, moneyShort(r.e), pct(r.share), `${r.s.limitPct}%`, pct((r.share / r.s.limitPct) * 100, 0)]) },
@@ -381,8 +390,8 @@ function appetite(d: QueryData): Answer {
     narrative: [reds.length ? `${reds.length} metric${reds.length > 1 ? "s are" : " is"} in breach: ${reds.map((m) => `${m.name} (${fmtMetric(m, m.actual)} vs ${m.direction === "max" ? "≤" : "≥"} ${fmtMetric(m, m.limit)})`).join("; ")}.` : "No appetite breaches.", `${list.filter((m) => m.rag === "amber").length} metrics are in early warning.`],
     chart: { kind: "donut", segments: [{ label: "Green", value: list.filter((m) => m.rag === "green").length, tone: "success" }, { label: "Amber", value: list.filter((m) => m.rag === "amber").length, tone: "warning" }, { label: "Red", value: reds.length, tone: "danger" }], centerLabel: "Metrics", centerValue: String(list.length) },
     table: { columns: ["Metric", "Type", "Appetite", "Actual", "Status"], rows: list.map((m) => [m.name, m.type, `${m.direction === "max" ? "≤" : "≥"} ${fmtMetric(m, m.limit)}`, fmtMetric(m, m.actual), m.rag[0]!.toUpperCase() + m.rag.slice(1)]) },
-    sources: [{ label: "ERM risk appetite scorecard (§6.10)", detail: "RAS 2026.1" }],
-    structuredQuery: "SELECT metric, type, appetite_limit, actual, rag FROM risk_appetite_scorecard\nWHERE ras_version = 'RAS 2026.1' ORDER BY rag DESC",
+    sources: [{ label: "ERM risk appetite scorecard (§6.10)", detail: rasVersion().version }],
+    structuredQuery: `SELECT metric, type, appetite_limit, actual, rag FROM risk_appetite_scorecard\nWHERE ras_version = '${rasVersion().version}' ORDER BY rag DESC`,
     confidence: 0.91,
     touched: `Risk appetite scorecard — ${list.length} rows`,
   };

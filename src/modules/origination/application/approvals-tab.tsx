@@ -1,10 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { KeyRound } from "lucide-react";
+import Link from "next/link";
+import { ArrowUpRight, KeyRound, Send } from "lucide-react";
 import {
   Alert,
   ApprovalTimeline,
+  Button,
   Card,
   CardContent,
   CardDescription,
@@ -15,103 +17,141 @@ import {
   Stack,
   StepUpAuthDialog,
   Text,
+  TextLink,
+  WorkflowInstanceCard,
   useToast,
   type DecisionAction,
 } from "@credigit/web-ui";
-import { money, moneyShort } from "@/lib/format";
+import { dateTime, money, moneyShort } from "@/lib/format";
 import { roleById } from "@/lib/rbac/roles";
-import { buildChainFor, chainStatus, collateralDueDiligenceDone, currentSteps, decide, finalAuthority, isBreach } from "../logic";
-import { TENANT_PARAM_NOTE } from "../params";
-import { toApprovalTiers } from "../view-models";
+import { canDecide, currentStep, getDefinition, useOperationsStore } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import { collateralDueDiligenceDone, finalAuthority, isBreach } from "../logic";
+import { inGroup, TENANT_PARAM_NOTE } from "../params";
+import { toApprovalTiers, toOperationSteps, toUiOperationStatus } from "../view-models";
+import { decideApplicationOperation, freshChain, isCreditOp, markStepUp, submitForApproval } from "../actions";
+import { operationHref } from "./operation-status";
 import type { AppCtx } from "./context";
 import { useStepUpThreshold } from "../use-params";
 
-const toDecision: Record<DecisionAction, "approved" | "declined" | "recommended" | "returned"> = {
-  approve: "approved",
-  decline: "declined",
-  recommend: "recommended",
-  return: "returned",
-};
-const verb: Record<DecisionAction, string> = { approve: "Approved", decline: "Declined", recommend: "Recommended", return: "Returned for rework" };
+const toEngine: Record<DecisionAction, "approve" | "reject" | "return"> = { approve: "approve", recommend: "approve", decline: "reject", return: "return" };
 
 export function ApprovalsTab({ c }: { c: AppCtx }) {
-  const { app, roleId, me, users } = c;
+  const { app, users } = c;
+  const { actor } = useScope();
   const { toast } = useToast();
   const [stepUpOpen, setStepUpOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const resolver = useRef<((ok: boolean) => void) | null>(null);
-
-  const steps = currentSteps(app.approvals);
-  const mine = steps.find((s) => s.roleId === roleId);
-  const inDecisionStage = app.stage === "Recommendation" || app.stage === "Approval";
-  const isInitiator = app.createdById === me.id;
-  const blocked = isBreach(app.limitGate) && c.extra.exception?.decision !== "granted";
   const threshold = useStepUpThreshold();
+  const minComment = useRule<number>("operations.minCommentLength");
+  const warnHours = useRule<number>("origination.sla.warnWithinHours");
+  const instances = useOperationsStore((s) => s.instances);
+  const history = instances.filter((i) => isCreditOp(i.operationType) && i.subject.id === app.id);
+  const op = history[0];
+  const open = op && (op.status === "Pending" || op.status === "In progress");
+  const steps = op ? getDefinition(op.operationType).steps : [];
+  const step = op ? currentStep(op) : undefined;
+  const allowed = op && open ? canDecide(op, actor) : undefined;
+  const inDecisionStage = app.stage === "Recommendation" || app.stage === "Approval";
+  const blocked = isBreach(app.limitGate) && c.extra.exception?.decision !== "granted";
   const highValue = app.amount > threshold;
-  const bdmBlocked = mine?.roleId === "bdm" && !collateralDueDiligenceDone(c.collateral);
-  const status = chainStatus(app.approvals);
-  const current = steps[0];
-  const currentTierId = current ? (current.adjudicates ?? current.pair ?? current.id) : undefined;
+  const bdmStep = Boolean(step && op && op.stepIndex === 0 && step.approverRoles.length === 1 && step.approverRoles[0] === "bdm");
+  const bdmBlocked = bdmStep && actor.roleId === "bdm" && !collateralDueDiligenceDone(c.collateral);
+  const canSubmit = c.canEdit && inDecisionStage && !open && inGroup("initiators", actor.roleId) && app.createdById === actor.id;
+  const preview = op ? app.approvals : freshChain(app);
 
-  const actions: DecisionAction[] = !mine
-    ? []
-    : mine.adjudicates
-      ? ["approve", "decline"]
-      : mine.roleId === "bdm" && !mine.pair
-        ? ["recommend", "return", "decline"]
-        : ["approve", "return", "decline"];
+  const actions: DecisionAction[] = op?.awaitingAdjudication ? ["approve", "decline"] : bdmStep ? ["recommend", "return", "decline"] : ["approve", "return", "decline"];
 
-  const onDecide = ({ decision, comment }: { decision: DecisionAction; comment: string }) => {
-    if (!mine) return;
-    const label = `${verb[decision]} at tier ${mine.tier} (${roleById[mine.roleId].short}${mine.adjudicates ? ", adjudicator" : ""})`;
-    if (decision === "return") {
-      const fresh = buildChainFor(app.flow, app.amount, users);
-      c.change({ approvals: fresh, stage: "Analysis" }, label, app.stage, "Analysis — rework");
-      toast({ title: "Returned for rework", description: "The request is back with the Credit Analyst; the approval route restarts.", tone: "warning" });
-      return;
-    }
-    const next = decide(app.approvals, mine.id, toDecision[decision], comment, users);
-    const result = chainStatus(next);
-    const dissent = next.find((s) => s.adjudicates && !app.approvals.some((x) => x.id === s.id));
-    const stage = result === "Declined" ? "Declined" : app.stage === "Recommendation" && decision === "recommend" ? "Approval" : app.stage;
-    c.change({ approvals: next, stage }, label, mine.decision, comment);
-    if (dissent) c.log(`Co-signer dissent — routed to ${roleById[dissent.roleId].name} for adjudication`, "Dissent", roleById[dissent.roleId].name);
+  const onDecide = async ({ decision, comment }: { decision: DecisionAction; comment: string }) => {
+    if (!op) return;
+    const res = await decideApplicationOperation(op.id, toEngine[decision], comment);
+    if (!res.ok) { toast({ title: "Decision not recorded", description: res.reason, tone: "danger" }); return; }
+    const after = useOperationsStore.getState().instances.find((i) => i.id === op.id);
     toast({
-      title: verb[decision],
-      description: dissent ? `Co-signers disagree — routed to the ${roleById[dissent.roleId].name}.` : result === "Approved" ? "All tiers have signed — ready to release to the offer letter." : result === "Declined" ? "The request is declined." : "Routed to the next tier.",
+      title: "Decision recorded",
+      description: after?.awaitingAdjudication ? "Co-signers disagree — routed to the adjudicator." : after?.status === "Approved" ? "All tiers have signed — ready to release to the offer letter." : after?.status === "Rejected" ? "The request is declined." : after?.status === "Returned" ? "Returned to the Credit Analyst; the route restarts." : "Recorded — waiting on the next signer.",
       tone: decision === "decline" ? "danger" : "success",
     });
   };
 
+  const submit = async () => {
+    setSubmitting(true);
+    const res = await submitForApproval(app.id);
+    setSubmitting(false);
+    toast(res.ok ? { title: "Submitted for approval", description: res.message, tone: "success" } : { title: "Not submitted", description: res.reason, tone: "danger" });
+  };
+
   let notice: React.ReactNode = null;
-  if (mine && isInitiator) notice = "Segregation of duties: you initiated this request, so you cannot decide on it (PRD §4.2).";
-  else if (mine && blocked) notice = "Blocked by the portfolio-limit gate until the CRO / Board grants an exception.";
-  else if (bdmBlocked) notice = "Collateral due diligence is not complete — Legal must finish the search before the BDM can submit (PRD §6.1.1, step 3). You can still return or decline.";
+  if (blocked) notice = "Blocked by the portfolio-limit gate until the CRO / Board grant an exception.";
+  else if (bdmBlocked) notice = "Collateral due diligence is not complete — Legal must finish the search before the BDM can concur (PRD §6.1.1, step 3). You can still return or decline.";
+  else if (highValue) notice = `Above the ${moneyShort(threshold)} high-value threshold — step-up authentication is required.`;
 
   return (
     <Grid columns={{ base: 1, lg: 3 }} gap="large">
-      <div className="lg:col-span-2">
-        <Card>
-          <CardHeader>
-            <div><CardTitle>Approval route — {app.flow} chart-flow</CardTitle>
-            <CardDescription>
-              {money(app.amount)} routes up to {finalAuthority(app.approvals)}. Co-signers sign together; dissent routes automatically to the named adjudicator so an approval never sits idle (PRD §4.2, §6.1.2).
-            </CardDescription></div>
-          </CardHeader>
-          <CardContent>
-            <ApprovalTimeline tiers={toApprovalTiers(app.approvals, users)} currentTierId={inDecisionStage ? currentTierId : undefined} />
-          </CardContent>
-        </Card>
-      </div>
+      <Stack gap="large" className="lg:col-span-2">
+        {op ? (
+          <WorkflowInstanceCard
+            subject={{ title: op.title, type: getDefinition(op.operationType).name, href: operationHref(op.id), reference: op.id }}
+            status={toUiOperationStatus(op.status)}
+            requester={{ name: op.requestedBy.name, role: roleById[op.requestedBy.roleId]?.name }}
+            submittedAt={dateTime(op.requestedAt)}
+            steps={toOperationSteps(op, steps)}
+            warnWithinMs={warnHours * 3_600_000}
+            linkComponent={Link}
+            titleAs="h2"
+            actions={
+              <Button as={Link} href={operationHref(op.id)} variant="tertiary" iconAfter={<ArrowUpRight aria-hidden />}>
+                Open in Operations
+              </Button>
+            }
+          />
+        ) : (
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Approval route — {app.flow} chart-flow (preview)</CardTitle>
+                <CardDescription>
+                  {money(app.amount)} routes up to {finalAuthority(preview)}. Once submitted, the route runs in Operations: co-signers sign together and dissent goes to the named adjudicator (PRD §4.2, §6.1.2).
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ApprovalTimeline tiers={toApprovalTiers(preview, users)} />
+            </CardContent>
+          </Card>
+        )}
+        {history.length > 1 ? (
+          <Card>
+            <CardHeader>
+              <div>
+                <CardTitle>Earlier approval rounds</CardTitle>
+                <CardDescription>Returned or withdrawn rounds are kept for audit.</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Stack gap="small">
+                {history.slice(1).map((h) => (
+                  <Text key={h.id} variant="small">
+                    <TextLink as={Link} href={operationHref(h.id)}>{h.id}</TextLink> · {h.status} · {dateTime(h.completedAt ?? h.requestedAt)}
+                    {h.reason ? ` — ${h.reason}` : ""}
+                  </Text>
+                ))}
+              </Stack>
+            </CardContent>
+          </Card>
+        ) : null}
+      </Stack>
       <Stack gap="large">
-        {inDecisionStage && mine ? (
+        {op && open && allowed?.ok ? (
           <DecisionPanel
-            title={`Your decision — ${roleById[mine.roleId].name}${mine.adjudicates ? " (adjudicator)" : ""}`}
+            title={`Your decision — ${roleById[actor.roleId]?.name}${op.awaitingAdjudication ? " (adjudicator)" : ""}`}
             actions={bdmBlocked ? actions.filter((a) => a !== "recommend") : actions}
             onDecide={onDecide}
-            disabled={isInitiator || blocked}
-            notice={notice ?? (highValue ? `Above the ${moneyShort(threshold)} high-value threshold — step-up authentication is required.` : undefined)}
+            notice={notice ?? undefined}
             commentRequired
-            minCommentLength={5}
+            minCommentLength={minComment}
             requireStepUp={highValue}
             onStepUp={() =>
               new Promise<boolean>((resolve) => {
@@ -120,13 +160,19 @@ export function ApprovalsTab({ c }: { c: AppCtx }) {
               })
             }
           />
+        ) : canSubmit ? (
+          <Alert tone="info" title="Ready to submit for approval" action={<Button iconBefore={<Send aria-hidden />} loading={submitting} onClick={submit}>Submit for approval</Button>}>
+            Analysis is complete. Submitting starts the {app.flow} chart-flow in Operations ({freshChain(app).length} signer(s), up to {finalAuthority(freshChain(app))}).
+          </Alert>
         ) : (
-          <Alert tone={status === "Declined" ? "danger" : status === "Approved" ? "success" : "info"} title={status === "Approved" ? "Fully approved" : status === "Declined" ? "Declined" : inDecisionStage ? "No decision needed from your role" : `Stage: ${app.stage}`}>
-            {inDecisionStage && steps.length
-              ? `Waiting on ${steps.map((s) => roleById[s.roleId].name + (s.adjudicates ? " (adjudicator)" : "")).join(" and ")}. Switch role from the user menu to act as an approver.`
-              : !inDecisionStage && status === "In progress"
-                ? "Approvals open once the Credit Analyst completes analysis."
-                : "This route is closed."}
+          <Alert tone={op?.status === "Rejected" ? "danger" : op?.status === "Approved" ? "success" : "info"} title={op?.status === "Approved" ? "Fully approved" : op?.status === "Rejected" ? "Declined" : open ? "No decision needed from you" : inDecisionStage ? "Awaiting submission" : `Stage: ${app.stage}`}>
+            {open
+              ? allowed?.reason ?? "Waiting on another signer."
+              : inDecisionStage
+                ? `Waiting for the initiator (${users.find((u) => u.id === app.createdById)?.name ?? "Account Officer"}) to submit the request for approval.`
+                : op
+                  ? "This route is closed."
+                  : "Approvals open once the Credit Analyst completes analysis."}
           </Alert>
         )}
         <Card>
@@ -139,23 +185,24 @@ export function ApprovalsTab({ c }: { c: AppCtx }) {
                 <KeyRound aria-hidden className="mr-1 inline size-4" />
                 Step-up authentication above {moneyShort(threshold)} ({TENANT_PARAM_NOTE.toLowerCase()}).
               </Text>
-              <Text variant="small">Initiator ({users.find((u) => u.id === app.createdById)?.name ?? "—"}) cannot approve, or act as Disbursement Maker / Checker.</Text>
-              <Text variant="small">Approvers act only on their own step; both co-signers of a pair decide in parallel.</Text>
+              <Text variant="small">The requester ({op?.requestedBy.name ?? users.find((u) => u.id === app.createdById)?.name ?? "—"}) cannot decide any step (segregation of duties, enforced by Operations).</Text>
+              <Text variant="small">Tiers, signers, adjudicators, limits and SLAs come from Operations → Business rules → Credit chart-flow.</Text>
             </Stack>
           </CardContent>
         </Card>
       </Stack>
       <StepUpAuthDialog
         open={stepUpOpen}
-        onOpenChange={(open) => {
-          setStepUpOpen(open);
-          if (!open && resolver.current) {
+        onOpenChange={(o) => {
+          setStepUpOpen(o);
+          if (!o && resolver.current) {
             resolver.current(false);
             resolver.current = null;
           }
         }}
         onVerify={async (code) => /^\d{6}$/.test(code)}
         onVerified={() => {
+          if (op) markStepUp(op);
           resolver.current?.(true);
           resolver.current = null;
           setStepUpOpen(false);

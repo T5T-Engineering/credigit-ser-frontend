@@ -9,22 +9,28 @@
 import { format, subMonths, addMonths } from "date-fns";
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { Facility, Obligor, Sector } from "@/lib/data/types";
+import { getRule } from "@/lib/platform/rules";
 import { computeWarr, hash01, liveFacilities, nplRatio, onBalance, portfolioTotals, sum, warrExposure, type WarrResult } from "./selectors";
+import { PORTFOLIO_RULES } from "./rule-keys";
 
-/** Start of the reporting period used for new-business split and WARR decomposition (YTD). */
-export const PERIOD_START = new Date("2026-01-01T00:00:00+01:00");
-export const PERIOD_LABEL = "YTD 1 Jan – 10 Nov 2026";
-export const OPENING_LABEL = "31 Dec 2025";
+/** Start of the reporting period used for new-business split and WARR decomposition (YTD) — business rule. */
+export function periodStart(): Date {
+  const iso = getRule<string>(PORTFOLIO_RULES.periodStartDate);
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? new Date(`${DEMO_NOW.getFullYear()}-01-01T00:00:00`) : d;
+}
+export const periodLabel = () => `YTD ${format(periodStart(), "d MMM")} – ${format(DEMO_NOW, "d MMM yyyy")}`;
+export const openingLabel = () => getRule<string>(PORTFOLIO_RULES.openingDateLabel);
 
-export const isNewBusiness = (f: Facility) => new Date(f.startDate) >= PERIOD_START;
+export const isNewBusiness = (f: Facility) => new Date(f.startDate) >= periodStart();
 
 // ---------------------------------------------------------------------------------------------------------------
 // Prior grades and opening exposure (synthetic, deterministic)
 // ---------------------------------------------------------------------------------------------------------------
 
-/** Obligor grade at the opening date (31 Dec 2025). null = not a customer then. */
+/** Obligor grade at the opening date (prior year-end). null = not a customer then. */
 export function priorGrade(o: Obligor): number | null {
-  if (new Date(o.customerSince) >= PERIOD_START) return null;
+  if (new Date(o.customerSince) >= periodStart()) return null;
   const r = hash01(`${o.id}:prior-grade`);
   let g = o.riskGrade;
   if (o.watchlist) g = o.riskGrade - (r < 0.55 ? 2 : r < 0.9 ? 1 : 0);
@@ -140,7 +146,7 @@ export function reconciliation(all: Facility[]): ReconLine[] {
   ];
   return groups.map(([ledger, test], i) => {
     const spine = sum(fac.filter(test), onBalance);
-    // One simulated suspense break on the overdraft ledger so the reconciliation workflow is visible.
+    // TD-502: simulated suspense break on the overdraft ledger so the reconciliation workflow is visible.
     const diff = i === 0 ? Math.round(spine * 0.0004 / 1e5) * 1e5 : 0;
     return {
       id: `REC-${i + 1}`,
@@ -212,13 +218,15 @@ export type SectorProjection = {
 const lifeCycles: LifeCycle[] = ["Emerging", "Growth", "Maturity", "Decline"];
 const phases: CyclePhase[] = ["Expansion", "Peak", "Contraction", "Trough"];
 
-/** Scenario multipliers on the base drift (demo calibration of the simulated projection engine). */
+/** Scenario multipliers on the base drift (demo calibration of the simulated projection engine — TD-503). */
 export const scenarioShift: Record<Scenario, number> = { Base: 0, Upside: -0.35, Downside: 0.9 };
 
 /** Per-sector 3/6/12-month projected NPL range under a scenario. */
 export function sectorProjections(all: Facility[], obligors: Obligor[], sectors: Sector[], scenario: Scenario = "Base"): SectorProjection[] {
   const byId = new Map(obligors.map((o) => [o.id, o]));
   const shift = scenarioShift[scenario];
+  const worseAbove = 1 + getRule<number>(PORTFOLIO_RULES.projectionDeterioratingAbovePct) / 100;
+  const betterBelow = 1 - getRule<number>(PORTFOLIO_RULES.projectionImprovingBelowPct) / 100;
   return sectors.map((s) => {
     const list = all.filter((f) => byId.get(f.obligorId)?.sectorId === s.id);
     const current = nplRatio(list);
@@ -244,12 +252,12 @@ export function sectorProjections(all: Facility[], obligors: Obligor[], sectors:
       m12,
       rollRate12: Math.max(0.5, 2 + 6 * (phaseDrift + lifeDrift + shift) + 3 * hash01(`${s.id}:roll`)),
       drivers: sectorDrivers[s.id] ?? ["Real GDP growth"],
-      direction: m12[1] > base * 1.08 ? "Deteriorating" : m12[1] < base * 0.95 ? "Improving" : "Stable",
+      direction: m12[1] > base * worseAbove ? "Deteriorating" : m12[1] < base * betterBelow ? "Improving" : "Stable",
     };
   });
 }
 
-/** Bank-wide projected NPL ratio path for each scenario, 12 months forward from the current figure. */
+/** Bank-wide projected NPL ratio path for each scenario, 12 months forward (simulated engine calibration — TD-503). */
 export function bookProjection(currentNpl: number) {
   const months = Array.from({ length: 13 }, (_, m) => format(addMonths(DEMO_NOW, m), "MMM yy"));
   const drift: Record<Scenario, number> = { Base: 0.018, Upside: -0.012, Downside: 0.075 };
@@ -269,7 +277,8 @@ export function projectedWarr(current: WarrResult["warr"]) {
 // ---------------------------------------------------------------------------------------------------------------
 
 export type PlanLine = { sectorId: string; targetPct: number; budgetedDisbursement: number; targetYieldPct: number };
-export type PlanVersion = { id: string; name: string; version: number; status: "Board-approved" | "Revision — pending ALCO" | "Uploaded — validating"; uploadedAt: string; uploadedBy: string; fileName: string; targetBook: number; lines: PlanLine[] };
+/** Seed status of a plan version; approval state afterwards lives in the store (set by the Operations workflow). */
+export type PlanVersion = { id: string; name: string; version: number; status: "Board-approved" | "Draft" | "Uploaded — validating"; uploadedAt: string; uploadedBy: string; fileName: string; targetBook: number; lines: PlanLine[] };
 
 /** FY2026 Board-approved plan (v1) and the mid-year revision (v2), derived from sector limits. */
 export function seedPlanVersions(sectors: Sector[], grossLoans: number): PlanVersion[] {
@@ -285,7 +294,7 @@ export function seedPlanVersions(sectors: Sector[], grossLoans: number): PlanVer
   const v2 = v1.map((l) => (l.sectorId === "SEC-ICT" ? { ...l, targetPct: l.targetPct + 1.5 } : l.sectorId === "SEC-OGU" ? { ...l, targetPct: Math.max(0, l.targetPct - 1.5) } : l));
   return [
     { id: "PLAN-2026-V1", name: "FY2026 Annual Portfolio Plan", version: 1, status: "Board-approved", uploadedAt: "2026-01-14T10:20:00+01:00", uploadedBy: "Portfolio & MIS Officer", fileName: "FY2026_Portfolio_Plan_Board_Approved.xlsx", targetBook: target, lines: v1 },
-    { id: "PLAN-2026-V2", name: "FY2026 Mid-year revision", version: 2, status: "Revision — pending ALCO", uploadedAt: "2026-07-08T15:05:00+01:00", uploadedBy: "Portfolio & MIS Officer", fileName: "FY2026_Plan_MidYear_Revision.xlsx", targetBook: target, lines: v2 },
+    { id: "PLAN-2026-V2", name: "FY2026 Mid-year revision", version: 2, status: "Draft", uploadedAt: "2026-07-08T15:05:00+01:00", uploadedBy: "Portfolio & MIS Officer", fileName: "FY2026_Plan_MidYear_Revision.xlsx", targetBook: target, lines: v2 },
   ];
 }
 
@@ -303,7 +312,10 @@ export type ReportDef = {
   phase: 1 | 2;
 };
 
-/** Report catalogue. Exact CBN return codes/templates are a tenant/regulator configuration (see OPEN-QUESTIONS). */
+/**
+ * Report catalogue. Cadence is a business rule per report (`portfolio.reportCadence.<id>`, read with `reportCadence`);
+ * exact CBN return codes/templates are a tenant/regulator configuration (see OPEN-QUESTIONS, TD-505).
+ */
 export const reportCatalogue: ReportDef[] = [
   { id: "RPT-SOL", name: "Sectoral & single-obligor limit report", audience: "CBN return", cadence: "Monthly", prd: "§6.6.2, CBN 3.2–3.3", description: "Sector exposure vs internal limits, obligor exposure vs 20% SHF limit, government 10% ceiling.", phase: 1 },
   { id: "RPT-LEX", name: "Large exposures return", audience: "CBN return", cadence: "Monthly", prd: "§6.6.5, CBN 3.2(d)–(e)", description: "Obligors ≥10% of shareholders' funds and the 8× aggregate ceiling.", phase: 1 },
@@ -322,7 +334,7 @@ export const reportCatalogue: ReportDef[] = [
 // Tenant sector → CBN classification mapping (§6.6.1) — percentage split where a tenant sector is broader
 // ---------------------------------------------------------------------------------------------------------------
 
-/** Mandatory mapping of each tenant sector code to one or more CBN standard industry classes (demo mapping). */
+/** Mandatory mapping of each tenant sector code to one or more CBN standard industry classes (demo mapping — TD-504). */
 export const cbnSectorMap: Record<string, Array<{ cbn: string; pct: number }>> = {
   "SEC-AGR": [{ cbn: "Agriculture", pct: 100 }],
   "SEC-MIN": [{ cbn: "Mining & Quarrying", pct: 100 }],
@@ -354,4 +366,11 @@ export function reaggregateToCbn(rows: Array<{ sectorId: string; exposure: numbe
     }
   }
   return [...map.values()].sort((a, b) => b.exposure - a.exposure);
+}
+
+export const REPORT_CADENCES: ReportDef["cadence"][] = ["Daily", "Weekly", "Monthly", "Quarterly", "Annual"];
+export const reportCadenceRuleKey = (id: string) => `portfolio.reportCadence.${id}`;
+/** Effective cadence of a report (business rule; falls back to the catalogue default). */
+export function reportCadence(rep: ReportDef): ReportDef["cadence"] {
+  return getRule<ReportDef["cadence"]>(reportCadenceRuleKey(rep.id));
 }

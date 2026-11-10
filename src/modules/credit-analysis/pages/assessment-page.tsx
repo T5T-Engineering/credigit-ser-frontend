@@ -3,12 +3,15 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Pencil, RefreshCw, Save, SearchX, Undo2, X } from "lucide-react";
+import { Pencil, RefreshCw, Send, SearchX, Undo2, X } from "lucide-react";
 import { Alert, Button, EmptyState, EntityHeader, Field, Skeleton, Stack, Tabs, Textarea } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useApplications, useDbActions, useFacilities, useLookups, useObligor, useObligors } from "@/lib/data/hooks";
+import { useApplications, useFacilities, useLookups, useObligor, useObligors } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
-import { useCan, useHydrated, useRole, useSession } from "@/lib/auth/session";
+import { useCan, useHydrated } from "@/lib/auth/session";
+import { usePendingFor } from "@/lib/platform/operations";
+import { useRule, useRulesStore } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
 import { date, dateTime } from "@/lib/format";
 import type { Obligor } from "@/lib/data/types";
 import { walletFor } from "../data";
@@ -18,15 +21,16 @@ import {
   axisHistory,
   baselineScores,
   bookPeers,
+  gatingChecks,
   interpretiveCell,
   ratioBenchmarks,
   ratioTrends,
-  STALE_AFTER_DAYS,
-  type GatingCheck,
+  weightingText,
   type ParamOverride,
 } from "../logic";
 import { parameters } from "../parameters";
-import { useCreditAnalysis, useOverrides } from "../store";
+import { useGatingOverrides, useOverrides } from "../store";
+import { refreshAssessment, submitEnrichmentChange, SUBJECT_ENRICHMENT } from "../actions";
 import { PostureBadge } from "../shared";
 import { OverviewTab } from "../assessment/overview-tab";
 import { ParametersTab } from "../assessment/parameters-tab";
@@ -75,27 +79,30 @@ function AssessmentRoute() {
 }
 
 const TABS = ["overview", "parameters", "trend", "peers", "advisory"];
-const EXPANSION = /expansion|purchase of new|construction|production line/i;
 
 function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor; initialTab: string; initialEdit: boolean }) {
   const canEdit = useCan("credit-analysis", "edit");
-  const user = useSession((s) => s.user);
-  const role = useRole();
-  const { update, log } = useDbActions();
+  const { actor } = useScope();
   const { sector, user: userById } = useLookups();
   const allObligors = useObligors();
   const facilities = useFacilities();
   const applications = useApplications();
   const saved = useOverrides(obligor.id);
-  const setOverrides = useCreditAnalysis((s) => s.setOverrides);
+  const gatingOverrides = useGatingOverrides();
+  const pendingEnrichment = usePendingFor(SUBJECT_ENRICHMENT, obligor.id);
+  // Re-derive when tenant business rules change (all thresholds are read at call time).
+  const ruleValues = useRulesStore((s) => s.values);
+  const staleAfter = useRule<number>("credit-analysis.staleAfterDays");
+  const minRationale = useRule<number>("credit-analysis.enrichment.minRationale");
 
-  const startInEdit = initialEdit && canEdit;
+  const startInEdit = initialEdit && canEdit && !pendingEnrichment;
   const [tab, setTab] = useState(startInEdit ? "parameters" : initialTab);
   const [editing, setEditing] = useState(startInEdit);
   const [draft, setDraft] = useState<Record<string, string>>(() => (startInEdit ? Object.fromEntries(Object.entries(saved).map(([k, v]) => [k, String(v.score)])) : {}));
   const [rationale, setRationale] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   const baseline = useMemo(() => baselineScores(obligor), [obligor]);
@@ -117,52 +124,36 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
         out[pid] = {
           score,
           rationale: rationale || saved[pid]?.rationale || "",
-          by: user?.name ?? "Analyst",
+          by: actor.name,
           at: DEMO_NOW.toISOString(),
         };
     }
     return out;
-  }, [editing, saved, draft, baseline, rationale, user]);
+  }, [editing, saved, draft, baseline, rationale, actor.name]);
 
-  const a = useMemo(() => assess(obligor, effectiveOverrides), [obligor, effectiveOverrides]);
-  const committed = useMemo(() => assess(obligor, saved), [obligor, saved]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- ruleValues: recompute when business rules change
+  const a = useMemo(() => assess(obligor, effectiveOverrides), [obligor, effectiveOverrides, ruleValues]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- ruleValues: recompute when business rules change
+  const committed = useMemo(() => assess(obligor, saved), [obligor, saved, ruleValues]);
   const cell = useMemo(() => (a.position.neutral ? null : interpretiveCell(a.position.base, a.scores)), [a]);
   const trends = useMemo(() => ratioTrends(a), [a]);
   const history = useMemo(() => axisHistory(a), [a]);
   const benchmarks = useMemo(() => ratioBenchmarks(a), [a]);
-  const peers = useMemo(() => bookPeers(obligor, allObligors), [obligor, allObligors]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- ruleValues: recompute when business rules change
+  const peers = useMemo(() => bookPeers(obligor, allObligors), [obligor, allObligors, ruleValues]);
   const tenantOutstanding = useMemo(
     () => facilities.filter((f) => f.obligorId === obligor.id && f.status !== "Closed" && f.status !== "Written off").reduce((s, f) => s + f.outstanding, 0),
     [facilities, obligor.id],
   );
   const wallet = useMemo(() => walletFor(obligor.id, obligor.verifiedTurnover, tenantOutstanding), [obligor.id, obligor.verifiedTurnover, tenantOutstanding]);
-  const gating = useMemo<GatingCheck[]>(
-    () =>
-      applications
-        .filter((x) => x.obligorId === obligor.id && !["Booked", "Declined", "Withdrawn"].includes(x.stage))
-        .map((x) => ({
-          applicationId: x.id,
-          tenorMonths: x.tenorMonths,
-          purpose: x.purpose,
-          stage: a.ngx?.lifeCycle,
-          flagged: x.tenorMonths > 36 && EXPANSION.test(x.purpose) && a.ngx?.lifeCycle === "Decline",
-          analystNote:
-            !a.position.neutral && a.position.base === "Conservative" && EXPANSION.test(x.purpose) && (a.ngx?.lifeCycle === "Maturity" || a.ngx?.lifeCycle === "Decline"),
-        })),
-    [applications, obligor.id, a.ngx, a.position],
-  );
+  const gating = useMemo(() => gatingChecks(a, applications), [a, applications]);
+  const openExceptions = gating.filter((g) => g.flagged && !gatingOverrides[g.applicationId]);
 
   const age = ageDays(obligor.rarUpdatedAt, DEMO_NOW);
-  const stale = age > STALE_AFTER_DAYS;
+  const stale = age > staleAfter;
   const sectorName = sector.get(obligor.sectorId)?.name ?? obligor.sectorId;
   const rm = userById.get(obligor.relationshipManagerId);
   const dirty = editing && JSON.stringify(effectiveOverrides) !== JSON.stringify(saved);
-
-  const actor = () => ({
-    actorId: user?.id ?? "demo",
-    actorName: user?.name ?? "Demo user",
-    roleId: role?.id ?? "credit-analyst",
-  });
 
   function startEdit() {
     setDraft(Object.fromEntries(Object.entries(saved).map(([k, v]) => [k, String(v.score)])));
@@ -178,49 +169,35 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
     setError(null);
   }
 
-  function saveEdit() {
-    if (rationale.trim().length < 15) {
-      setError("Record a rationale of at least 15 characters — every analyst adjustment is kept in the audit trail with its reason.");
-      return;
-    }
+  async function submitEdit() {
+    setSubmitting(true);
     const changed = parameters.filter((p) => (saved[p.id]?.score ?? baseline[p.id]) !== (effectiveOverrides[p.id]?.score ?? baseline[p.id]));
     const finalOverrides = Object.fromEntries(Object.entries(effectiveOverrides).map(([k, v]) => [k, changed.some((c) => c.id === k) ? { ...v, rationale: rationale.trim() } : v]));
-    setOverrides(obligor.id, finalOverrides);
-    const at = DEMO_NOW.toISOString();
-    update("obligors", obligor.id, { rar: a.scores, rarUpdatedAt: at });
-    log({
-      ...actor(),
-      action: "Adjusted 360 RAR analyst enrichment inputs",
-      entityType: "Obligor",
-      entityId: obligor.id,
-      before: `${committed.position.label}; ${changed.map((p) => `${p.id} ${(saved[p.id]?.score ?? baseline[p.id]!).toFixed(1)}`).join(", ")}`,
-      after: `${a.position.label}; ${changed.map((p) => `${p.id} ${(effectiveOverrides[p.id]?.score ?? baseline[p.id]!).toFixed(1)}`).join(", ")} — ${rationale.trim()}`,
+    const res = await submitEnrichmentChange({
+      obligor,
+      overrides: finalOverrides,
+      changes: changed.map((p) => ({ id: p.id, name: p.name, before: saved[p.id]?.score ?? baseline[p.id]!, after: effectiveOverrides[p.id]?.score ?? baseline[p.id]! })),
+      rationale,
+      beforeLabel: committed.position.label,
+      previewLabel: a.position.label,
     });
+    setSubmitting(false);
+    if (!res.ok) {
+      setError(res.reason);
+      return;
+    }
     setEditing(false);
     setDraft({});
-    setNotice(`Saved ${changed.length} adjustment${changed.length === 1 ? "" : "s"}. Posture is now ${a.position.label}.`);
+    setNotice(res.message);
   }
 
-  function refresh() {
+  async function refresh() {
     setRefreshing(true);
     setNotice(null);
-    window.setTimeout(() => {
-      const at = DEMO_NOW.toISOString();
-      update("obligors", obligor.id, {
-        rar: committed.scores,
-        rarUpdatedAt: at,
-      });
-      log({
-        ...actor(),
-        action: "Refreshed 360 RAR assessment",
-        entityType: "Obligor",
-        entityId: obligor.id,
-        before: `${obligor.rarUpdatedAt.slice(0, 10)} · ${committed.position.label}`,
-        after: `${at.slice(0, 10)} · ${committed.position.label} (CBA, bureau/CRMS, NGX corpus ${"v2026.2"}, macro feed re-read)`,
-      });
-      setRefreshing(false);
-      setNotice(`Assessment refreshed — all feeds re-read and the posture recomputed: ${committed.position.label}.`);
-    }, 1200);
+    const res = await refreshAssessment(obligor);
+    setRefreshing(false);
+    if (res.ok) setNotice(res.message);
+    else setError(res.reason);
   }
 
   return (
@@ -259,7 +236,7 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
           actions={
             canEdit && !editing ? (
               <>
-                <Button variant="tertiary" iconBefore={<Pencil aria-hidden />} onClick={startEdit}>
+                <Button variant="tertiary" iconBefore={<Pencil aria-hidden />} onClick={startEdit} disabled={!!pendingEnrichment}>
                   Adjust enrichment inputs
                 </Button>
                 <Button iconBefore={<RefreshCw aria-hidden />} loading={refreshing} onClick={refresh}>
@@ -283,9 +260,28 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
             {notice}
           </Alert>
         )}
+        {error && !editing && (
+          <Alert tone="danger" title="Couldn’t complete that">
+            {error}
+          </Alert>
+        )}
+        {pendingEnrichment && (
+          <Alert
+            tone="info"
+            title="Enrichment adjustments awaiting approval"
+            action={
+              <Button size="small" variant="tertiary" href={`/operations/item?id=${pendingEnrichment.id}`} as={Link}>
+                Open request
+              </Button>
+            }
+          >
+            {pendingEnrichment.requestedBy.name} submitted {pendingEnrichment.title.replace(/^360 RAR enrichment — /, "")} for second-analyst / CCO approval ({pendingEnrichment.id}). Scores and
+            posture change only once it is approved; further adjustments wait until it is decided.
+          </Alert>
+        )}
         {stale && !editing && (
           <Alert tone="warning" title={`Assessment is ${age} days old`}>
-            Older than the {STALE_AFTER_DAYS}-day refresh cycle (tenant parameter).{" "}
+            Older than the {staleAfter}-day refresh cycle (tenant parameter).{" "}
             {canEdit ? "Refresh to re-read the CBA, bureau/CRMS, NGX corpus and macro feeds." : "A Credit Analyst can refresh it."}
           </Alert>
         )}
@@ -295,13 +291,18 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
             narrative.
           </Alert>
         )}
-        {gating.some((g) => g.flagged) && (
-          <Alert tone="danger" title="Industry Life-Cycle gating — hard exception">
-            {gating
-              .filter((g) => g.flagged)
-              .map((g) => g.applicationId)
-              .join(", ")}
-            : long-tenor expansion request in a Decline-stage industry. CCO/CRO override with documented rationale is required before it passes the Credit Analyst tier (§6.2.6).
+        {openExceptions.length > 0 && (
+          <Alert
+            tone="danger"
+            title="Industry Life-Cycle gating — hard exception"
+            action={
+              <Button size="small" variant="tertiary" onClick={() => setTab("advisory")}>
+                Review gating
+              </Button>
+            }
+          >
+            {openExceptions.map((g) => g.applicationId).join(", ")}: long-tenor expansion request in a {openExceptions[0]!.stage}-stage industry. CCO/CRO override with documented
+            rationale is required before it passes the Credit Analyst tier (§6.2.6).
           </Alert>
         )}
         {editing && (
@@ -321,18 +322,24 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
                 <Button size="small" variant="tertiary" onClick={cancelEdit}>
                   Discard
                 </Button>
-                <Button size="small" iconBefore={<Save aria-hidden />} onClick={saveEdit} disabled={!dirty}>
-                  Save adjustments
+                <Button size="small" iconBefore={<Send aria-hidden />} onClick={submitEdit} disabled={!dirty} loading={submitting}>
+                  Submit for approval
                 </Button>
               </span>
             }
           >
             <Stack gap="small">
               <span>
-                Adjust parameters that carry an analyst enrichment / survey source. The posture recalculates live: now <strong>{a.position.label}</strong>
-                {a.position.label !== committed.position.label ? ` (was ${committed.position.label})` : ""}.
+                Adjust parameters that carry an analyst enrichment / survey source. The preview recalculates live: <strong>{a.position.label}</strong>
+                {a.position.label !== committed.position.label ? ` (now ${committed.position.label})` : ""}. Adjustments are applied only after a second Credit Analyst or the CCO
+                approves them in Operations.
               </span>
-              <Field label="Rationale for the adjustment" required error={error ?? undefined} description="Kept in the audit trail with the before/after scores.">
+              <Field
+                label="Rationale for the adjustment"
+                required
+                error={error ?? undefined}
+                description={`At least ${minRationale} characters. Shown to the approver and kept in the audit trail with the before/after scores.`}
+              >
                 <Textarea
                   value={rationale}
                   onChange={(e) => setRationale(e.target.value)}
@@ -373,13 +380,13 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
             {
               id: "advisory",
               label: "Advisory",
-              content: <AdvisoryTab a={a} cell={cell} wallet={wallet} benchmarks={benchmarks} trends={trends} gating={gating} canEdit={canEdit} editing={editing} />,
+              content: <AdvisoryTab a={a} cell={cell} wallet={wallet} benchmarks={benchmarks} trends={trends} gating={gating} canEdit={canEdit} editing={editing} committedLabel={committed.position.label} />,
             },
           ]}
         />
         <p className="text-xs text-fg-subtle">
-          Scores refreshed {dateTime(obligor.rarUpdatedAt)} · Weighting: tenant-configurable (demo: equal) · Intensity thresholds and COP bands are demo defaults from the Rules &
-          Parameters Engine.
+          Scores refreshed {dateTime(obligor.rarUpdatedAt)} · Weighting: {weightingText()} · Intensity thresholds, COP bands and scoring bands are tenant business rules (Operations →
+          Business rules).
         </p>
       </Stack>
     </ModulePage>

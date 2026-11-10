@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -12,49 +12,52 @@ import {
   CardTitle,
   DataTable,
   type DataTableColumn,
-  DecisionPanel,
   DescriptionList,
   Field,
   Grid,
   Input,
   Modal,
-  Select,
+  SegmentedControl,
   Stack,
   StatCard,
   StatusBadge,
   Text,
+  useToast,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { newId } from "@/lib/data/store";
 import { useCan } from "@/lib/auth/session";
-import { useDbActions } from "@/lib/data/hooks";
-import type { CbnClass, Ifrs9Stage } from "@/lib/data/types";
 import { dateTime, money } from "@/lib/format";
-import { APPROVING_ROLES, CalcRegister, sum, useActorName, useAuditLog, type CalcSpec, ms } from "../common";
-import { cureData, eclFor, eligibility, suspendedInterest, type CureData, type CureParams, type EclRow, type Eligibility } from "../data";
+import { publish } from "@/lib/platform/events";
+import { runHooks } from "@/lib/platform/hooks";
+import { cancelOperation, useOperationsStore } from "@/lib/platform/operations";
+import { CalcRegister, sum, useActorName, useAuditLog, type CalcSpec, ms } from "../common";
+import { cureData, cureParams, eclFor, eligibility, suspendedInterest, type CureData, type EclRow, type Eligibility } from "../data";
+import { ModuleApprovals, operationHref, RulesPanel, useSubmitOperation } from "../governance";
 import { StageBadge } from "../parts";
+import { IFRS9_RULE_GROUPS } from "../platform";
 import { useIfrs9, type Declassification } from "../store";
 import { useEcl } from "../use-ecl";
 
 type Candidate = EclRow & { cure: CureData; elig: Eligibility; eclTarget: number; interest: number };
 
 const eligTones = { Eligible: "success", "In probation": "warning", "Not eligible": "neutral" } as const;
-const decTones = { "Pending approval": "warning", Approved: "success", Rejected: "danger" } as const;
+const decTones = { "Pending approval": "warning", Approved: "success", Rejected: "danger", Returned: "warning", Withdrawn: "neutral" } as const;
 
 export function DeclassificationPage() {
-  const { input, rows } = useEcl();
+  const { input, rows, rules } = useEcl();
   const canEdit = useCan("ifrs9", "edit");
   const actor = useActorName();
-  const isApprover = actor.roleId ? APPROVING_ROLES.includes(actor.roleId) : false;
   const audit = useAuditLog();
-  const { update } = useDbActions();
-  const params = useIfrs9((s) => s.cureParams);
-  const setParams = useIfrs9((s) => s.setCureParams);
+  const { toast } = useToast();
+  const submitOperation = useSubmitOperation();
+  const params = useMemo(() => cureParams(), [rules]); // eslint-disable-line react-hooks/exhaustive-deps
   const decls = useIfrs9((s) => s.declassifications);
   const addDecl = useIfrs9((s) => s.addDeclassification);
-  const decide = useIfrs9((s) => s.decideDeclassification);
+  const instances = useOperationsStore((s) => s.instances);
   const [proposal, setProposal] = useState<Candidate | null>(null);
   const [portion, setPortion] = useState(100);
+  const [scope, setScope] = useState<"all" | "mine">("all");
 
   const cures = useMemo(() => cureData(rows), [rows]);
   const candidates: Candidate[] = useMemo(
@@ -69,27 +72,23 @@ export function DeclassificationPage() {
         }),
     [rows, cures, params, input],
   );
-  const pendingIds = new Set(decls.filter((d) => d.status === "Pending approval").map((d) => d.facilityId));
   const pending = decls.filter((d) => d.status === "Pending approval");
+  const pendingByFacility = new Map(pending.map((d) => [d.facilityId, d]));
   const decided = decls.filter((d) => d.status !== "Pending approval");
+  const history = scope === "mine" ? decls.filter((d) => d.proposedById === actor.id) : decided;
   const eligible = candidates.filter((c) => c.elig.status === "Eligible");
   const writeBackApproved = sum(decided.filter((d) => d.status === "Approved").map((d) => (d.eclBefore - d.eclAfter) * d.performingPortion));
-
-  const changeParam = <K extends keyof CureParams>(key: K, value: CureParams[K]) => {
-    if (value === params[key] || (typeof value === "number" && !Number.isFinite(value))) return;
-    audit("Changed declassification parameter", "Ifrs9CureParameter", String(key), String(params[key]), String(value));
-    setParams({ ...params, [key]: value });
-  };
 
   const openProposal = (c: Candidate) => {
     setPortion(Math.round(c.cure.performingPortion * 100));
     setProposal(c);
   };
 
-  const submit = () => {
+  /** The engine proposes; approval is routed to Operations (§6.4.4 approving officer). */
+  const submit = async () => {
     if (!proposal || !proposal.elig.target) return;
     const share = portion / 100;
-    const d: Declassification = {
+    const draft: Declassification = {
       id: newId("DCL"),
       facilityId: proposal.id,
       obligorName: proposal.obligor?.name ?? proposal.id,
@@ -100,33 +99,44 @@ export function DeclassificationPage() {
       eclAfter: proposal.eclTarget,
       interestWriteBack: params.suspendedInterestPolicy === "On declassification" ? proposal.interest * share : 0,
       trigger: proposal.elig.reason,
+      currentDpd: proposal.cure.currentDpd,
       proposedBy: `${actor.name} (${actor.role})`,
+      proposedById: actor.id,
       proposedAt: new Date().toISOString(),
       status: "Pending approval",
     };
-    addDecl(d);
-    audit("Proposed IFRS 9 declassification", "Facility", proposal.id, `Stage ${proposal.stage}`, `Stage ${d.to} (${portion}% performing) — pending approval`);
+    const hook = await runHooks("ifrs9.declassification.propose.before", { declassification: draft });
+    if (!hook.ok) {
+      toast({ title: "Proposal blocked", description: `${hook.vetoedBy}: ${hook.reason}`, tone: "danger" });
+      return;
+    }
+    const d = hook.ctx.declassification;
+    const writeBack = (d.eclBefore - d.eclAfter) * d.performingPortion;
+    const res = await submitOperation<Declassification>("ifrs9.declassification", {
+      title: `Declassify ${d.facilityId} (${d.obligorName}): Stage ${d.from} → ${d.to}`,
+      subject: { type: "Declassification", id: d.id, title: `${d.facilityId} · ${d.obligorName}`, href: "/ifrs9/declassification" },
+      payload: d,
+      summary: [
+        { label: "Facility", value: `${d.facilityId} · ${d.obligorName}` },
+        { label: "Migration", value: `Stage ${d.from} → Stage ${d.to} (${portion}% performing)` },
+        { label: "Trigger data", value: d.trigger },
+        { label: "ECL before → after", value: `${money(d.eclBefore)} → ${money(d.eclAfter)}` },
+        { label: "ECL write-back", value: money(writeBack) },
+        { label: "Interest write-back", value: `${money(d.interestWriteBack)} (${params.suspendedInterestPolicy})` },
+      ],
+    });
+    if (!res.ok) return;
+    addDecl({ ...d, operationId: res.instance.id });
+    audit("Proposed IFRS 9 declassification", "Facility", d.facilityId, `Stage ${d.from}`, `Stage ${d.to} (${portion}% performing) — Operations ${res.instance.id}`);
+    publish("ifrs9.declassification.proposed", { module: "ifrs9", subject: { type: "Facility", id: d.facilityId, title: d.obligorName, href: "/ifrs9/declassification" }, payload: { declassificationId: d.id, from: d.from, to: d.to, operationId: res.instance.id } });
+    await runHooks("ifrs9.declassification.propose.after", { declassification: d, operationId: res.instance.id });
     setProposal(null);
   };
 
-  const onDecide = (d: Declassification, decision: string, comment: string) => {
-    const approved = decision === "approve";
-    decide(d.id, { status: approved ? "Approved" : "Rejected", decidedBy: `${actor.name} (${actor.role})`, decidedAt: new Date().toISOString(), comment });
-    if (approved && d.performingPortion >= 1) {
-      const fac = rows.find((r) => r.id === d.facilityId)?.facility;
-      const cure = cures.get(d.facilityId);
-      const cbnClass: CbnClass = d.to === 1 ? "Performing" : "Watchlist";
-      if (fac) update("facilities", fac.id, { stage: d.to as Ifrs9Stage, cbnClass, dpd: cure?.currentDpd ?? fac.dpd });
-    }
-    audit(
-      approved ? "Approved IFRS 9 declassification" : "Rejected IFRS 9 declassification",
-      "Facility",
-      d.facilityId,
-      `Stage ${d.from}, ECL ${money(d.eclBefore)}`,
-      approved
-        ? `Stage ${d.to} (${Math.round(d.performingPortion * 100)}%), ECL write-back ${money((d.eclBefore - d.eclAfter) * d.performingPortion)}, interest write-back ${money(d.interestWriteBack)}`
-        : `Rejected: ${comment}`,
-    );
+  const withdraw = async (d: Declassification) => {
+    if (!d.operationId) return;
+    const res = await cancelOperation(d.operationId, "Withdrawn by the proposer");
+    if (!res.ok) toast({ title: "Not withdrawn", description: res.reason, tone: "danger" });
   };
 
   const cols: DataTableColumn<Candidate>[] = [
@@ -176,14 +186,20 @@ export function DeclassificationPage() {
       id: "action",
       header: "",
       exportable: false,
-      cell: (c) =>
-        pendingIds.has(c.id) ? (
-          <Badge tone="warning">Pending approval</Badge>
-        ) : canEdit && c.elig.status === "Eligible" ? (
+      cell: (c) => {
+        const p = pendingByFacility.get(c.id);
+        if (p)
+          return (
+            <Button as={Link} href={p.operationId ? operationHref(p.operationId) : "/ifrs9/declassification"} size="small" variant="text">
+              <Badge tone="warning">Awaiting approval</Badge>
+            </Button>
+          );
+        return canEdit && c.elig.status === "Eligible" ? (
           <Button size="small" variant="secondary" onClick={() => openProposal(c)}>
             Propose
           </Button>
-        ) : null,
+        ) : null;
+      },
     },
   ];
 
@@ -198,126 +214,79 @@ export function DeclassificationPage() {
     {
       metric: "Suspended-interest write-back",
       formula: "Interest suspended while in Stage 3 × performing portion, per policy",
-      sources: `Tenant policy: ${params.suspendedInterestPolicy}`,
+      sources: `Business rule ifrs9.cure.suspendedInterestPolicy: ${params.suspendedInterestPolicy}`,
       prd: "§6.7.5",
     },
     {
       metric: "Stage 3 → 2",
       formula: `DPD < ${params.stage3DpdThreshold} and ≥ ${params.curePeriods} consecutive timely periods`,
-      sources: "CBA repayment feed; Rules & Parameters Engine",
+      sources: "CBA repayment feed; business rules ifrs9.cure.*",
       prd: "§6.7.5",
     },
     { metric: "Stage 2 → 1", formula: `SICR reversed, sustained ${params.stage2Probation} months probation`, sources: "SICR triggers (Staging tab) in reverse", prd: "§6.7.5" },
     { metric: "Restructured", formula: `Minimum Stage 2 for ${params.restructuredProbation} months`, sources: "Facility status · forbearance flag", prd: "§6.7.5" },
   ];
 
+  const opStep = (d: Declassification) => {
+    const i = instances.find((x) => x.id === d.operationId);
+    return i ? `${i.status} · ${i.id}` : "—";
+  };
+
   return (
-    <ModulePage module="ifrs9" description="Stage reversal as performance recovers: the engine proposes, a human approves, and ECL is written back.">
+    <ModulePage module="ifrs9" description="Stage reversal as performance recovers: the engine proposes, the approving officer decides in Operations, and ECL is written back.">
       <Stack gap="large">
         <Grid columns={{ base: 2, lg: 4 }} gap="medium">
           <StatCard label="Eligible for declassification" value={String(eligible.length)} hint={`of ${candidates.length} Stage 2/3 facilities`} tone="success" />
           <StatCard label="In probation" value={String(candidates.filter((c) => c.elig.status === "In probation").length)} tone="warning" hint="Cure / probation period running" />
-          <StatCard label="Awaiting approval" value={String(pending.length)} hint="Routed via §6.4.4 escalation protocol" tone="info" />
+          <StatCard label="Awaiting approval" value={String(pending.length)} hint="Routed through Operations (§6.4.4)" tone="info" />
           <StatCard label="ECL written back" value={ms(writeBackApproved)} hint="Credit to impairment charge (approved)" />
         </Grid>
 
-        <Card variant="outlined">
-          <CardHeader>
-            <Stack gap="xsmall">
-              <CardTitle>Trigger parameters</CardTitle>
-              <CardDescription>Tenant-configurable in the Rules &amp; Parameters Engine (demo defaults). One engine governs both directions of migration.</CardDescription>
-            </Stack>
-          </CardHeader>
-          <CardContent>
-            <Grid columns={{ base: 1, sm: 2, lg: 3, xl: 6 }} gap="medium">
-              <Field label="Stage 3 → 2: DPD below">
-                <Input
-                  type="number"
-                  suffix="days"
-                  defaultValue={params.stage3DpdThreshold}
-                  disabled={!canEdit}
-                  onBlur={(e) => changeParam("stage3DpdThreshold", Number(e.target.value))}
-                />
-              </Field>
-              <Field label="Cure period">
-                <Input type="number" suffix="periods" defaultValue={params.curePeriods} disabled={!canEdit} onBlur={(e) => changeParam("curePeriods", Number(e.target.value))} />
-              </Field>
-              <Field label="Stage 2 → 1 probation">
-                <Input
-                  type="number"
-                  suffix="months"
-                  defaultValue={params.stage2Probation}
-                  disabled={!canEdit}
-                  onBlur={(e) => changeParam("stage2Probation", Number(e.target.value))}
-                />
-              </Field>
-              <Field label="Restructured probation">
-                <Input
-                  type="number"
-                  suffix="months"
-                  defaultValue={params.restructuredProbation}
-                  disabled={!canEdit}
-                  onBlur={(e) => changeParam("restructuredProbation", Number(e.target.value))}
-                />
-              </Field>
-              <Field label="Suspended-interest write-back">
-                <Select
-                  value={params.suspendedInterestPolicy}
-                  disabled={!canEdit}
-                  onChange={(e) => changeParam("suspendedInterestPolicy", e.target.value as CureParams["suspendedInterestPolicy"])}
-                  options={[
-                    { value: "On cash receipt", label: "On cash receipt" },
-                    { value: "On declassification", label: "On declassification" },
-                  ]}
-                />
-              </Field>
-            </Grid>
-          </CardContent>
-        </Card>
+        <RulesPanel
+          title="Trigger parameters"
+          description="Business rules (Rules & Parameters Engine). One engine governs both directions of migration; changes are approved in Operations before they apply."
+          keys={IFRS9_RULE_GROUPS.cure}
+          canRequest={canEdit}
+        />
 
         {pending.length > 0 && (
           <Card variant="outlined">
             <CardHeader>
               <Stack gap="xsmall">
-                <CardTitle>Approval queue</CardTitle>
-                <CardDescription>Approving officer (demo configuration: CRO or Head of Risk). The proposer cannot approve their own proposal.</CardDescription>
+                <CardTitle>Awaiting approval</CardTitle>
+                <CardDescription>Decided by the approving officer in Operations → Approvals. The proposer cannot approve their own proposal.</CardDescription>
               </Stack>
             </CardHeader>
             <CardContent>
-              <Stack gap="large">
+              <Stack gap="medium">
                 {pending.map((d) => (
-                  <Grid key={d.id} columns={{ base: 1, lg: 2 }} gap="large">
-                    <Card variant="filled" padding="small">
+                  <Card key={d.id} variant="filled" padding="small">
+                    <Stack gap="small">
                       <DescriptionList
-                        columns={2}
+                        columns={3}
                         items={[
-                          { label: "Facility", value: `${d.facilityId} · ${d.obligorName}`, span: 2 },
-                          { label: "Migration", value: `Stage ${d.from} → Stage ${d.to}` },
-                          { label: "Performing portion", value: `${Math.round(d.performingPortion * 100)}%`, mono: true },
-                          { label: "ECL before → after", value: `${money(d.eclBefore)} → ${money(d.eclAfter)}`, mono: true, span: 2 },
+                          { label: "Facility", value: `${d.facilityId} · ${d.obligorName}` },
+                          { label: "Migration", value: `Stage ${d.from} → Stage ${d.to} (${Math.round(d.performingPortion * 100)}%)` },
                           { label: "ECL write-back", value: money((d.eclBefore - d.eclAfter) * d.performingPortion), mono: true },
-                          { label: "Interest write-back", value: money(d.interestWriteBack), mono: true, hint: params.suspendedInterestPolicy },
-                          { label: "Trigger data", value: d.trigger, span: 2 },
-                          { label: "Proposed by", value: `${d.proposedBy}, ${dateTime(d.proposedAt)}`, span: 2 },
+                          { label: "Trigger data", value: d.trigger },
+                          { label: "Proposed by", value: `${d.proposedBy}, ${dateTime(d.proposedAt)}` },
+                          { label: "Workflow", value: opStep(d), mono: true },
                         ]}
                       />
-                    </Card>
-                    {isApprover && !d.proposedBy.startsWith(actor.name) ? (
-                      <DecisionPanel
-                        title="Your decision"
-                        actions={["approve", "decline"]}
-                        commentRequired={["decline"]}
-                        onDecide={({ decision, comment }) => onDecide(d, decision, comment)}
-                        notice="On approval the ECL is recalculated on the destination stage basis, the reversal is credited to the impairment charge and the CBN 12.4 reserve entry is recomputed."
-                      />
-                    ) : (
-                      <Alert tone="info" title="Awaiting the approving officer">
-                        {isApprover
-                          ? "You proposed this declassification, so another approver must decide (segregation of duties)."
-                          : "Sign in as CRO or Head of Risk to approve or reject this proposal."}
-                      </Alert>
-                    )}
-                  </Grid>
+                      <Stack direction="horizontal" gap="small" wrap>
+                        {d.operationId && (
+                          <Button as={Link} href={operationHref(d.operationId)} size="small">
+                            Open approval
+                          </Button>
+                        )}
+                        {d.proposedById === actor.id && (
+                          <Button size="small" variant="tertiary" onClick={() => void withdraw(d)}>
+                            Withdraw
+                          </Button>
+                        )}
+                      </Stack>
+                    </Stack>
+                  </Card>
                 ))}
               </Stack>
             </CardContent>
@@ -356,7 +325,7 @@ export function DeclassificationPage() {
                     {c.id} · Stage {c.stage}
                     {c.elig.target ? ` → ${c.elig.target}` : ""} · {c.elig.reason}
                   </Text>
-                  {canEdit && c.elig.status === "Eligible" && !pendingIds.has(c.id) && (
+                  {canEdit && c.elig.status === "Eligible" && !pendingByFacility.has(c.id) && (
                     <div>
                       <Button size="small" variant="secondary" onClick={() => openProposal(c)}>
                         Propose
@@ -375,14 +344,24 @@ export function DeclassificationPage() {
               <CardTitle>Declassification history</CardTitle>
               <CardDescription>Original stage, trigger data, approver and resulting ECL and interest adjustment — reportable at facility and portfolio level.</CardDescription>
             </Stack>
+            <SegmentedControl
+              label="Show"
+              size="small"
+              value={scope}
+              onChange={(v) => setScope(v as "all" | "mine")}
+              options={[
+                { value: "all", label: "All decisions" },
+                { value: "mine", label: "My proposals" },
+              ]}
+            />
           </CardHeader>
           <CardContent>
             <DataTable
               label="Declassification history"
-              data={decided}
+              data={history}
               getRowId={(d) => d.id}
               exportFilename="ifrs9-declassification-history"
-              emptyState={<Text tone="muted">No decisions yet. Approved and rejected proposals appear here.</Text>}
+              emptyState={<Text tone="muted">{scope === "mine" ? "You haven't proposed any declassifications yet." : "No decisions yet. Approved and rejected proposals appear here."}</Text>}
               columns={[
                 { id: "at", header: "Decided", accessor: (d) => d.decidedAt ?? "", cell: (d) => (d.decidedAt ? dateTime(d.decidedAt) : "—") },
                 { id: "fac", header: "Facility", accessor: "facilityId", cell: (d) => <span className="font-mono text-sm whitespace-nowrap">{d.facilityId}</span> },
@@ -397,10 +376,25 @@ export function DeclassificationPage() {
                 },
                 { id: "by", header: "Approver", accessor: (d) => d.decidedBy ?? "" },
                 { id: "status", header: "Outcome", accessor: "status", cell: (d) => <StatusBadge status={d.status} tones={decTones} /> },
+                {
+                  id: "op",
+                  header: "Workflow",
+                  exportable: false,
+                  cell: (d) =>
+                    d.operationId ? (
+                      <Button as={Link} href={operationHref(d.operationId)} size="small" variant="text">
+                        {d.operationId}
+                      </Button>
+                    ) : (
+                      "—"
+                    ),
+                },
               ]}
             />
           </CardContent>
         </Card>
+
+        <ModuleApprovals modules={["ifrs9"]} title="IFRS 9 approvals in Operations" limit={5} />
 
         <CalcRegister specs={specs} />
       </Stack>
@@ -415,7 +409,7 @@ export function DeclassificationPage() {
             <Button variant="tertiary" onClick={() => setProposal(null)}>
               Cancel
             </Button>
-            <Button onClick={submit} disabled={portion <= 0 || portion > 100}>
+            <Button onClick={() => void submit()} disabled={portion <= 0 || portion > 100}>
               Submit for approval
             </Button>
           </Stack>
@@ -442,6 +436,9 @@ export function DeclassificationPage() {
             <Field label="Performing portion" description="Partial cure: only this share of the exposure migrates (proportionate write-back).">
               <Input type="number" min={1} max={100} suffix="%" value={portion} onChange={(e) => setPortion(Number(e.target.value))} />
             </Field>
+            <Text variant="small" tone="muted">
+              The proposal is routed to the approving officer through Operations. The stage, ECL and interest are written back only after approval.
+            </Text>
           </Stack>
         )}
       </Modal>

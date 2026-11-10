@@ -13,7 +13,8 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { useApplications, useCollateral, useObligors } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { Application, Collateral, Obligor, User } from "@/lib/data/types";
-import { addDaysIso, contingentProducts, pristineSeed } from "../credit-admin/common";
+import { getRule } from "@/lib/platform/rules";
+import { addDaysIso, pristineSeed } from "../credit-admin/common";
 import { seedClauses, type Clause, type ClauseLibrary } from "./library";
 import { seedTemplates, type HouseTemplate } from "./template";
 
@@ -104,7 +105,8 @@ export function tagReason(clause: Clause, ctx: TagContext): string | undefined {
   if (r.obligorTypes?.includes(ctx.obligorType)) return `Obligor type: ${ctx.obligorType}`;
   const col = r.collateralTypes?.find((t) => ctx.collateralTypes.includes(t));
   if (col) return `Collateral: ${col}`;
-  if (r.secured && ctx.collateralTypes.some((t) => !["Personal guarantee", "Corporate guarantee", "Domiciliation of proceeds"].includes(t))) return "Secured facility";
+  const unsecured = getRule<string[]>("offer-letters.unsecuredCollateralTypes");
+  if (r.secured && ctx.collateralTypes.some((t) => !unsecured.includes(t))) return "Secured facility";
   if (r.foreignCurrency && ctx.currency !== "NGN") return `Foreign-currency facility (${ctx.currency})`;
   if (r.sectorIds?.includes(ctx.sectorId)) return "Sector";
   return undefined;
@@ -115,7 +117,7 @@ export function autoTag(clauses: Clause[], ctx: TagContext): string[] {
 }
 
 export function templateFor(templates: HouseTemplate[], product: Application["product"]): HouseTemplate {
-  const line = (contingentProducts as readonly string[]).includes(product) && product !== "Trade finance (LC)" ? "Contingent facilities" : "All products";
+  const line = getRule<string[]>("offer-letters.contingentTemplateProducts").includes(product) ? "Contingent facilities" : "All products";
   const approved = templates.filter((t) => t.status === "Approved");
   return approved.find((t) => t.productLine === line) ?? approved.find((t) => t.productLine === "All products") ?? templates[0]!;
 }
@@ -132,13 +134,13 @@ export function newLetterFor(app: Application, ctx: TagContext, clauses: Clause[
   return {
     id: letterIdFor(app.id),
     applicationId: app.id,
-    ref: `HLB/CAD/OL/${new Date(at).getFullYear()}/${seq}`,
+    ref: `${getRule<string>("offer-letters.referencePrefix")}/${new Date(at).getFullYear()}/${seq}`,
     templateId: tpl.id,
     templateVersion: tpl.version,
     clauseIds: autoTag(clauses, ctx),
     clauseEdits: {},
     customClauses: [],
-    validityDays: 7,
+    validityDays: getRule<number>("offer-letters.validityDaysDefault"),
     status: "Draft",
     createdAt: at,
     updatedAt: at,

@@ -4,6 +4,9 @@
 import { useMemo } from "react";
 import type { RoleId } from "@/lib/rbac/roles";
 import { useApplications, useCollateral, useFacilities, useObligors } from "@/lib/data/hooks";
+import { getRule } from "@/lib/platform/rules";
+import { ermKeys } from "../enterprise-risk/keys";
+import { useRuleValues } from "../operational-risk/shared";
 import { isoDaysAgo } from "../operational-risk/shared";
 import { useOpRisk } from "../operational-risk/store";
 import { useErm } from "../enterprise-risk/store";
@@ -27,6 +30,7 @@ export type AiActivity = {
   decidedAt?: string;
 };
 
+// TD-906: cross-module AI outputs are assembled here with fixed model labels/confidences (demo feed).
 export function useAiActivity(): AiActivity[] {
   const applications = useApplications();
   const facilities = useFacilities();
@@ -35,6 +39,7 @@ export function useAiActivity(): AiActivity[] {
   const kriSignedOff = useOpRisk((s) => s.commentarySignedOffBy);
   const packs = useErm((s) => s.packs);
   const signOffs = useAi((s) => s.signOffs);
+  const rules = useRuleValues();
 
   return useMemo(() => {
     const name = (oid: string) => obligors.find((o) => o.id === oid)?.name ?? oid;
@@ -46,18 +51,19 @@ export function useAiActivity(): AiActivity[] {
       ...(apps[2] ? [{ id: `AIA-MEMO-${apps[2].id}`, kind: "AI-drafted" as const, capability: "Credit-memo drafting" as const, module: "360 RAR analysis", href: `/origination/application?id=${apps[2].id}`, item: `Credit recommendation & covenant rationale — ${name(apps[2].obligorId)}`, entity: apps[2].id, generatedAt: isoDaysAgo(1), model: "SER Narrative 1.4", confidence: 0.76, accountable: "credit-analyst" as RoleId, phase: 2 as const }] : []),
       ...pastDue.map((f, i) => ({ id: `AIA-EXC-${f.id}`, kind: "AI-flagged" as const, capability: "Exception flagging" as const, module: "Loan review & monitoring", href: "/monitoring/exceptions", item: `${f.dpd} days past due — ${name(f.obligorId)} (${f.product})`, entity: f.id, generatedAt: isoDaysAgo(i), model: "SER Exception Rules 1.0", confidence: 0.99, accountable: "loan-review-officer" as RoleId, phase: 1 as const })),
       ...shares.map((c) => ({ id: `AIA-MRG-${c.id}`, kind: "AI-flagged" as const, capability: "Exception flagging" as const, module: "Collateral & legal", href: "/collateral/shares", item: `Share-collateral margin near shortfall — ${c.ticker ?? c.description}`, entity: c.id, generatedAt: isoDaysAgo(0), model: "SER Exception Rules 1.0", confidence: 0.97, accountable: "collateral-officer" as RoleId, phase: 2 as const })),
-      { id: "AIA-LIM-GOV", kind: "AI-flagged", capability: "Exception flagging", module: "Enterprise risk", href: "/enterprise-risk?tab=appetite", item: "Government-sector exposure above the 10% CBN ceiling", entity: "RA-03", generatedAt: isoDaysAgo(2), model: "SER Anomaly 0.8", confidence: 0.98, accountable: "cro", phase: 2 },
+      { id: "AIA-LIM-GOV", kind: "AI-flagged", capability: "Exception flagging", module: "Enterprise risk", href: "/enterprise-risk", item: `Government-sector exposure above the ${getRule<number>(ermKeys.rasLimit("RA-03"))}% CBN ceiling`, entity: "RA-03", generatedAt: isoDaysAgo(2), model: "SER Anomaly 0.8", confidence: 0.98, accountable: "cro", phase: 2 },
       { id: "AIA-REC-SUSP", kind: "AI-flagged", capability: "Exception flagging", module: "Portfolio & MIS", href: "/portfolio", item: "Suspense-account items ageing past the clearance window (7 items)", entity: "GL-SUSP-01", generatedAt: isoDaysAgo(1), model: "SER Exception Rules 1.0", confidence: 0.95, accountable: "portfolio-mis-officer", phase: 1 },
       { id: "AIA-KRI-COMMENTARY", kind: "AI-drafted", capability: "Trend tracking", module: "Operational risk", href: "/operational-risk", item: "KRI trend & correlation commentary (attrition ↔ complaints)", entity: "KRI-HC-01, KRI-CC-01", generatedAt: isoDaysAgo(0), model: "SER Trend Analyser 2.3", confidence: 0.82, accountable: "operational-risk-analyst", phase: 2 },
       { id: "AIA-RPT-CBN", kind: "AI-drafted", capability: "Auto-report generation", module: "Portfolio & MIS", href: "/portfolio/reports", item: "CBN monthly prudential return — October 2026 (templated draft)", entity: "RPT-2026-10", generatedAt: isoDaysAgo(3), model: "SER Reports 1.2", confidence: 0.88, accountable: "portfolio-mis-officer", phase: 1 },
-      ...packs.slice(0, 1).map((p) => ({ id: `AIA-BRC-${p.id}`, kind: "AI-drafted" as const, capability: "Auto-report generation" as const, module: "Enterprise risk", href: "/enterprise-risk?tab=brc", item: `Board Risk Committee pack — executive summary (${p.id})`, entity: p.id, generatedAt: p.compiledAt, model: "SER Narrative 1.4", confidence: 0.78, accountable: "head-of-risk" as RoleId, phase: 2 as const })),
+      ...packs.slice(0, 1).map((p) => ({ id: `AIA-BRC-${p.id}`, kind: "AI-drafted" as const, capability: "Auto-report generation" as const, module: "Enterprise risk", href: "/enterprise-risk/brc-pack", item: `Board Risk Committee pack — executive summary (${p.id})`, entity: p.id, generatedAt: p.compiledAt, model: "SER Narrative 1.4", confidence: 0.78, accountable: "head-of-risk" as RoleId, phase: 2 as const })),
     ];
     return items.map((it) => {
       if (it.id === "AIA-KRI-COMMENTARY" && kriSignedOff) return { ...it, status: "Signed off" as const, decidedBy: kriSignedOff };
       const pack = packs.find((p) => it.id === `AIA-BRC-${p.id}`);
-      if (pack && pack.status !== "Draft") return { ...it, status: "Signed off" as const, decidedBy: pack.compiledBy };
+      if (pack?.summaryAdoptedBy) return { ...it, status: "Signed off" as const, decidedBy: pack.summaryAdoptedBy };
       const so = signOffs[it.id];
       return so ? { ...it, status: so.status, decidedBy: so.by, decidedAt: so.at } : { ...it, status: "Pending sign-off" as const };
     });
-  }, [applications, facilities, obligors, collateral, kriSignedOff, packs, signOffs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `rules` is the change signal for getRule()
+  }, [applications, facilities, obligors, collateral, kriSignedOff, packs, signOffs, rules]);
 }

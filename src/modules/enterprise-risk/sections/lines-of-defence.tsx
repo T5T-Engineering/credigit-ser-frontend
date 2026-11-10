@@ -3,6 +3,7 @@
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, ChipList, Chip, Grid, Stack, Steps, Text } from "@credigit/web-ui";
 import { roleById, type RoleId } from "@/lib/rbac/roles";
 
+// TD-903: role-to-line mapping is a code literal (should be a tenant `roles` rule per line).
 const lines: { title: string; description: string; roles: RoleId[]; note?: string }[] = [
   { title: "First line — risk-taking", description: "Front Office / Account Officers own the risks they originate and operate day-to-day controls.", roles: ["account-officer", "bdm"] },
   {

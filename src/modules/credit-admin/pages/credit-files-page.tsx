@@ -24,13 +24,15 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan, useSession } from "@/lib/auth/session";
+import { useCan } from "@/lib/auth/session";
 import { useDocuments, useSectors, useUsers } from "@/lib/data/hooks";
 import { date, moneyShort, pct } from "@/lib/format";
-import { demoNowIso, useAuditLog } from "../common";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import type { RoleId } from "@/lib/rbac/roles";
+import { setCreditFileItem } from "../actions";
 import { annexure1, useCreditFiles, type CreditFileRow } from "../credit-files";
 import { useFacilityRows } from "../logic";
-import { useCreditAdminStore } from "../store";
 import { toDocumentItem } from "../view";
 
 function band(r: CreditFileRow) {
@@ -149,25 +151,28 @@ export function CreditFilesPage() {
 }
 
 function CreditFileDrawer({ file, onClose }: { file: CreditFileRow; onClose: () => void }) {
-  const roleId = useSession((s) => s.roleId);
-  const user = useSession((s) => s.user);
-  const canEdit = useCan("credit-admin", "edit") && roleId === "credit-admin-officer";
-  const setFileItem = useCreditAdminStore((s) => s.setFileItem);
+  const { actor } = useScope();
+  const deskRoles = useRule<RoleId[]>("credit-admin.cpConfirmerRoles");
+  const canEdit = useCan("credit-admin", "edit") && deskRoles.includes(actor.roleId);
   const documents = useDocuments();
   const users = useUsers();
-  const log = useAuditLog();
+  const [error, setError] = useState<string | null>(null);
   const appIds = new Set(file.facilities.map((f) => f.app?.id).filter(Boolean));
   const docs = documents.filter((d) => d.ownerId === file.obligor.id || appIds.has(d.ownerId)).map((d) => toDocumentItem(d, users));
 
   const onToggle = (id: string, status: ChecklistStatus) => {
     const before = file.items.find((i) => i.id === id)?.status;
-    setFileItem(file.obligor.id, id, { status, byName: user?.name ?? "Credit Administration", at: demoNowIso() });
-    log(status === "met" ? "Filed credit-file item" : "Marked credit-file item outstanding", "Credit file", file.obligor.id, `${id}: ${before}`, `${id}: ${status}`);
+    void setCreditFileItem(file.obligor.id, id, before, status).then((r) => setError(r.ok ? null : r.reason));
   };
 
   return (
     <Drawer open onOpenChange={(o) => !o && onClose()} size="large" title={`Credit file — ${file.obligor.name}`} description={`${file.obligor.type} · ${file.obligor.id} · CBN Annexure 1 minimum content`}>
       <Stack gap="large">
+        {error ? (
+          <Alert tone="danger" title="Not saved">
+            {error}
+          </Alert>
+        ) : null}
         <KeyValueGrid
           columns={3}
           items={[

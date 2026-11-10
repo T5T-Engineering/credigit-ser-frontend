@@ -66,7 +66,7 @@ export function eventCatalogue(): EventDefinition[] {
 }
 
 export function subscriptionList(): Omit<Subscription, "handler">[] {
-  return [...subscriptions.values()].map(({ handler: _h, ...meta }) => meta).sort((a, b) => a.priority - b.priority);
+  return [...subscriptions.values()].map((s) => ({ id: s.id, name: s.name, pattern: s.pattern, priority: s.priority })).sort((a, b) => a.priority - b.priority);
 }
 
 export function matches(pattern: string, name: string): boolean {

@@ -1,5 +1,6 @@
 "use client";
 
+import { getRule } from "@/lib/platform/rules";
 import Link from "next/link";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { Alert, Button, DataTable, Grid, StatCard, Stack, StatusBadge, Text, type DataTableColumn } from "@credigit/web-ui";
@@ -30,7 +31,7 @@ export function CollateralTab({ c }: { c: AppCtx }) {
         <StatCard label="Market value" value={moneyShort(mv)} hint={`${c.collateral.length} item(s) pledged`} />
         <StatCard label="Forced-sale value" value={moneyShort(fsv)} hint="Valuer's FSV" />
         <StatCard label="Lending value" value={moneyShort(c.lendingTotal)} hint="Market value less tenant haircut" />
-        <StatCard label="Security cover" value={pct(c.coverage * 100, 0)} hint={`Lending value ÷ ${money(c.app.amount)}`} tone={c.coverage >= 1 ? "success" : c.coverage >= 0.7 ? "warning" : "danger"} icon={<ShieldCheck aria-hidden />} />
+        <StatCard label="Security cover" value={pct(c.coverage * 100, 0)} hint={`Lending value ÷ ${money(c.app.amount)}`} tone={c.coverage >= 1 ? "success" : c.coverage * 100 >= getRule<number>("origination.coverage.warnPct") ? "warning" : "danger"} icon={<ShieldCheck aria-hidden />} />
       </Grid>
       {!dd ? (
         <Alert tone="warning" title="Collateral due diligence outstanding">

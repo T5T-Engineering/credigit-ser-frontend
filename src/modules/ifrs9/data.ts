@@ -8,57 +8,116 @@
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { CbnClass, Collateral, CollateralType, Facility, Ifrs9Stage, Obligor, Sector } from "@/lib/data/types";
 import { rarPosition } from "@/lib/rar";
+import { getRule } from "@/lib/platform/rules";
 import { clamp, hash01, sum } from "./common";
 
 // ---------------------------------------------------------------- parameters
+// Rule DEFAULTS and descriptors only — registered as business rules in ./platform.ts. Engine code reads the
+// current values with getRule() at call time (invariant 8).
 
-/** 12-month PD by internal risk grade 1 (best) – 10 (worst). Demo calibration. */
-export const PD_BY_GRADE = [0.0012, 0.0022, 0.0035, 0.0055, 0.008, 0.012, 0.018, 0.027, 0.04, 0.06];
-
-/** Sector PD multipliers (demo segmentation per §6.7.2 "segmented by product, sector and 360 RAR posture"). */
-export const SECTOR_PD_MULTIPLIER: Record<string, number> = {
-  "SEC-OGU": 1.25,
-  "SEC-OGD": 1.15,
-  "SEC-CON": 1.2,
-  "SEC-RES": 1.15,
-  "SEC-AGR": 1.1,
-  "SEC-COM": 1.1,
-  "SEC-MIN": 1.2,
-  "SEC-GOV": 0.6,
-  "SEC-FIN": 0.8,
+/** Demo PD master scale, grade 1 (best) – 10 (worst). */
+export const PD_SCALE = [0.0012, 0.0022, 0.0035, 0.0055, 0.008, 0.012, 0.018, 0.027, 0.04, 0.06];
+/** Sector PD multipliers (demo segmentation, §6.7.2). Sectors not listed use 1.0. */
+export const SECTOR_MULTIPLIER_DEFAULTS: Record<string, number> = { "SEC-OGU": 1.25, "SEC-OGD": 1.15, "SEC-CON": 1.2, "SEC-RES": 1.15, "SEC-AGR": 1.1, "SEC-COM": 1.1, "SEC-MIN": 1.2, "SEC-GOV": 0.6, "SEC-FIN": 0.8 };
+export const POSTURES = ["Aggressive", "Competitive", "Conservative", "Defensive"] as const;
+export const POSTURE_DEFAULTS = [1.1, 1.0, 0.95, 1.2];
+export const MACRO = [
+  { id: "upside", name: "Upside", weight: 15, pdFactor: 0.85 },
+  { id: "base", name: "Base", weight: 60, pdFactor: 1.0 },
+  { id: "downside", name: "Downside", weight: 25, pdFactor: 1.35 },
+] as const;
+/** ICAAP stress scenarios: descriptive records; severities are rules `ifrs9.scenario.<id>.<field>`. */
+export const SCENARIO_FIELDS = [
+  { field: "gdpPct", label: "GDP growth", unit: "%", min: -30, max: 30, step: 0.1 },
+  { field: "inflationPct", label: "Inflation", unit: "%", min: 0, max: 200, step: 0.5 },
+  { field: "fxDevaluationPct", label: "FX devaluation", unit: "%", min: 0, max: 300, step: 1 },
+  { field: "mprBps", label: "MPR shock", unit: "bps", min: -1000, max: 3000, step: 25 },
+  { field: "pdMultiplier", label: "PD multiplier", unit: "×", min: 0.1, max: 10, step: 0.05 },
+  { field: "lgdAddOn", label: "LGD add-on", unit: "fraction", min: 0, max: 1, step: 0.01 },
+] as const;
+export const SCENARIO_DEFAULTS: Record<string, Record<string, number>> = {
+  base: { gdpPct: 3.2, inflationPct: 22, fxDevaluationPct: 0, mprBps: 0, pdMultiplier: 1, lgdAddOn: 0 },
+  adverse: { gdpPct: 0.8, inflationPct: 28, fxDevaluationPct: 25, mprBps: 300, pdMultiplier: 1.6, lgdAddOn: 0.05 },
+  severe: { gdpPct: -2.5, inflationPct: 35, fxDevaluationPct: 60, mprBps: 600, pdMultiplier: 2.4, lgdAddOn: 0.12 },
 };
+export const PILLAR2 = [
+  { id: "concentration", risk: "Credit concentration (single obligor & sector)", basis: "HHI-based add-on on sector exposures (§6.6.2)", def: 0.9 },
+  { id: "irrbb", risk: "Interest-rate risk in the banking book (IRRBB)", basis: "EVE sensitivity, +200 bps (§6.8.1)", def: 0.6 },
+  { id: "liquidity", risk: "Liquidity & funding risk", basis: "ILAAP survival-horizon outcome (§6.8.2)", def: 0.3 },
+  { id: "strategic", risk: "Strategic & reputational risk", basis: "ERM risk register (§6.10)", def: 0.4 },
+] as const;
 
-/** 360 RAR posture PD multiplier (demo). */
-export const POSTURE_PD_MULTIPLIER = { Aggressive: 1.1, Competitive: 1.0, Conservative: 0.95, Defensive: 1.2 } as const;
+const r = (key: string) => getRule<number>(`ifrs9.${key}`);
+const rp = (key: string) => getRule<number>(`ifrs9.${key}`) / 100;
 
-/** Forward-looking macro scenarios (from the §5.5 external data feed) and probability weights. Demo values. */
-export const MACRO_SCENARIOS = [
-  { id: "upside", name: "Upside", weight: 0.15, pdFactor: 0.85 },
-  { id: "base", name: "Base", weight: 0.6, pdFactor: 1.0 },
-  { id: "downside", name: "Downside", weight: 0.25, pdFactor: 1.35 },
-];
-export const FLI_OVERLAY = sum(MACRO_SCENARIOS.map((s) => s.weight * s.pdFactor));
+/** USD/NGN spot from the Rules & Parameters Engine spot-rate feed. */
+export const usdNgn = () => r("usdNgnSpot");
 
-export const LGD_FLOOR = 0.1;
-export const LGD_CAP_UNSECURED = 0.75;
-/** Discount on collateral recovery for time-to-recover and work-out cost (demo). */
-export const RECOVERY_DISCOUNT = 0.85;
-/** Undrawn-limit credit-conversion factor for overdraft / revolving facilities (§6.7.2). Demo value. */
-export const CCF_REVOLVING = 0.75;
-/** CCF for transaction-related contingencies (guarantees) — §9.1 CCF category (50%). */
-export const CCF_GUARANTEE = 0.5;
-/** CBN general provision on performing book — tenant parameter (demo 1%); PRD caps it at 1.25% of RWA (CBN 3.16(d)). */
-export const GENERAL_PROVISION_RATE = 0.01;
-/** CBN specific provision rates (PRD §6.7.1 / CBN 12.2(a)(2)). */
-export const CBN_SPECIFIC_RATE: Record<CbnClass, number> = { Performing: 0, Watchlist: 0, Substandard: 0.1, Doubtful: 0.5, Lost: 1 };
-/** Haircut weightings for Lost-facility provisioning (PRD §6.7.3 / CBN 12.13(a)(5)). Types not listed get no adjustment. */
-export const LOST_HAIRCUT_WEIGHTING: Partial<Record<CollateralType, number>> = {
-  "Cash / lien on deposit": 0,
-  "Quoted shares": 0.2,
-  "Legal mortgage": 0.5,
-};
-/** USD/NGN spot from the Rules & Parameters Engine spot-rate feed (demo). */
-export const USD_NGN = 1_535;
+/** 12-month PD for an internal risk grade (1–10). */
+export const pdForGrade = (grade: number) => r(`pd.grade${clamp(Math.round(grade), 1, 10)}`);
+export const sectorPdMultiplier = (sectorId: string) => (sectorId in SECTOR_MULTIPLIER_DEFAULTS ? r(`pdMultiplier.sector.${sectorId}`) : 1);
+export const posturePdMultiplier = (posture: (typeof POSTURES)[number]) => r(`pdMultiplier.posture.${posture}`);
+
+/** Forward-looking overlay = Σ weight × PD factor over the macro scenarios. */
+export function fliOverlay(): number {
+  return sum(MACRO.map((s) => rp(`fli.${s.id}.weight`) * r(`fli.${s.id}.pdFactor`)));
+}
+
+/** EAD / LGD parameters (fractions). */
+export function eclParams() {
+  return {
+    ccfRevolving: rp("ccf.revolving"),
+    ccfGuarantee: rp("ccf.guarantee"),
+    lgdFloor: rp("lgd.floor"),
+    lgdCap: rp("lgd.unsecuredCap"),
+    recoveryRate: rp("lgd.recoveryRate"),
+    accrualDpdCap: r("accrual.dpdCap"),
+    accrualWindow: r("accrual.windowDays"),
+    pdFloor: r("pd.floor"),
+    pdCap: r("pd.cap"),
+    minTenor: r("pd.minTenorYears"),
+    fli: fliOverlay(),
+  };
+}
+
+/** CBN specific provision rate per class (PRD §6.7.1). */
+export function cbnSpecificRate(cls: CbnClass): number {
+  if (cls === "Substandard") return rp("cbn.substandardRate");
+  if (cls === "Doubtful") return rp("cbn.doubtfulRate");
+  if (cls === "Lost") return rp("cbn.lostRate");
+  return 0;
+}
+export const generalProvisionRate = () => rp("cbn.generalProvisionRate");
+
+/** Haircut weighting for Lost-facility provisioning (PRD §6.7.3). Types not listed get no adjustment. */
+export function lostHaircutWeighting(type: CollateralType): number | undefined {
+  if (type === "Cash / lien on deposit") return rp("cbn.haircut.cash");
+  if (type === "Quoted shares") return rp("cbn.haircut.quotedShares");
+  if (type === "Legal mortgage") return rp("cbn.haircut.legalMortgage");
+  return undefined;
+}
+
+/** CBN classification bands by DPD (PRD §6.7.1). */
+export function cbnDpdBands() {
+  return { watchlist: r("cbn.dpd.watchlist"), substandard: r("cbn.dpd.substandard"), doubtful: r("cbn.dpd.doubtful"), lost: r("cbn.dpd.lost") };
+}
+
+/** Staging triggers (PRD §6.7.1). */
+export function stagingParams() {
+  return {
+    stage2Dpd: r("stage2DpdTrigger"),
+    stage3Dpd: r("stage3DpdTrigger"),
+    grade: r("sicr.gradeTrigger"),
+    notches: r("sicr.notchDowngrade"),
+    watchlist: getRule<boolean>("ifrs9.sicr.watchlistTrigger"),
+    defensive: getRule<boolean>("ifrs9.sicr.defensiveTrigger"),
+  };
+}
+
+/** Applicable minimum CAR (%) for the tenant licence category (PRD §9.1). */
+export function minimumCar(): number {
+  return getRule<string>("ifrs9.icaap.licenceCategory") === "other" ? r("icaap.minCarOther") : r("icaap.minCarInternational");
+}
 
 // ---------------------------------------------------------------- engine
 
@@ -104,33 +163,34 @@ export function remainingYears(f: Facility) {
 /** Facility-level ECL for a given stage (also used to price stage transfers / write-backs). */
 export function eclFor(f: Facility, input: Omit<EngineInput, "facilities">, stage: Ifrs9Stage = f.stage, shock?: Shock, maps?: Maps): EclRow {
   const m = maps ?? buildMaps(input);
+  const p = maps?.params ?? eclParams();
   const o = m.obligor.get(f.obligorId);
   const rate = fx(f, shock);
   const outstanding = f.outstanding * rate;
-  const accrued = (outstanding * (f.ratePct / 100) * (Math.min(f.dpd, 90) + 30)) / 365;
+  const accrued = (outstanding * (f.ratePct / 100) * (Math.min(f.dpd, p.accrualDpdCap) + p.accrualWindow)) / 365;
   const isRevolving = f.product === "Overdraft" || f.product === "Revolving credit";
   const isGuarantee = f.product.includes("guarantee");
   const undrawn = Math.max(0, f.approvedAmount * rate - outstanding);
-  const undrawnCcf = isRevolving ? undrawn * CCF_REVOLVING : isGuarantee ? f.approvedAmount * rate * CCF_GUARANTEE : 0;
+  const undrawnCcf = isRevolving ? undrawn * p.ccfRevolving : isGuarantee ? f.approvedAmount * rate * p.ccfGuarantee : 0;
   const ead = outstanding + accrued + undrawnCcf;
 
   const grade = clamp(o?.riskGrade ?? 5, 1, 10);
   const posture = o ? rarPosition(o.rar).base : "Competitive";
-  const pdRaw = PD_BY_GRADE[grade - 1]! * (SECTOR_PD_MULTIPLIER[o?.sectorId ?? ""] ?? 1) * POSTURE_PD_MULTIPLIER[posture] * FLI_OVERLAY * (shock?.pdMultiplier ?? 1);
-  const pd12Base = clamp(pdRaw, 0.0005, 0.95);
+  const pdRaw = pdForGrade(grade) * sectorPdMultiplier(o?.sectorId ?? "") * posturePdMultiplier(posture) * p.fli * (shock?.pdMultiplier ?? 1);
+  const pd12Base = clamp(pdRaw, p.pdFloor, p.pdCap);
   const years = remainingYears(f);
-  const pd12 = 1 - (1 - pd12Base) ** Math.min(1, Math.max(years, 0.25));
-  const pdLifetime = 1 - (1 - pd12Base) ** Math.max(years, 0.25);
+  const pd12 = 1 - (1 - pd12Base) ** Math.min(1, Math.max(years, p.minTenor));
+  const pdLifetime = 1 - (1 - pd12Base) ** Math.max(years, p.minTenor);
   const pd = stage === 1 ? pd12 : stage === 2 ? Math.max(pdLifetime, pd12) : 1;
 
   const recovery = sum(
     (m.collateralByFacility.get(f.id) ?? []).map((c) => {
       if (c.perfection !== "Perfected") return 0;
       const value = c.type === "Quoted shares" ? c.marketValue : c.forcedSaleValue;
-      return (value * (1 - c.haircutPct / 100) * RECOVERY_DISCOUNT) / Math.max(1, c.facilityIds.length);
+      return (value * (1 - c.haircutPct / 100) * p.recoveryRate) / Math.max(1, c.facilityIds.length);
     }),
   );
-  const lgd = clamp((ead > 0 ? 1 - recovery / ead : LGD_CAP_UNSECURED) + (shock?.lgdAddOn ?? 0), LGD_FLOOR, stage === 3 ? 1 : LGD_CAP_UNSECURED + (shock?.lgdAddOn ?? 0));
+  const lgd = clamp((ead > 0 ? 1 - recovery / ead : p.lgdCap) + (shock?.lgdAddOn ?? 0), p.lgdFloor, stage === 3 ? 1 : p.lgdCap + (shock?.lgdAddOn ?? 0));
   const ecl = pd * lgd * ead;
 
   // CBN prudential provision (parallel basis, §6.7.1).
@@ -138,13 +198,14 @@ export function eclFor(f: Facility, input: Omit<EngineInput, "facilities">, stag
   let prudential = 0;
   let prudentialBasis = "";
   if (cls === "Performing" || cls === "Watchlist") {
-    prudential = outstanding * GENERAL_PROVISION_RATE;
-    prudentialBasis = `General provision ${(GENERAL_PROVISION_RATE * 100).toFixed(0)}% (tenant parameter)`;
-  } else if (cls === "Lost" && f.dpd < 360 + 365) {
+    const rate = generalProvisionRate();
+    prudential = outstanding * rate;
+    prudentialBasis = `General provision ${(rate * 100).toFixed(2)}% (tenant parameter)`;
+  } else if (cls === "Lost" && f.dpd < cbnDpdBands().lost + getRule<number>("ifrs9.cbn.haircutLapseDays")) {
     // §6.7.3 haircut-adjusted provision; lapses after 1 year non-performing in Lost (CBN 12.13(b)(3)-(4)).
     const eligible = sum(
       (m.collateralByFacility.get(f.id) ?? []).map((c) => {
-        const w = LOST_HAIRCUT_WEIGHTING[c.type];
+        const w = lostHaircutWeighting(c.type);
         if (w === undefined || c.perfection !== "Perfected") return 0;
         const value = c.type === "Quoted shares" ? c.marketValue : c.forcedSaleValue;
         return (value * (1 - w)) / Math.max(1, c.facilityIds.length);
@@ -153,8 +214,9 @@ export function eclFor(f: Facility, input: Omit<EngineInput, "facilities">, stag
     prudential = Math.max(0, outstanding - eligible);
     prudentialBasis = eligible > 0 ? "Lost — haircut-adjusted (§6.7.3)" : "Lost — 100%";
   } else {
-    prudential = outstanding * CBN_SPECIFIC_RATE[cls];
-    prudentialBasis = `${cls} — ${(CBN_SPECIFIC_RATE[cls] * 100).toFixed(0)}% of outstanding`;
+    const rate = cbnSpecificRate(cls);
+    prudential = outstanding * rate;
+    prudentialBasis = `${cls} — ${(rate * 100).toFixed(0)}% of outstanding`;
   }
 
   return {
@@ -182,6 +244,7 @@ export function eclFor(f: Facility, input: Omit<EngineInput, "facilities">, stag
 }
 
 type Maps = {
+  params?: ReturnType<typeof eclParams>;
   obligor: Map<string, Obligor>;
   sector: Map<string, Sector>;
   collateralByFacility: Map<string, Collateral[]>;
@@ -190,7 +253,7 @@ type Maps = {
 function buildMaps(input: Omit<EngineInput, "facilities">): Maps {
   const collateralByFacility = new Map<string, Collateral[]>();
   for (const c of input.collateral) for (const fid of c.facilityIds) collateralByFacility.set(fid, [...(collateralByFacility.get(fid) ?? []), c]);
-  return { obligor: new Map(input.obligors.map((o) => [o.id, o])), sector: new Map(input.sectors.map((s) => [s.id, s])), collateralByFacility };
+  return { params: eclParams(), obligor: new Map(input.obligors.map((o) => [o.id, o])), sector: new Map(input.sectors.map((s) => [s.id, s])), collateralByFacility };
 }
 
 export function runEcl(input: EngineInput, shock?: Shock): EclRow[] {
@@ -229,19 +292,22 @@ export type StageTransfer = {
 /** Stage transfers this quarter (derived from DPD / watchlist history; demo history). */
 export function stageTransfers(rows: EclRow[], input: EngineInput): StageTransfer[] {
   const maps = buildMaps(input);
+  const sp = stagingParams();
+  const doubtfulFrom = cbnDpdBands().doubtful;
   const out: StageTransfer[] = [];
   for (const r of rows) {
     const f = r.facility;
     const h = hash01(f.id);
     let from: Ifrs9Stage | null = null;
     let trigger = "";
-    if (r.stage === 3 && f.dpd < 180) {
+    // Demo history: which transfers happened this quarter is simulated from the facility hash (TD-124).
+    if (r.stage === 3 && f.dpd < doubtfulFrom) {
       from = 2;
-      trigger = "Default definition met — DPD ≥ 90 (CBN Sub-Standard)";
-    } else if (r.stage === 2 && f.dpd >= 30) {
+      trigger = `Default definition met — DPD ≥ ${sp.stage3Dpd} (CBN Sub-Standard)`;
+    } else if (r.stage === 2 && f.dpd >= sp.stage2Dpd) {
       from = 1;
-      trigger = "Quantitative backstop — DPD ≥ 30";
-    } else if (r.stage === 2 && h < 0.6) {
+      trigger = `Quantitative backstop — DPD ≥ ${sp.stage2Dpd}`;
+    } else if (r.stage === 2 && sp.watchlist && h < 0.6) {
       from = 1;
       trigger = "Qualitative SICR — Loan Review watchlist flag";
     }
@@ -265,6 +331,7 @@ export function stageTransfers(rows: EclRow[], input: EngineInput): StageTransfe
 export type MovementStep = { label: string; value: number; caption: string };
 
 /** ECL movement for the quarter (opening → closing). Components are a demo attribution of the computed closing ECL. */
+// Demo attribution shares below simulate movement history until the ECL run history is persisted (TD-124).
 export function eclMovement(rows: EclRow[], transfers: StageTransfer[]): { opening: number; steps: MovementStep[]; closing: number } {
   const closing = sum(rows.map((r) => r.ecl));
   const quarterStart = DEMO_NOW.getTime() - 90 * 864e5;
@@ -299,49 +366,51 @@ export type SicrTrigger = {
 };
 
 export function sicrTriggers(rows: EclRow[]): SicrTrigger[] {
+  const p = stagingParams();
+  const restructuredMonths = getRule<number>("ifrs9.cure.restructuredProbationMonths");
   return [
     {
       id: "T1",
       name: "Days-past-due backstop",
       kind: "Backstop",
-      rule: "DPD ≥ 30 and < 90 → Stage 2",
-      parameter: "30 days (tenant-configurable)",
+      rule: `DPD ≥ ${p.stage2Dpd} and < ${p.stage3Dpd} → Stage 2`,
+      parameter: `${p.stage2Dpd} days · rule ifrs9.stage2DpdTrigger`,
       source: "CBA facility ledger · Loan Review past-due register (§6.4.1)",
-      count: rows.filter((r) => r.facility.dpd >= 30 && r.facility.dpd < 90).length,
+      count: rows.filter((r) => r.facility.dpd >= p.stage2Dpd && r.facility.dpd < p.stage3Dpd).length,
     },
     {
       id: "T2",
       name: "Watchlist flag",
       kind: "Qualitative",
       rule: "Obligor on Loan Review watchlist → Stage 2",
-      parameter: "On / off",
+      parameter: p.watchlist ? "On · rule ifrs9.sicr.watchlistTrigger" : "Off · rule ifrs9.sicr.watchlistTrigger",
       source: "Loan Review watchlist (§6.4.1)",
-      count: rows.filter((r) => r.obligor?.watchlist && r.stage < 3).length,
+      count: p.watchlist ? rows.filter((r) => r.obligor?.watchlist && r.stage < 3).length : 0,
     },
     {
       id: "T3",
       name: "Risk-grade deterioration",
       kind: "Quantitative",
-      rule: "Internal grade ≥ 7 (proxy for ≥ 3-notch downgrade since origination)",
-      parameter: "Grade 7 · 3 notches (demo)",
+      rule: `Internal grade ≥ ${p.grade} (proxy for ≥ ${p.notches}-notch downgrade since origination)`,
+      parameter: `Grade ${p.grade} · ${p.notches} notches · rules ifrs9.sicr.*`,
       source: "Internal rating (§6.2) — origination grade not yet in the data spine",
-      count: rows.filter((r) => (r.obligor?.riskGrade ?? 0) >= 7).length,
+      count: rows.filter((r) => (r.obligor?.riskGrade ?? 0) >= p.grade).length,
     },
     {
       id: "T4",
       name: "360 RAR posture",
       kind: "Qualitative",
       rule: "Posture moved to Defensive",
-      parameter: "Defensive quadrant (§6.2.5)",
+      parameter: p.defensive ? "Defensive quadrant (§6.2.5) · On" : "Off · rule ifrs9.sicr.defensiveTrigger",
       source: "360 RAR Engine",
-      count: rows.filter((r) => r.obligor && rarPosition(r.obligor.rar).base === "Defensive").length,
+      count: p.defensive ? rows.filter((r) => r.obligor && rarPosition(r.obligor.rar).base === "Defensive").length : 0,
     },
     {
       id: "T5",
       name: "Restructured / forborne",
       kind: "Qualitative",
       rule: "Held at minimum Stage 2 during probation",
-      parameter: "12-month probation (demo)",
+      parameter: `${restructuredMonths}-month probation · rule ifrs9.cure.restructuredProbationMonths`,
       source: "Origination request type · facility status",
       count: rows.filter((r) => r.facility.status === "Restructured").length,
     },
@@ -349,8 +418,8 @@ export function sicrTriggers(rows: EclRow[]): SicrTrigger[] {
       id: "T6",
       name: "Default definition",
       kind: "Default",
-      rule: "DPD ≥ 90 or CBN Sub-Standard / Doubtful / Lost → Stage 3",
-      parameter: "90 days (CBN)",
+      rule: `DPD ≥ ${p.stage3Dpd} or CBN Sub-Standard / Doubtful / Lost → Stage 3`,
+      parameter: `${p.stage3Dpd} days · rule ifrs9.stage3DpdTrigger`,
       source: "CBA facility ledger · CBN classification",
       count: rows.filter((r) => r.stage === 3).length,
     },
@@ -528,28 +597,34 @@ export const sourceMapping = [
 
 export type CapitalBase = { tier1Gross: number; deductions: number; tier2Gross: number; creditRwa: number; marketRwa: number; operationalRwa: number };
 
-/** Demo capital base calibrated to the portfolio: GL capital accounts would supply this in production. */
+/** Demo capital base calibrated to the portfolio: GL capital accounts would supply this in production (TD-125). */
 export function capitalBase(rows: EclRow[]): CapitalBase {
-  // Credit RWA: exposures × demo risk weight (retail 75%, public sector 0%/20%, others 100%; 150% FCY-collateral overlay out of scope here).
-  const creditRwa = sum(
+  const w = { publicSector: rp("capital.rw.publicSector"), retail: rp("capital.rw.retail"), defaulted: rp("capital.rw.defaulted"), other: rp("capital.rw.corporate") };
+  // Credit RWA: exposures x risk weight (150% FCY-collateral overlay out of scope here).
+  const loanRwa = sum(
     rows.map((r) => {
       const t = r.obligor?.type;
-      const w = t === "Public sector" ? 0.2 : t === "Retail" ? 0.75 : r.stage === 3 ? 1.5 : 1;
-      return Math.max(0, r.ead - r.ecl) * w;
+      const weight = t === "Public sector" ? w.publicSector : t === "Retail" ? w.retail : r.stage === 3 ? w.defaulted : w.other;
+      return Math.max(0, r.ead - r.ecl) * weight;
     }),
   );
-  // The loan book is roughly 55% of total risk-weighted assets for a Nigerian DMB (demo calibration).
-  const otherCreditRwa = creditRwa * 0.45;
-  const totalCredit = creditRwa + otherCreditRwa;
-  const marketRwa = totalCredit * 0.08;
-  const operationalRwa = totalCredit * 0.16;
+  const totalCredit = loanRwa / Math.max(0.01, rp("capital.loanBookShareOfCreditRwa"));
+  const marketRwa = totalCredit * rp("capital.marketRwaPct");
+  const operationalRwa = totalCredit * rp("capital.operationalRwaPct");
   const totalRwa = totalCredit + marketRwa + operationalRwa;
-  return { tier1Gross: totalRwa * 0.168, deductions: totalRwa * 0.012, tier2Gross: totalRwa * 0.041, creditRwa: totalCredit, marketRwa, operationalRwa };
+  return {
+    tier1Gross: totalRwa * rp("capital.tier1Pct"),
+    deductions: totalRwa * rp("capital.deductionsPct"),
+    tier2Gross: totalRwa * rp("capital.tier2Pct"),
+    creditRwa: totalCredit,
+    marketRwa,
+    operationalRwa,
+  };
 }
 
 export function capitalMetrics(c: CapitalBase, eclIncrease = 0, rwaIncrease = 0) {
-  const tier1 = c.tier1Gross - c.deductions - eclIncrease * 0.7; // ΔECL net of 30% tax shield (demo)
-  const tier2 = Math.min(c.tier2Gross, tier1 / 3); // §9.1: Tier 2 capped at one-third of Tier 1
+  const tier1 = c.tier1Gross - c.deductions - eclIncrease * (1 - rp("icaap.taxShield")); // ΔECL net of tax shield
+  const tier2 = Math.min(c.tier2Gross, tier1 * rp("icaap.tier2CapPctOfTier1")); // §9.1: Tier 2 capped at one-third of Tier 1
   const qualifying = tier1 + tier2;
   const rwa = c.creditRwa + c.marketRwa + c.operationalRwa + rwaIncrease;
   return { tier1, tier2, tier2Capped: c.tier2Gross > tier2, qualifying, rwa, car: (qualifying / rwa) * 100, tier1Ratio: (tier1 / rwa) * 100 };
@@ -557,11 +632,17 @@ export function capitalMetrics(c: CapitalBase, eclIncrease = 0, rwaIncrease = 0)
 
 export type CapitalClass = "Adequately capitalised" | "Under-capitalised" | "Significantly under-capitalised" | "Critically under-capitalised" | "Insolvent";
 
+/** Capital classification bands (PRD §6.7.4, CBN 3.16(f)-(g)). */
+export function capitalBands() {
+  return { significantly: r("icaap.band.significantly"), critically: r("icaap.band.critically") };
+}
+
 /** §6.7.4 classification engine (CBN 3.16(f)-(g)). */
-export function classifyCar(car: number, minimum: number): CapitalClass {
+export function classifyCar(car: number, minimum: number = minimumCar()): CapitalClass {
+  const b = capitalBands();
   if (car < 0) return "Insolvent";
-  if (car < 2) return "Critically under-capitalised";
-  if (car < 5) return "Significantly under-capitalised";
+  if (car < b.critically) return "Critically under-capitalised";
+  if (car < b.significantly) return "Significantly under-capitalised";
   if (car < minimum) return "Under-capitalised";
   return "Adequately capitalised";
 }
@@ -585,50 +666,26 @@ export type IcaapScenario = {
   lgdAddOn: number;
 };
 
-export const seedScenarios: IcaapScenario[] = [
-  {
-    id: "base",
-    name: "Base",
-    description: "Consensus macro path from the external data feed",
-    gdpPct: 3.2,
-    inflationPct: 22,
-    fxDevaluationPct: 0,
-    mprBps: 0,
-    pdMultiplier: 1,
-    lgdAddOn: 0,
-  },
-  {
-    id: "adverse",
-    name: "Adverse",
-    description: "Oil-price fall, FX pressure and tighter monetary policy",
-    gdpPct: 0.8,
-    inflationPct: 28,
-    fxDevaluationPct: 25,
-    mprBps: 300,
-    pdMultiplier: 1.6,
-    lgdAddOn: 0.05,
-  },
-  {
-    id: "severe",
-    name: "Severe",
-    description: "Recession with sharp naira devaluation and sector contagion",
-    gdpPct: -2.5,
-    inflationPct: 35,
-    fxDevaluationPct: 60,
-    mprBps: 600,
-    pdMultiplier: 2.4,
-    lgdAddOn: 0.12,
-  },
+const SCENARIO_META = [
+  { id: "base", name: "Base", description: "Consensus macro path from the external data feed" },
+  { id: "adverse", name: "Adverse", description: "Oil-price fall, FX pressure and tighter monetary policy" },
+  { id: "severe", name: "Severe", description: "Recession with sharp naira devaluation and sector contagion" },
 ];
 
-/** Pillar 2 capital add-ons (demo — tenant ICAAP policy). As % of RWA. */
-export const pillar2AddOns = [
-  { risk: "Credit concentration (single obligor & sector)", pct: 0.9, basis: "HHI-based add-on on sector exposures (§6.6.2)" },
-  { risk: "Interest-rate risk in the banking book (IRRBB)", pct: 0.6, basis: "EVE sensitivity, +200 bps (§6.8.1)" },
-  { risk: "Liquidity & funding risk", pct: 0.3, basis: "ILAAP survival-horizon outcome (§6.8.2)" },
-  { risk: "Strategic & reputational risk", pct: 0.4, basis: "ERM risk register (§6.10)" },
-];
+/** ICAAP scenarios with severities from the business rules `ifrs9.scenario.<id>.<field>`. */
+export function icaapScenarios(): IcaapScenario[] {
+  return SCENARIO_META.map((m) => {
+    const v = Object.fromEntries(SCENARIO_FIELDS.map((f) => [f.field, r(`scenario.${m.id}.${f.field}`)])) as Record<(typeof SCENARIO_FIELDS)[number]["field"], number>;
+    return { ...m, ...v };
+  });
+}
 
+/** Pillar 2 capital add-ons (% of RWA) from the tenant ICAAP policy rules. */
+export function pillar2AddOns() {
+  return PILLAR2.map((p) => ({ id: p.id, risk: p.risk, basis: p.basis, pct: r(`icaap.pillar2.${p.id}`), ruleKey: `ifrs9.icaap.pillar2.${p.id}` }));
+}
+
+/** Tenant-configured checklist (demo copy — TD-129). */
 export const supervisoryChecklist: Record<CapitalClass, string[]> = {
   "Adequately capitalised": ["Maintain monthly CAR monitoring", "Annual ICAAP submission to the Board and CBN"],
   "Under-capitalised": ["Notify the CBN and submit a capital restoration plan", "Restrict dividend payments", "Board approval for new business lines"],
@@ -671,9 +728,23 @@ export type CureParams = {
   curePeriods: number;
   stage2Probation: number;
   restructuredProbation: number;
+  watchlistExtraPeriods: number;
+  stage2Dpd: number;
   suspendedInterestPolicy: "On cash receipt" | "On declassification";
 };
-export const defaultCureParams: CureParams = { stage3DpdThreshold: 90, curePeriods: 3, stage2Probation: 3, restructuredProbation: 12, suspendedInterestPolicy: "On cash receipt" };
+
+/** Declassification trigger parameters (PRD §6.7.5) from the business rules. */
+export function cureParams(): CureParams {
+  return {
+    stage3DpdThreshold: r("cure.stage3DpdThreshold"),
+    curePeriods: r("cure.periods"),
+    stage2Probation: r("cure.stage2ProbationMonths"),
+    restructuredProbation: r("cure.restructuredProbationMonths"),
+    watchlistExtraPeriods: r("cure.watchlistExtraPeriods"),
+    stage2Dpd: r("stage2DpdTrigger"),
+    suspendedInterestPolicy: getRule<CureParams["suspendedInterestPolicy"]>("ifrs9.cure.suspendedInterestPolicy"),
+  };
+}
 
 export type Eligibility = { target: Ifrs9Stage | null; status: "Eligible" | "In probation" | "Not eligible"; reason: string };
 
@@ -686,13 +757,19 @@ export function eligibility(r: EclRow, c: CureData | undefined, p: CureParams): 
   }
   if (r.facility.status === "Restructured" && c.monthsInProbation < p.restructuredProbation)
     return { target: 1, status: "In probation", reason: `Restructured — ${c.monthsInProbation} of ${p.restructuredProbation} months probation at minimum Stage 2` };
-  if (c.currentDpd >= 30) return { target: null, status: "Not eligible", reason: `SICR still met — ${c.currentDpd} DPD` };
-  if (r.obligor?.watchlist && c.consecutiveTimely < p.stage2Probation + 3) return { target: 1, status: "In probation", reason: "Watchlist flag still active" };
+  if (c.currentDpd >= p.stage2Dpd) return { target: null, status: "Not eligible", reason: `SICR still met — ${c.currentDpd} DPD` };
+  if (r.obligor?.watchlist && c.consecutiveTimely < p.stage2Probation + p.watchlistExtraPeriods) return { target: 1, status: "In probation", reason: "Watchlist flag still active" };
   if (c.monthsInProbation < p.stage2Probation) return { target: 1, status: "In probation", reason: `${c.monthsInProbation} of ${p.stage2Probation} months probation` };
   return { target: 1, status: "Eligible", reason: `SICR reversed · ${c.monthsInProbation} months probation sustained` };
 }
 
-/** Suspended interest while in Stage 3 (demo: unpaid interest for DPD beyond 90). */
-export function suspendedInterest(r: EclRow) {
-  return r.stage === 3 ? (r.outstanding * (r.facility.ratePct / 100) * Math.max(0, r.facility.dpd - 90)) / 365 : 0;
+/** Suspended interest while in Stage 3 (demo: unpaid interest for DPD beyond the Stage 3 default definition). */
+export function suspendedInterest(row: EclRow) {
+  return row.stage === 3 ? (row.outstanding * (row.facility.ratePct / 100) * Math.max(0, row.facility.dpd - r("stage3DpdTrigger"))) / 365 : 0;
+}
+
+/** Reporting period (YYYY-MM) of the last month-end staging run before the demo date. */
+export function reportingPeriod(now: Date = DEMO_NOW): string {
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }

@@ -32,7 +32,7 @@ export function hookPointCatalogue(): HookPointDefinition[] {
 }
 
 export function hookList(): Omit<HookHandler<unknown>, "run">[] {
-  return [...handlers.values()].map(({ run: _r, ...meta }) => meta).sort((a, b) => a.point.localeCompare(b.point) || a.priority - b.priority);
+  return [...handlers.values()].map((h) => ({ id: h.id, name: h.name, point: h.point, priority: h.priority })).sort((a, b) => a.point.localeCompare(b.point) || a.priority - b.priority);
 }
 
 /** Register a hook handler. Returns an unregister function. */

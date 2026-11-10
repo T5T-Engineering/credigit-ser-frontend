@@ -2,7 +2,6 @@
 
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { addMonths } from "date-fns";
 import { Banknote, Clock, Gauge as GaugeIcon, Inbox, ShieldCheck } from "lucide-react";
 import {
   ActivityFeed,
@@ -39,20 +38,25 @@ import {
   type DecisionSubmission,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan, useRole, useSession } from "@/lib/auth/session";
-import { useApplications, useDbActions, useObligors } from "@/lib/data/hooks";
+import { useCan } from "@/lib/auth/session";
+import { useApplications, useObligors } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { newId } from "@/lib/data/store";
 import { date, dateTime, money, moneyShort } from "@/lib/format";
-import { demoNowIso, hash, useAuditLog } from "../../credit-admin/common";
+import { canDecide, useOperationsStore, usePendingFor } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import type { RoleId } from "@/lib/rbac/roles";
+import { demoNowIso } from "../../credit-admin/common";
 import { isCleared, useFacilityRows, type FacilityRow } from "../../credit-admin/logic";
+import { PendingOperationNotice } from "../../credit-admin/operations-ui";
+import { decideDisbursement, prepareDisbursement, withdrawDisbursement } from "../actions";
 import {
-  STEP_UP_THRESHOLD,
   accountFor,
+  checkerRoles,
   checkerChecks,
   disbursementTones,
   makerChecks,
-  useDisbursementStore,
   useDisbursements,
   type Disbursement,
   type SodCheck,
@@ -68,7 +72,12 @@ export function DisbursementPage() {
   const apps = useApplications();
   const obligors = useObligors();
   const canEdit = useCan("disbursement", "edit");
-  const role = useRole();
+  const { actor } = useScope();
+  const stepUpThreshold = useRule<number>("approvals.stepUpThresholdNgn");
+  const makerRoles = useRule<RoleId[]>("disbursement.makerRoles");
+  const instances = useOperationsStore((s) => s.instances);
+  const isMaker = canEdit && makerRoles.includes(actor.roleId);
+  const isChecker = canEdit && checkerRoles().includes(actor.roleId);
   const [tab, setTab] = useState("queue");
   // `?facility=FAC-…` opens the workspace directly (deep link from other modules).
   const [openId, setOpenId] = useState<string | null>(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("facility")));
@@ -84,6 +93,8 @@ export function DisbursementPage() {
     [rows, latestByFacility],
   );
   const awaiting = requests.filter((r) => r.status === "Awaiting authorisation");
+  const awaitingMe = new Set(instances.filter((i) => i.operationType === "disbursement.authorise" && canDecide(i, actor).ok).map((i) => i.subject.id));
+  const myWork = requests.filter((r) => r.makerId === actor.id || r.checkerId === actor.id || awaitingMe.has(r.id));
   const authorisedMonth = requests.filter((r) => r.status === "Authorised" && inMonth(r.decidedAt));
   const comingThrough = apps.filter((a) => a.stage === "Conditions");
   const obligorName = (id: string) => obligors.find((o) => o.id === id)?.name ?? id;
@@ -139,7 +150,7 @@ export function DisbursementPage() {
       exportable: false,
       cell: (q) => (
         <Button size="small" variant="tertiary" onClick={() => setOpenId(q.row.facility.id)}>
-          {nextActionLabel(q, role?.id)}
+          {nextActionLabel(q, isMaker, isChecker)}
         </Button>
       ),
     },
@@ -153,7 +164,7 @@ export function DisbursementPage() {
     { id: "status", header: "Status", accessor: "status", cell: (d) => <StatusBadge status={d.status} tones={disbursementTones} /> },
     { id: "maker", header: "Maker", accessor: "makerName" },
     { id: "checker", header: "Checker", accessor: (d) => d.checkerName ?? "—" },
-    { id: "stepUp", header: "Step-up", accessor: (d) => (d.stepUpVerified ? "Verified" : d.amount > STEP_UP_THRESHOLD ? "Required" : "Not required"), cell: (d) => (d.stepUpVerified ? <Badge tone="success">Verified</Badge> : d.amount > STEP_UP_THRESHOLD ? <Badge tone="info" variant="outline">Required</Badge> : <Text variant="small" tone="subtle">Not required</Text>) },
+    { id: "stepUp", header: "Step-up", accessor: (d) => (d.stepUpVerified ? "Verified" : d.amount > stepUpThreshold ? "Required" : "Not required"), cell: (d) => (d.stepUpVerified ? <Badge tone="success">Verified</Badge> : d.amount > stepUpThreshold ? <Badge tone="info" variant="outline">Required</Badge> : <Text variant="small" tone="subtle">Not required</Text>) },
     { id: "cba", header: "CBA reference", accessor: (d) => d.cbaReference ?? "—", cell: (d) => <span className="font-mono text-sm">{d.cbaReference ?? "—"}</span> },
     { id: "prepared", header: "Prepared", accessor: "preparedAt", cell: (d) => dateTime(d.preparedAt), sortable: true },
     { id: "decided", header: "Decided", accessor: (d) => d.decidedAt ?? "", cell: (d) => (d.decidedAt ? dateTime(d.decidedAt) : "—"), sortable: true },
@@ -185,7 +196,7 @@ export function DisbursementPage() {
           <StatCard label="Pending disbursement" value={String(queue.length)} hint={`${moneyShort(queue.reduce((s, q) => s + q.row.undisbursed, 0))} undisbursed`} icon={<Inbox aria-hidden />} />
           <StatCard label="Awaiting authorisation" value={String(awaiting.length)} hint={`${moneyShort(awaiting.reduce((s, d) => s + d.amount, 0))} prepared by Makers`} icon={<Clock aria-hidden />} tone="info" />
           <StatCard label="Authorised this month" value={moneyShort(authorisedMonth.reduce((s, d) => s + d.amount, 0))} hint={`${authorisedMonth.length} disbursements · ${DEMO_NOW.toLocaleString("en-NG", { month: "long", year: "numeric" })}`} icon={<Banknote aria-hidden />} tone="success" />
-          <StatCard label="Step-up threshold" value={moneyShort(STEP_UP_THRESHOLD)} hint="Parameter — set by tenant (PRD §4.2). Above this the Checker re-authenticates." icon={<GaugeIcon aria-hidden />} tone="accent" />
+          <StatCard label="Step-up threshold" value={moneyShort(stepUpThreshold)} hint="Business rule approvals.stepUpThresholdNgn (PRD §4.2). Above this the Checker re-authenticates." icon={<GaugeIcon aria-hidden />} tone="accent" />
         </Grid>
 
         <Tabs
@@ -272,6 +283,23 @@ export function DisbursementPage() {
               ),
             },
             {
+              id: "mine",
+              label: "My work",
+              badge: String(myWork.length),
+              content: (
+                <DataTable
+                  label="Disbursements I prepared, authorised or must decide"
+                  columns={historyColumns}
+                  data={myWork}
+                  getRowId={(d) => d.id}
+                  onRowClick={(d) => setOpenId(d.facilityId)}
+                  defaultSort={{ id: "prepared", direction: "desc" }}
+                  emptyState={<EmptyState icon={<Inbox aria-hidden />} title="Nothing for you yet" description="Disbursements you prepare, authorise or need to decide appear here." />}
+                  mobileCard={requestCard}
+                />
+              ),
+            },
+            {
               id: "history",
               label: "History",
               content: (
@@ -302,9 +330,9 @@ export function DisbursementPage() {
   );
 }
 
-function nextActionLabel(q: QueueRow, roleId: string | undefined) {
-  if (roleId === "disbursement-checker" && q.request?.status === "Awaiting authorisation") return "Review & authorise";
-  if (roleId === "disbursement-maker" && (!q.request || q.request.status !== "Awaiting authorisation")) return "Prepare";
+function nextActionLabel(q: QueueRow, isMaker: boolean, isChecker: boolean) {
+  if (isChecker && q.request?.status === "Awaiting authorisation") return "Review & authorise";
+  if (isMaker && (!q.request || q.request.status !== "Awaiting authorisation")) return "Prepare";
   return "Open";
 }
 
@@ -333,15 +361,19 @@ function SodPanel({ title, checks }: { title: string; checks: SodCheck[] }) {
 
 function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Disbursement[]; onClose: () => void }) {
   const { facility, obligor, app } = row;
-  const role = useRole();
-  const user = useSession((s) => s.user);
-  const saveRequest = useDisbursementStore((s) => s.saveRequest);
-  const { update } = useDbActions();
-  const audit = useAuditLog();
-  const userId = user?.id ?? "";
-  const roleId = role?.id ?? "";
+  const { actor } = useScope();
+  const canEdit = useCan("disbursement", "edit");
+  const stepUpThreshold = useRule<number>("approvals.stepUpThresholdNgn");
+  const accountLength = useRule<number>("disbursement.accountNumberLength");
+  const makerRoles = useRule<RoleId[]>("disbursement.makerRoles");
+  const userId = actor.id;
+  const roleId = actor.roleId;
+  const isMakerRole = canEdit && makerRoles.includes(roleId);
+  const isCheckerRole = canEdit && checkerRoles().includes(roleId);
   const latest = requests[0];
   const awaiting = latest?.status === "Awaiting authorisation" ? latest : undefined;
+  const pendingOp = usePendingFor("Disbursement", awaiting?.id ?? "-");
+  const stepUpPassed = useRef(false);
   const pendingFacility = facility.status === "Pending disbursement";
   const openCps = row.cps.filter((c) => !isCleared(c.status));
   const mChecks = makerChecks(userId, roleId, app);
@@ -358,16 +390,16 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
   const [valueDate, setValueDate] = useState(DEMO_NOW.toISOString().slice(0, 10));
   const [narration, setNarration] = useState(`${facility.product} drawdown — ${facility.id}`);
   const [touched, setTouched] = useState(false);
-  const [done, setDone] = useState<string | null>(null);
+  const [done, setDone] = useState<{ ok: boolean; text: string } | null>(null);
   const [stepUpOpen, setStepUpOpen] = useState(false);
   const resolver = useRef<((ok: boolean) => void) | null>(null);
 
   const amt = Number(amount.replace(/[^\d.]/g, ""));
   const amountError = !amt || amt <= 0 ? "Enter an amount greater than zero" : amt > row.undisbursed ? `Can't exceed the undisbursed approved amount (${money(row.undisbursed, facility.currency)})` : undefined;
-  const accountError = /^\d{10}$/.test(account) ? undefined : "Enter the 10-digit NUBAN account number";
+  const accountError = new RegExp(`^\\d{${accountLength}}$`).test(account) ? undefined : `Enter the ${accountLength}-digit NUBAN account number`;
   const nameError = accountName.trim() ? undefined : "Enter the account name";
 
-  function prepare() {
+  async function prepare() {
     setTouched(true);
     if (amountError || accountError || nameError || !canPrepare) return;
     const at = demoNowIso();
@@ -383,35 +415,18 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
       narration,
       status: "Awaiting authorisation",
       makerId: userId,
-      makerName: user?.name ?? "Disbursement Maker",
+      makerName: actor.name,
       preparedAt: at,
     };
-    saveRequest(d);
-    audit("Prepared disbursement", "Disbursement", d.id, undefined, `${money(amt, facility.currency)} to ${account} (${facility.id})`);
-    setDone(`Disbursement ${d.id} prepared and sent to a Checker for authorisation.`);
+    const r = await prepareDisbursement(d, app?.id);
+    setDone(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.reason });
   }
 
   async function decide({ decision, comment }: DecisionSubmission) {
-    if (!awaiting || !checkerOk) return;
-    const at = demoNowIso();
-    if (decision === "approve") {
-      const cbaReference = `CBA/DSB/${String(hash(awaiting.id + at) % 1_000_000).padStart(6, "0")}`;
-      saveRequest({ ...awaiting, status: "Authorised", checkerId: userId, checkerName: user?.name, decidedAt: at, comment, stepUpVerified: awaiting.amount > STEP_UP_THRESHOLD, cbaReference });
-      audit("Authorised disbursement", "Disbursement", awaiting.id, "Awaiting authorisation", `Authorised · ${cbaReference}${awaiting.amount > STEP_UP_THRESHOLD ? " · step-up verified" : ""}`);
-      const outstanding = facility.outstanding + awaiting.amount;
-      update("facilities", facility.id, { status: "Active", outstanding, startDate: at, maturityDate: addMonths(new Date(at), facility.tenorMonths).toISOString() });
-      audit("Facility activated on disbursement", "Facility", facility.id, `Pending disbursement · outstanding ${money(facility.outstanding)}`, `Active · outstanding ${money(outstanding)}`);
-      if (app) {
-        update("applications", app.id, { stage: "Booked", updatedAt: at });
-        audit("Application booked", "Application", app.id, app.stage, "Booked");
-      }
-      setDone(`Authorised. ${money(awaiting.amount, awaiting.currency)} posted to the CBA (${cbaReference}); ${facility.id} is now Active.`);
-    } else {
-      const status = decision === "return" ? "Returned to maker" : "Rejected";
-      saveRequest({ ...awaiting, status, checkerId: userId, checkerName: user?.name, decidedAt: at, comment });
-      audit(decision === "return" ? "Returned disbursement to maker" : "Rejected disbursement", "Disbursement", awaiting.id, "Awaiting authorisation", `${status}: ${comment}`);
-      setDone(decision === "return" ? "Returned to the Maker with your comment." : "Disbursement rejected.");
-    }
+    if (!awaiting || !checkerOk || !pendingOp) return;
+    const r = await decideDisbursement(pendingOp.id, decision === "approve" ? "approve" : decision === "return" ? "return" : "reject", comment, stepUpPassed.current);
+    stepUpPassed.current = false;
+    setDone(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.reason });
   }
 
   function stepUp(): Promise<boolean> {
@@ -433,9 +448,14 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
     >
       <Stack gap="large">
         {done ? (
-          <Alert tone="success" title="Done">
-            {done}
+          <Alert tone={done.ok ? "success" : "danger"} title={done.ok ? "Done" : "Not done"}>
+            {done.text}
           </Alert>
+        ) : null}
+        {pendingOp ? (
+          <PendingOperationNotice instance={pendingOp} title="Awaiting Checker authorisation">
+            {pendingOp.requestedBy.id === userId ? "You prepared it, so a different Checker must decide. " : ""}
+          </PendingOperationNotice>
         ) : null}
 
         <DescriptionList
@@ -477,7 +497,7 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
           </Alert>
         ) : null}
 
-        {roleId === "disbursement-maker" && pendingFacility && !awaiting ? (
+        {isMakerRole && pendingFacility && !awaiting ? (
           <Card variant="outlined">
             <CardHeader>
               <CardTitle>Prepare disbursement</CardTitle>
@@ -494,7 +514,7 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
                 <Form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    prepare();
+                    void prepare();
                   }}
                 >
                   <Grid columns={{ base: 1, md: 2 }} gap="medium">
@@ -505,7 +525,7 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
                       <Input type="date" value={valueDate} onChange={(e) => setValueDate(e.target.value)} disabled={!gateOk} />
                     </Field>
                     <Field label="Beneficiary account (NUBAN)" required error={touched ? accountError : undefined} description="Customer's operating account in the CBA">
-                      <Input inputMode="numeric" maxLength={10} className="font-mono" value={account} onChange={(e) => setAccount(e.target.value.replace(/\D/g, ""))} disabled={!gateOk} />
+                      <Input inputMode="numeric" maxLength={accountLength} className="font-mono" value={account} onChange={(e) => setAccount(e.target.value.replace(/\D/g, ""))} disabled={!gateOk} />
                     </Field>
                     <Field label="Account name" required error={touched ? nameError : undefined}>
                       <Input value={accountName} onChange={(e) => setAccountName(e.target.value)} disabled={!gateOk} />
@@ -540,24 +560,39 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
                     { label: "Beneficiary", value: `${awaiting.accountName} · ${awaiting.accountNumber}` },
                     { label: "Value date", value: date(awaiting.valueDate) },
                     { label: "Prepared by", value: `${awaiting.makerName} · ${dateTime(awaiting.preparedAt)}` },
-                    { label: "Step-up", value: awaiting.amount > STEP_UP_THRESHOLD ? `Required — above ${moneyShort(STEP_UP_THRESHOLD)}` : "Not required" },
+                    { label: "Step-up", value: awaiting.amount > stepUpThreshold ? `Required — above ${moneyShort(stepUpThreshold)}` : "Not required" },
                     { label: "Narration", value: awaiting.narration, span: 2 },
                   ]}
                 />
-                {roleId === "disbursement-checker" ? (
+                {!pendingOp ? (
+                  <Alert tone="warning" title="Not yet routed to Operations">
+                    This request pre-dates the Operations workflow.{" "}
+                    {awaiting.makerId === userId && isMakerRole ? (
+                      <Button size="small" variant="text" onClick={() => void prepareDisbursement(awaiting, app?.id).then((r) => setDone(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.reason }))}>
+                        Route to Operations
+                      </Button>
+                    ) : (
+                      "The Maker who prepared it must route it to Operations."
+                    )}
+                  </Alert>
+                ) : pendingOp.requestedBy.id === userId ? (
+                  <Button variant="secondary" onClick={() => void withdrawDisbursement(pendingOp.id, "Withdrawn by the Maker").then((r) => setDone(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.reason }))}>
+                    Withdraw request
+                  </Button>
+                ) : isCheckerRole ? (
                   <DecisionPanel
                     title="Checker decision"
                     actions={["approve", "return", "decline"]}
                     actionLabels={{ approve: "Authorise", return: "Return to maker", decline: "Reject" }}
                     commentRequired={["return", "decline"]}
-                    requireStepUp={(d) => d === "approve" && awaiting.amount > STEP_UP_THRESHOLD}
+                    requireStepUp={(d) => d === "approve" && awaiting.amount > stepUpThreshold}
                     onStepUp={stepUp}
                     onDecide={decide}
                     disabled={!checkerOk}
                     notice={
                       checkerOk ? (
                         <Text variant="small" tone="muted">
-                          Authorising posts the disbursement to the CBA (simulated) and activates the facility.
+                          Your decision is recorded on Operations request {pendingOp.id}. Authorising posts the disbursement to the CBA (simulated) and activates the facility.
                         </Text>
                       ) : (
                         <Alert tone="danger" title="You can't authorise this disbursement">
@@ -585,8 +620,8 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
           </CardHeader>
           <CardContent>
             <Stack gap="medium">
-              {roleId !== "disbursement-checker" ? <SodPanel title={`You (${user?.name ?? "—"}) as Maker`} checks={mChecks} /> : null}
-              {roleId !== "disbursement-maker" ? <SodPanel title={`You (${user?.name ?? "—"}) as Checker`} checks={cChecks} /> : null}
+              {!isCheckerRole ? <SodPanel title={`You (${actor.name}) as Maker`} checks={mChecks} /> : null}
+              {!isMakerRole ? <SodPanel title={`You (${actor.name}) as Checker`} checks={cChecks} /> : null}
             </Stack>
           </CardContent>
         </Card>
@@ -623,8 +658,11 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
           }
         }}
         onVerify={async (code) => {
+          // TD-858: demo OTP check (any 6 digits) until the step-up provider is integrated.
           const ok = /^\d{6}$/.test(code);
+          if (ok) stepUpPassed.current = true;
           if (ok && resolver.current) {
+
             resolver.current(true);
             resolver.current = null;
           }

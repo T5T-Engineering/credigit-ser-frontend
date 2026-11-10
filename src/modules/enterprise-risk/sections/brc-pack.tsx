@@ -23,31 +23,44 @@ import {
   Steps,
   Text,
 } from "@credigit/web-ui";
-import { useCan, useRole } from "@/lib/auth/session";
+import { useCan } from "@/lib/auth/session";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { date, dateTime } from "@/lib/format";
-import { useActorName, useAuditLog } from "../../operational-risk/shared";
+import { publish } from "@/lib/platform/events";
+import { runHooks } from "@/lib/platform/hooks";
+import { canDecide, decideOperation, submitOperation, usePendingFor, type SubmitResult } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import { aiKeys, submitAiSignOff } from "../../ai/platform";
+import { PendingBadge, SubmitOutcome } from "../../operational-risk/operation-ui";
+import { useAuditLog } from "../../operational-risk/shared";
 import { fmtMetric, packSections, type BrcPack } from "../data";
 import { useAppetite } from "../logic";
+import { ERM, type BrcPackPayload } from "../platform";
 import { useErm } from "../store";
+
+/** Estimated page count shown on a compiled pack (TD-902: layout heuristic, not a business rule). */
+const estimatePages = (sections: number) => 6 + sections * 4;
 
 const packTones = { Draft: "neutral", "Submitted to CRO": "info", "Approved for BRC": "success" } as const;
 
 export function BrcPackSection() {
   const canEdit = useCan("enterprise-risk", "edit");
-  const role = useRole();
+  const { actor } = useScope();
+  const narrativeModel = useRule<string>(aiKeys.narrativeModel);
   const packs = useErm((s) => s.packs);
   const { addPack, updatePack } = useErm.getState();
   const { metrics, readings } = useAppetite();
   const audit = useAuditLog();
-  const actor = useActorName();
+  const [outcome, setOutcome] = useState<SubmitResult | null>(null);
+  const pendingOp = usePendingFor("BrcPack", packs.find((p) => p.status === "Submitted to CRO")?.id ?? "");
   const [selected, setSelected] = useState<string[]>(packSections.map((s) => s.id));
   const [meeting, setMeeting] = useState("2026-11-26");
   const [progress, setProgress] = useState<number | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const active = packs.find((p) => p.id === activeId) ?? packs[0];
 
-  const finish = () => {
+  const finish = async () => {
     const breaches = metrics.filter((m) => m.rag === "red");
     const amber = metrics.filter((m) => m.rag === "amber");
     const reds = readings.filter((k) => k.rag === "red");
@@ -60,35 +73,71 @@ export function BrcPackSection() {
     ]
       .filter(Boolean)
       .join("\n\n");
-    const pack: BrcPack = {
+    const draft: BrcPack = {
       id: `BRC-${meeting.replace(/-/g, "")}-${String(packs.length + 1).padStart(2, "0")}`,
       meeting,
       sections: selected,
       compiledAt: DEMO_NOW.toISOString(),
-      compiledBy: actor,
-      pages: 6 + selected.length * 4,
+      compiledBy: actor.name,
+      compiledById: actor.id,
+      pages: estimatePages(selected.length),
       summary,
       status: "Draft",
     };
+    const before = await runHooks("enterprise-risk.brc-pack.compile.before", { pack: draft, actor });
+    setProgress(null);
+    if (!before.ok) {
+      setOutcome({ ok: false, reason: `Blocked by ${before.vetoedBy}: ${before.reason}` });
+      return;
+    }
+    const pack = before.ctx.pack;
     addPack(pack);
     setActiveId(pack.id);
-    audit("Compiled Board Risk Committee pack", "BRC pack", pack.id, undefined, `${selected.length} sections · meeting ${meeting}`);
-    setProgress(null);
+    audit("Compiled Board Risk Committee pack", "BRC pack", pack.id, undefined, `${pack.sections.length} sections · meeting ${meeting}`);
+    publish("enterprise-risk.brc-pack.compiled", { module: ERM, subject: { type: "BrcPack", id: pack.id, href: "/enterprise-risk/brc-pack" }, payload: { meeting, sections: pack.sections.length } });
+    await runHooks("enterprise-risk.brc-pack.compile.after", { pack, actor });
   };
 
   const compile = () => {
     const step = (i: number) => {
       setProgress(i);
-      if (i >= selected.length) finish();
+      if (i >= selected.length) void finish();
       else setTimeout(() => step(i + 1), 280);
     };
     step(0);
   };
 
+  /** Head of Risk submits; the CRO approves in Operations (or inline below via the same workflow engine). */
+  const submit = async (p: BrcPack) => {
+    const r = await submitOperation<BrcPackPayload>("enterprise-risk.brc-pack.approval", {
+      title: `BRC pack ${p.id} — meeting ${p.meeting}`,
+      subject: { type: "BrcPack", id: p.id, title: `BRC pack ${p.id}`, href: "/enterprise-risk/brc-pack" },
+      payload: { packId: p.id, meeting: p.meeting, sections: p.sections.length },
+      summary: [
+        { label: "Pack", value: p.id },
+        { label: "Meeting", value: date(p.meeting) },
+        { label: "Sections", value: String(p.sections.length) },
+        { label: "Executive summary", value: p.summaryAdoptedBy ? `Adopted by ${p.summaryAdoptedBy}` : "AI-drafted — not yet adopted" },
+      ],
+    });
+    setOutcome(r);
+    if (!r.ok) return;
+    if (!r.applied) updatePack(p.id, { status: "Submitted to CRO" });
+    audit("Submitted BRC pack to CRO", "BRC pack", p.id, "Draft", `Submitted to CRO · ${r.instance.id}`);
+    publish("enterprise-risk.brc-pack.submitted", { module: ERM, subject: { type: "BrcPack", id: p.id, href: "/enterprise-risk/brc-pack" }, payload: { operationId: r.instance.id } });
+  };
+  const decide = async (decision: "approve" | "reject") => {
+    if (!pendingOp) return;
+    const r = await decideOperation(pendingOp.id, decision, decision === "approve" ? "Approved for circulation to the Board Risk Committee." : "Returned to the Head of Risk for revision.");
+    if (!r.ok) setOutcome({ ok: false, reason: r.reason });
+  };
+  const mayDecide = pendingOp ? canDecide(pendingOp, actor).ok : false;
+
   const toggle = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   return (
     <Grid columns={{ base: 1, lg: 12 }} gap="large">
+      {outcome && <div className="lg:col-span-12"><SubmitOutcome result={outcome} /></div>}
       <Card className="lg:col-span-5">
         <CardHeader>
           <CardTitle>Board Risk Committee pack builder</CardTitle>
@@ -97,7 +146,7 @@ export function BrcPackSection() {
         <CardContent>
           <Stack gap="medium">
             <Field label="Committee meeting date" htmlFor="brc-date">
-              <Input id="brc-date" type="date" value={meeting} min="2026-11-10" onChange={(e) => setMeeting(e.target.value)} disabled={!canEdit} />
+              <Input id="brc-date" type="date" value={meeting} min={DEMO_NOW.toISOString().slice(0, 10)} onChange={(e) => setMeeting(e.target.value)} disabled={!canEdit} />
             </Field>
             <fieldset className="space-y-2">
               <legend className="mb-2 text-sm font-semibold text-fg">Sections</legend>
@@ -131,7 +180,10 @@ export function BrcPackSection() {
                     <CardTitle>{active.id}</CardTitle>
                     <CardDescription>Meeting {date(active.meeting)} · {active.pages} pages · compiled by {active.compiledBy}, {dateTime(active.compiledAt)}</CardDescription>
                   </div>
-                  <StatusBadge status={active.status} tones={packTones} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusBadge status={active.status} tones={packTones} />
+                    <PendingBadge subjectType="BrcPack" subjectId={active.id} />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -157,12 +209,15 @@ export function BrcPackSection() {
                   </div>
                   <div className="flex flex-wrap justify-end gap-2">
                     {active.status === "Draft" && canEdit && (
-                      <Button iconBefore={<Send aria-hidden />} onClick={() => { updatePack(active.id, { status: "Submitted to CRO" }); audit("Submitted BRC pack to CRO", "BRC pack", active.id, "Draft", "Submitted to CRO"); }}>Submit to CRO</Button>
+                      <Button iconBefore={<Send aria-hidden />} onClick={() => void submit(active)}>Submit to CRO</Button>
                     )}
-                    {active.status === "Submitted to CRO" && role?.id === "cro" && (
-                      <Button iconBefore={<ShieldCheck aria-hidden />} onClick={() => { updatePack(active.id, { status: "Approved for BRC", approvedBy: actor }); audit("Approved BRC pack for circulation", "BRC pack", active.id, "Submitted to CRO", "Approved for BRC"); }}>Approve for Board Risk Committee</Button>
+                    {active.status === "Submitted to CRO" && pendingOp?.subject.id === active.id && mayDecide && (
+                      <>
+                        <Button variant="tertiary" onClick={() => void decide("reject")}>Return to Head of Risk</Button>
+                        <Button iconBefore={<ShieldCheck aria-hidden />} onClick={() => void decide("approve")}>Approve for Board Risk Committee</Button>
+                      </>
                     )}
-                    {active.status === "Submitted to CRO" && role?.id !== "cro" && <Badge tone="info">Awaiting CRO approval</Badge>}
+                    {active.status === "Submitted to CRO" && !mayDecide && <Badge tone="info">Awaiting approval in Operations</Badge>}
                   </div>
                 </Stack>
               </CardContent>
@@ -170,16 +225,16 @@ export function BrcPackSection() {
             <AiDraftPanel
               kind="drafted"
               title="Executive summary"
-              model="SER Narrative v1.4 (simulated)"
+              model={narrativeModel}
               generatedAt={dateTime(active.compiledAt)}
               confidence={0.78}
               draft={active.summary}
               sources={[{ label: "Risk appetite scorecard", detail: `${metrics.length} metrics` }, { label: "Operational Risk KRIs", detail: `${readings.length} KRIs` }]}
               onAccept={
-                canEdit && active.status === "Draft"
-                  ? (text) => {
-                      updatePack(active.id, { summary: text });
-                      audit("Adopted AI-drafted BRC executive summary", "BRC pack", active.id, "AI-drafted", "Adopted by Head of Risk");
+                canEdit && active.status === "Draft" && !active.summaryAdoptedBy
+                  ? async (text) => {
+                      const r = await submitAiSignOff({ activityId: `AIA-BRC-${active.id}`, item: `BRC executive summary (${active.id})`, module: "Enterprise risk", href: "/enterprise-risk/brc-pack", decision: "Signed off", accountable: "head-of-risk", text });
+                      setOutcome(r);
                     }
                   : undefined
               }

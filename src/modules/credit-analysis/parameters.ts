@@ -5,7 +5,10 @@
  * `observed` describes the measurable reading behind a system-fed parameter and the demo scoring band used to
  * turn it into a 1–10 score. The PRD leaves the bands to the tenant's Rules & Parameters Engine ("scored against
  * tenant-configurable bands", §8), so the ranges below are illustrative demo bands, not product rules.
+ * Each band (`worst` / `best`) is the DEFAULT of business rule `credit-analysis.scoring.<id>.worst|best`
+ * (src/modules/credit-analysis/platform.ts); the catalogue reads the live rule value at call time.
  */
+import { getRule } from "@/lib/platform/rules";
 
 export type CardinalKey = "internal" | "industry" | "comparative" | "macro";
 
@@ -629,12 +632,30 @@ export const parameters: RarParameter[] = [
   },
 ];
 
+/** Demo scoring bands as transcribed above — the defaults of the `credit-analysis.scoring.*` business rules. */
+export const scoringBandDefaults: { id: string; name: string; measure: string; unit: ObservedSpec["unit"]; worst: number; best: number }[] = parameters
+  .filter((p) => p.observed)
+  .map((p) => ({ id: p.id, name: p.name, measure: p.observed!.measure, unit: p.observed!.unit, worst: p.observed!.worst, best: p.observed!.best }));
+
+export const scoringRuleKey = (id: string, end: "worst" | "best") => `credit-analysis.scoring.${id}.${end}`;
+
+// Replace the literal bands with live reads of the business rules (evaluated at call time, never at load).
+for (const p of parameters) {
+  const spec = p.observed;
+  if (!spec) continue;
+  const rest: Partial<ObservedSpec> = { unit: spec.unit, digits: spec.digits, measure: spec.measure };
+  p.observed = Object.defineProperties(rest as ObservedSpec, {
+    worst: { enumerable: true, get: () => getRule<number>(scoringRuleKey(p.id, "worst")) },
+    best: { enumerable: true, get: () => getRule<number>(scoringRuleKey(p.id, "best")) },
+  });
+}
+
 export const parametersByPoint = (point: CardinalKey) => parameters.filter((p) => p.point === point);
 
 /** Parameters an analyst may adjust (the PRD lists an analyst enrichment / survey source). */
 export const isEnrichable = (p: RarParameter) => p.enrichmentSource !== null;
 
-/** Map an observed value onto 1–10 with the demo band (linear, clamped). */
+/** Map an observed value onto 1–10 with the tenant band (linear, clamped; PRD fixed 1–10 scale — TD-120). */
 export function scoreFromObserved(spec: ObservedSpec, value: number): number {
   const t = (value - spec.worst) / (spec.best - spec.worst);
   return Math.min(10, Math.max(1, 1 + 9 * t));
@@ -668,5 +689,7 @@ export function formatObserved(spec: ObservedSpec, value: number): string {
 
 export function qualitativeLabel(p: RarParameter, score: number): string {
   if (!p.qualitative) return "";
-  return score < 4 ? p.qualitative[0] : score < 8 ? p.qualitative[1] : p.qualitative[2];
+  const mid = getRule<number>("credit-analysis.qualitative.midFrom");
+  const high = getRule<number>("credit-analysis.qualitative.highFrom");
+  return score < mid ? p.qualitative[0] : score < high ? p.qualitative[1] : p.qualitative[2];
 }

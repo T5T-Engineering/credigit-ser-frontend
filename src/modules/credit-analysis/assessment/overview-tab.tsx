@@ -28,7 +28,7 @@ import { intensityThresholds, postureTone, rarPosition, rarMidpoint } from "@/li
 import type { Obligor } from "@/lib/data/types";
 import { moneyShort } from "@/lib/format";
 import { walletPositionMeta, type WalletData } from "../data";
-import { copBands, type Assessment, type axisHistory } from "../logic";
+import { copBands, postureRule, type Assessment, type axisHistory } from "../logic";
 import { cardinalPoints } from "../parameters";
 import { postureOrder } from "../shared";
 
@@ -145,7 +145,7 @@ export function OverviewTab({ a, history, peers, wallet, onOpenTab }: Props) {
           <CardHeader>
             <div>
               <CardTitle>Composite position chart</CardTitle>
-              <CardDescription>Strategic-thrust vector from the (5.5, 5.5) midpoint · quadrant = base posture</CardDescription>
+              <CardDescription>Strategic-thrust vector from the ({rarMidpoint()}, {rarMidpoint()}) midpoint · quadrant = base posture</CardDescription>
             </div>
           </CardHeader>
           <CardContent>
@@ -167,12 +167,14 @@ export function OverviewTab({ a, history, peers, wallet, onOpenTab }: Props) {
               label={`Composite position of ${a.obligor.name}: X ${p.x}, Y ${p.y}`}
             />
             <Grid columns={2} gap="small" className="mt-4">
-              {[
-                ["Conservative", "↖ X < 5.5 · Y > 5.5"],
-                ["Aggressive", "↗ X > 5.5 · Y > 5.5"],
-                ["Defensive", "↙ X < 5.5 · Y < 5.5"],
-                ["Competitive", "↘ X > 5.5 · Y < 5.5"],
-              ].map(([q, where]) => (
+              {(
+                [
+                  ["Conservative", `↖ ${postureRule("Conservative")}`],
+                  ["Aggressive", `↗ ${postureRule("Aggressive")}`],
+                  ["Defensive", `↙ ${postureRule("Defensive")}`],
+                  ["Competitive", `↘ ${postureRule("Competitive")}`],
+                ] as const
+              ).map(([q, where]) => (
                 <span key={q} className="flex flex-col gap-1">
                   <Badge tone={postureTone[q as keyof typeof postureTone]} variant={!p.neutral && p.base === q ? "solid" : "soft"}>
                     {q}
@@ -231,12 +233,12 @@ export function OverviewTab({ a, history, peers, wallet, onOpenTab }: Props) {
                     label: "Magnitude",
                     value: p.magnitude.toFixed(2),
                     mono: true,
-                    hint: "√((X−5.5)² + (Y−5.5)²)",
+                    hint: `√((X−${rarMidpoint()})² + (Y−${rarMidpoint()})²)`,
                   },
                   {
                     label: "Lead",
                     value: p.neutral ? "n/a" : p.lead,
-                    hint: `|Y−5.5| ${Math.abs(p.y - rarMidpoint()).toFixed(2)} vs |X−5.5| ${Math.abs(p.x - rarMidpoint()).toFixed(2)}`,
+                    hint: `|Y−${rarMidpoint()}| ${Math.abs(p.y - rarMidpoint()).toFixed(2)} vs |X−${rarMidpoint()}| ${Math.abs(p.x - rarMidpoint()).toFixed(2)}`,
                   },
                 ]}
               />
@@ -314,8 +316,10 @@ export function OverviewTab({ a, history, peers, wallet, onOpenTab }: Props) {
               />
               <Text variant="small" tone="muted">
                 Bands (tenant-configurable; PRD example):{" "}
-                {copBands.map((b) => `${b.band.replace(" Confidence", "")} ${b.from ? `≥ ${b.from.toFixed(2)}` : "< 0.60"} → −${b.penalty.toFixed(1)}`).join(" · ")}. Dampening
-                amounts are demo parameters.
+                {copBands()
+                  .map((b, i, all) => `${b.band.replace(" Confidence", "")} ${b.from ? `≥ ${b.from.toFixed(2)}` : `< ${all[i - 1]!.from.toFixed(2)}`} → −${b.penalty.toFixed(1)}`)
+                  .join(" · ")}
+                . Bands and dampening amounts are tenant business rules.
                 {a.copBand.band === "Low Confidence" && " A documented customer explanation is required before proceeding."}
               </Text>
             </Stack>

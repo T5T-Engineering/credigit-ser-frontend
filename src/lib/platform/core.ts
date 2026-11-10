@@ -92,7 +92,11 @@ registerOperation<WorkflowDefinition>({
   module: "operations",
   description: "Change the approval steps, approvers or SLAs of an operation type.",
   defaultSteps: [step("review", "Head of Risk / CRO review", ["head-of-risk", "cro"], 48)],
-  apply: (def) => saveDefinition(def),
+  apply: (def) => {
+    saveDefinition(def);
+    publish("operations.workflow.changed", { module: "operations", subject: { type: "WorkflowDefinition", id: def.operationType, title: def.name, href: "/operations/workflows" }, payload: { version: def.version, steps: def.steps.length, enabled: def.enabled } });
+    notify({ templateId: "operations.workflow-changed", toRoles: ["system-admin", "head-of-risk", "cro"], href: "/operations/workflows", data: { name: def.name, version: def.version, steps: def.steps.length } });
+  },
 });
 
 type TemplatePayload = { id: string; subject: string; body: string; inApp: string };
@@ -104,6 +108,8 @@ registerOperation<TemplatePayload>({
   defaultSteps: [step("review", "Compliance / risk review", ["head-of-risk"], 48)],
   apply: (t) => {
     useNotificationStore.setState((s) => ({ overrides: { ...s.overrides, [t.id]: { subject: t.subject, body: t.body, inApp: t.inApp } } }));
+    publish("operations.template.changed", { module: "operations", subject: { type: "NotificationTemplate", id: t.id, href: "/operations/notifications" }, payload: {} });
+    notify({ templateId: "operations.template-changed", toRoles: ["system-admin", "head-of-risk"], href: "/operations/notifications", data: { id: t.id } });
   },
 });
 
@@ -165,6 +171,32 @@ defineTemplates([
     ],
   }),
   tpl({
+    id: "operations.workflow-changed",
+    name: "Workflow changed",
+    module: "operations",
+    trigger: "operations.workflow.changed",
+    subject: "Workflow updated: {{name}} (v{{version}})",
+    inApp: "{{name}} now has {{steps}} approval step(s) (version {{version}}).",
+    body: "<p>The approval workflow <strong>{{name}}</strong> was updated to version {{version}} with {{steps}} step(s).</p><p>New requests follow the updated steps; requests already in progress keep their original route.</p>",
+    tone: "info",
+    variables: [
+      { name: "name", description: "Workflow name", example: "Waiver request" },
+      { name: "version", description: "New version", example: "2" },
+      { name: "steps", description: "Number of steps", example: "2" },
+    ],
+  }),
+  tpl({
+    id: "operations.template-changed",
+    name: "Notification template changed",
+    module: "operations",
+    trigger: "operations.template.changed",
+    subject: "Notification template updated: {{id}}",
+    inApp: "The wording of notification template {{id}} was updated.",
+    body: "<p>The notification template <strong>{{id}}</strong> was updated after approval.</p>",
+    tone: "info",
+    variables: [{ name: "id", description: "Template id", example: "operations.approval-requested" }],
+  }),
+  tpl({
     id: "auth.access-requested",
     name: "New access request",
     module: "platform",
@@ -222,6 +254,8 @@ defineEvents([
   { name: "operations.request.rejected", module: "operations", description: "An operation was rejected." },
   { name: "operations.request.returned", module: "operations", description: "An operation was returned to the requester." },
   { name: "operations.request.cancelled", module: "operations", description: "The requester withdrew an operation." },
+  { name: "operations.workflow.changed", module: "operations", description: "An approved workflow definition change was applied." },
+  { name: "operations.template.changed", module: "operations", description: "An approved notification template change was applied." },
   { name: "rules.rule.changed", module: "operations", description: "A business rule value changed (after approval)." },
   { name: "platform.notification.sent", module: "platform", description: "A notification was sent (in-app + email outbox)." },
   { name: "auth.access.requested", module: "platform", description: "A person verified their email and requested access." },

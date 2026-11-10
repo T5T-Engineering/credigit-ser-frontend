@@ -1,28 +1,37 @@
 /**
  * Collateral Management & Legal Review logic (PRD §6.5, §6.7.3, §5.7).
- * Pure functions. BACKEND SEAM: haircut weightings come from the Rules & Parameters Engine (CBN 12.13(a)(5)).
+ * Pure functions. Haircuts, alert windows and the margin threshold are business rules (./platform.ts) read at call time.
+ * BACKEND SEAM: the Rules & Parameters Engine evaluates these server-side (CBN 12.13(a)(5)).
  */
 import { addDays, subDays } from "date-fns";
 import type { Tone } from "@credigit/web-ui";
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { Collateral, Facility, PerfectionStatus } from "@/lib/data/types";
 import type { RoleId } from "@/lib/rbac/roles";
+import { getRule } from "@/lib/platform/rules";
+import { typeSlug } from "./platform";
 
-/* ---------------- Haircut weighting (PRD §6.7.3) ---------------- */
+/* ---------------- Haircut weighting (PRD §6.7.3) — business rules `collateral.haircut.*` ---------------- */
 
-export type HaircutRule = { pct: number; source: "PRD §6.7.3" | "Tenant parameter"; prdCategory?: string };
+export type HaircutRule = { pct: number; source: string; prdCategory?: string };
 
-/** PRD §6.7.3 table; types the PRD doesn't list use the tenant's configured value (demo value from the register). */
-export function haircutFor(c: Pick<Collateral, "type" | "haircutPct" | "description">): HaircutRule {
+/** PRD §6.7.3 table for the listed types; other types use the tenant's configured haircut. Read at call time. */
+export function haircutFor(c: Pick<Collateral, "type" | "description">): HaircutRule {
+  const r = (key: string) => getRule<number>(`collateral.haircut.${key}`);
   switch (c.type) {
     case "Cash / lien on deposit":
-      return { pct: 0, source: "PRD §6.7.3", prdCategory: "Cash / deposits with the lending bank" };
+      return { pct: r("cash"), source: "PRD §6.7.3", prdCategory: "Cash / deposits with the lending bank" };
     case "Quoted shares":
-      return { pct: 20, source: "PRD §6.7.3", prdCategory: "Quoted equities & other traded securities" };
-    case "Legal mortgage":
-      return { pct: 50, source: "PRD §6.7.3", prdCategory: /duplex|plot/i.test(c.description) ? "Residential legal mortgage" : "Commercial legal mortgage" };
+      return { pct: r("quotedShares"), source: "PRD §6.7.3", prdCategory: "Quoted equities & other traded securities" };
+    case "Legal mortgage": {
+      const words = getRule<string[]>("collateral.haircut.residentialKeywords");
+      const residential = words.some((w) => w && c.description.toLowerCase().includes(w.toLowerCase()));
+      return residential
+        ? { pct: r("residentialMortgage"), source: "PRD §6.7.3", prdCategory: "Residential legal mortgage" }
+        : { pct: r("commercialMortgage"), source: "PRD §6.7.3", prdCategory: "Commercial legal mortgage" };
+    }
     default:
-      return { pct: c.haircutPct, source: "Tenant parameter" };
+      return { pct: r(typeSlug(c.type)), source: "Tenant parameter" };
   }
 }
 
@@ -87,7 +96,7 @@ export function collateralAbilities(roleId: RoleId | undefined) {
 
 /* ---------------- Simulated NGX prices (PRD §5.7 — prototype only) ---------------- */
 
-/** Reference closing prices (₦) — simulated demo values, not market data. */
+/** Reference closing prices (₦) — simulated demo values, not market data (TD-601). */
 export const referencePrices: Record<string, { name: string; price: number; sector: string; vol: number }> = {
   DANGCEM: { name: "Dangote Cement Plc", price: 478.5, sector: "Industrial goods", vol: 0.012 },
   MTNN: { name: "MTN Nigeria Communications Plc", price: 268.0, sector: "ICT", vol: 0.015 },
@@ -143,36 +152,53 @@ export function priceSeries(ticker: string, days = 30): { date: Date; price: num
 
 /* ---------------- Collateral monitoring alerts (PRD §6.4.2) ---------------- */
 
-export type CollateralAlertKind = "Perfection incomplete" | "Perfection defective" | "Revaluation overdue" | "Revaluation due ≤ 90 days" | "Insurance expired" | "Insurance expiring ≤ 30 days" | "Margin shortfall";
+export type CollateralAlertKind = "Perfection incomplete" | "Perfection defective" | "Revaluation overdue" | "Revaluation due soon" | "Insurance expired" | "Insurance expiring soon" | "Margin shortfall";
 
 export type CollateralAlert = { id: string; collateralId: string; obligorId: string; kind: CollateralAlertKind; detail: string; tone: Tone; dueAt?: string };
 
 /** `mtmOf` returns the current mark-to-market value of a quoted-share collateral (undefined for other types). */
-export function buildCollateralAlerts(collateral: Collateral[], facilities: Facility[], mtmOf: (c: Collateral) => number | undefined): CollateralAlert[] {
+export function buildCollateralAlerts(collateral: (Collateral & { insuranceExpiryEffective?: string })[], facilities: Facility[], mtmOf: (c: Collateral) => number | undefined): CollateralAlert[] {
   const facMap = new Map(facilities.map((f) => [f.id, f]));
   const alerts: CollateralAlert[] = [];
   const now = DEMO_NOW;
+  const stallDays = getRule<number>("collateral.perfection.stallDays");
+  const revalWarn = getRule<number>("collateral.revaluation.warningDays");
+  const insWarn = getRule<number>("collateral.insurance.warningDays");
   for (const c of collateral) {
     const linked = c.facilityIds.map((id) => facMap.get(id)).filter((f): f is Facility => !!f && f.status !== "Closed");
     if (!linked.length) continue;
     if (c.perfection === "Defective") alerts.push({ id: `${c.id}-pd`, collateralId: c.id, obligorId: c.obligorId, kind: "Perfection defective", detail: "Security document defect reported by Legal — cure before relying on the haircut adjustment.", tone: "danger" });
-    else if (c.perfection !== "Perfected" && new Date(c.valuedAt) < subDays(now, 90)) alerts.push({ id: `${c.id}-pi`, collateralId: c.id, obligorId: c.obligorId, kind: "Perfection incomplete", detail: `Stalled at ${c.perfection.toLowerCase()} for over 90 days on a live facility.`, tone: "warning" });
+    else if (c.perfection !== "Perfected" && new Date(c.valuedAt) < subDays(now, stallDays)) alerts.push({ id: `${c.id}-pi`, collateralId: c.id, obligorId: c.obligorId, kind: "Perfection incomplete", detail: `Stalled at ${c.perfection.toLowerCase()} for over ${stallDays} days on a live facility.`, tone: "warning" });
     const reval = new Date(c.nextRevaluation);
     if (c.type !== "Quoted shares" && c.type !== "Cash / lien on deposit") {
       if (reval < now) alerts.push({ id: `${c.id}-ro`, collateralId: c.id, obligorId: c.obligorId, kind: "Revaluation overdue", detail: `Revaluation was due ${reval.toDateString().slice(4)}.`, tone: "danger", dueAt: c.nextRevaluation });
+      else if (reval < addDays(now, revalWarn)) alerts.push({ id: `${c.id}-rd`, collateralId: c.id, obligorId: c.obligorId, kind: "Revaluation due soon", detail: `Revaluation due ${reval.toDateString().slice(4)} (within ${revalWarn} days).`, tone: "warning", dueAt: c.nextRevaluation });
     }
-    if (c.insuranceExpiry) {
-      const ins = new Date(c.insuranceExpiry);
-      if (ins < now) alerts.push({ id: `${c.id}-ie`, collateralId: c.id, obligorId: c.obligorId, kind: "Insurance expired", detail: "Insurance cover is not current.", tone: "danger", dueAt: c.insuranceExpiry });
-      else if (ins < addDays(now, 30)) alerts.push({ id: `${c.id}-ix`, collateralId: c.id, obligorId: c.obligorId, kind: "Insurance expiring ≤ 30 days", detail: "Request renewal certificate noting the bank's interest.", tone: "warning", dueAt: c.insuranceExpiry });
+    const insExpiry = c.insuranceExpiryEffective ?? c.insuranceExpiry;
+    if (insExpiry) {
+      const ins = new Date(insExpiry);
+      if (ins < now) alerts.push({ id: `${c.id}-ie`, collateralId: c.id, obligorId: c.obligorId, kind: "Insurance expired", detail: "Insurance cover is not current.", tone: "danger", dueAt: insExpiry });
+      else if (ins < addDays(now, insWarn)) alerts.push({ id: `${c.id}-ix`, collateralId: c.id, obligorId: c.obligorId, kind: "Insurance expiring soon", detail: `Expires within ${insWarn} days — request renewal certificate noting the bank's interest.`, tone: "warning", dueAt: insExpiry });
     }
     const mtm = mtmOf(c);
     if (c.type === "Quoted shares" && mtm !== undefined) {
       const adj = adjustedValue(c, mtm).adjusted;
       const exposure = linked.reduce((a, f) => a + facilityExposure(f), 0);
-      if (exposure > 0 && adj < exposure)
+      if (exposure > 0 && marginShortfall(adj, exposure) > 0)
         alerts.push({ id: `${c.id}-mc`, collateralId: c.id, obligorId: c.obligorId, kind: "Margin shortfall", detail: `Haircut-adjusted MTM covers ${Math.round((adj / exposure) * 100)}% of exposure.`, tone: "danger" });
     }
   }
   return alerts;
+}
+
+/* ---------------- Margin (PRD §5.7, §6.4.2) ---------------- */
+
+/** Haircut-adjusted value needed to cover an exposure at the margin threshold (business rule `collateral.margin.minCoverPct`). */
+export function requiredCover(exposure: number): number {
+  return exposure * (getRule<number>("collateral.margin.minCoverPct") / 100);
+}
+
+/** Shortfall of haircut-adjusted value below the margin threshold (0 when covered). */
+export function marginShortfall(adjusted: number, exposure: number): number {
+  return exposure > 0 ? Math.max(0, requiredCover(exposure) - adjusted) : 0;
 }

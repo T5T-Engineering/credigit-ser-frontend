@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { Download, Landmark, Plus, TrendingUp } from "lucide-react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Download, Landmark, Plus, Send, TrendingUp, Undo2 } from "lucide-react";
 import {
   Alert,
   Badge,
@@ -12,8 +14,11 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  defaultBrand,
+  Field,
   Grid,
   Logo,
+  Modal,
   Sparkline,
   Stack,
   StatCard,
@@ -25,42 +30,59 @@ import {
   TableHeaderCell,
   TableRow,
   Text,
-  RolePicker,
+  Textarea,
+  TextLink,
   riskStatusTones,
   useBrand,
-  type BrandColors,
-  type BrandInput,
+  type BrandConfig,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { useRole } from "@/lib/auth/session";
+import { runHooks } from "@/lib/platform/hooks";
+import { submitOperation, usePendingFor, type SubmitResult } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { ago } from "@/lib/format";
 import { useAuditLog } from "@/modules/workspace/use-audit-log";
+import { brandFingerprint, TenantBrandSync, useBrandingStore } from "./brand-store";
+import { brandPresets } from "./presets";
+import type { BrandChangePayload } from "./platform";
 
-type Preset = { id: string; label: string; description: string; brand: { name: string; colors: BrandColors; font: NonNullable<BrandInput["font"]> } };
+/** Readable summary (no hex values in the UI); hex values go to the audit log only. */
+const describe = (b: BrandConfig) => `${b.name} · ${b.font.family}${Object.values(b.logos).some(Boolean) ? " · custom logo" : ""}`;
+const auditSummary = (b: BrandConfig) => `${describe(b)} · ${b.colors.primary} / ${b.colors.accent} / ${b.colors.neutral}`;
 
 /**
- * Tenant presets. Hex values here are tenant brand CONFIGURATION (data handed to `updateBrand`), not UI styling.
- * Harbourline, Sahel and Atlantic are fictional demo tenants.
+ * Settings → Branding. Editing applies a PERSONAL preview in this browser instantly; the tenant brand for every user
+ * changes only when a "brand.change" request is approved in Operations (System Admin requests, one approver decides).
  */
-const presets: Preset[] = [
-  { id: "credigit", label: "Credigit default", description: "Ink, Ember and Slate · Baloo 2", brand: { name: "Credigit", colors: { primary: "#0F1E2E", accent: "#E8401C", neutral: "#5B6878" }, font: { family: "Baloo 2" } } },
-  { id: "harbourline", label: "Harbourline Bank (demo)", description: "Navy and teal · Inter", brand: { name: "Harbourline Bank", colors: { primary: "#0B2545", accent: "#0F766E", neutral: "#52606D" }, font: { family: "Inter" } } },
-  { id: "sahel", label: "Sahel Microfinance Bank (demo)", description: "Aubergine and magenta · Nunito Sans", brand: { name: "Sahel Microfinance Bank", colors: { primary: "#2E1A47", accent: "#A21C6B", neutral: "#5E5A6B" }, font: { family: "Nunito Sans" } } },
-  { id: "atlantic", label: "Atlantic Merchant Bank (demo)", description: "Forest and green · IBM Plex Sans", brand: { name: "Atlantic Merchant Bank", colors: { primary: "#14241C", accent: "#1D6B3A", neutral: "#56635B" }, font: { family: "IBM Plex Sans" } } },
-];
-
-const summary = (b: { colors: { primary: string; accent: string; neutral: string }; font: { family: string }; name: string; logos: object }) =>
-  `${b.name} · ${b.colors.primary} / ${b.colors.accent} / ${b.colors.neutral} · ${b.font.family}${Object.values(b.logos).some(Boolean) ? " · custom logo" : ""}`;
-
-/** Settings → Branding: runtime colours, logos and font for the tenant (applies instantly, everywhere). */
 export function BrandingPage() {
+  return (
+    <Suspense>
+      <Branding />
+    </Suspense>
+  );
+}
+
+function Branding() {
   const { brand, updateBrand, resetBrand } = useBrand();
   const role = useRole();
   const log = useAuditLog();
-  const isAdmin = role?.id === "system-admin";
+  const params = useSearchParams();
+  const requesterRoles = useRule<string[]>("settings.brand.requesterRoles");
+  const personalPreview = useRule<boolean>("settings.brand.personalPreview");
+  const approved = useBrandingStore((s) => s.approved);
+  const approvedAt = useBrandingStore((s) => s.approvedAt);
+  const approvedBy = useBrandingStore((s) => s.approvedBy);
+  const pending = usePendingFor("Branding", "tenant");
+  const [submitOpen, setSubmitOpen] = useState(false);
+  const canRequest = Boolean(role && requesterRoles.includes(role.id));
+  const canEdit = canRequest || personalPreview;
+  const tenantBrand = approved ?? defaultBrand;
+  const previewing = brandFingerprint(brand) !== brandFingerprint(tenantBrand);
 
-  // Audit every brand change (debounced so dragging a colour picker writes one entry).
+  // Audit personal preview changes (debounced so dragging a colour picker writes one entry).
   const last = useRef<string | null>(null);
-  const current = summary(brand);
+  const current = auditSummary(brand);
   useEffect(() => {
     if (last.current === null) {
       last.current = current;
@@ -69,87 +91,185 @@ export function BrandingPage() {
     if (last.current === current) return;
     const before = last.current;
     const t = window.setTimeout(() => {
-      log({ action: "Changed branding", entityType: "Branding", entityId: "tenant", before, after: current });
+      log({ action: "Previewed branding (personal, this browser only)", entityType: "Branding", entityId: "preview", before, after: current });
       last.current = current;
     }, 1200);
     return () => window.clearTimeout(t);
   }, [current, log]);
 
-  // Shareable demo links: /settings/branding/?preset=harbourline applies a tenant preset on load.
+  // Shareable demo links: ?preset=harbourline previews a preset; ?preview=pending previews the brand awaiting approval.
+  const presetId = params.get("preset");
+  const previewPending = params.get("preview") === "pending";
+  const pendingBrand = (pending?.payload as BrandChangePayload | undefined)?.brand;
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("preset");
-    const preset = presets.find((p) => p.id === id);
+    const preset = brandPresets.find((p) => p.id === presetId);
     if (preset && preset.id !== "credigit") updateBrand(preset.brand);
-  }, [updateBrand]);
+  }, [presetId, updateBrand]);
+  useEffect(() => {
+    if (previewPending && pendingBrand) updateBrand(pendingBrand);
+  }, [previewPending, pendingBrand, updateBrand]);
 
-  const active = presets.find((p) => p.brand.colors.accent.toLowerCase() === brand.colors.accent.toLowerCase() && p.brand.colors.primary.toLowerCase() === brand.colors.primary.toLowerCase() && p.brand.font.family === brand.font.family);
+  const discard = () => (approved ? updateBrand(approved) : resetBrand());
 
   return (
-    <ModulePage
-      module="settings"
-      title="Branding"
-      description="Change the application's colours, logo and font on the fly. Every screen, chart and document preview restyles instantly."
-    >
+    <ModulePage module="settings" title="Branding" description="Colours, logo and font for the whole product. Try changes instantly as a personal preview; the tenant brand changes for everyone once the request is approved in Operations.">
+      <TenantBrandSync />
       <Stack gap="large">
-        <Alert tone="info" title="Applies instantly for this tenant">
-          Changes take effect across the whole product as you make them — no reload or release. In this prototype they are stored in this browser; in production the tenant brand is saved centrally and{" "}
-          {isAdmin ? "editable by you as System Admin." : "restricted to the System Admin (everyone can try it here)."}
+        <Alert tone="info" title="Tenant brand">
+          {approved ? (
+            <>
+              <span className="font-semibold">{describe(approved)}</span> — approved by {approvedBy} {approvedAt ? ago(approvedAt) : ""}.
+            </>
+          ) : (
+            "Credigit defaults (Baloo 2) — no tenant brand has been approved yet."
+          )}{" "}
+          Changes for every user need a {requesterRoles.length ? "System Admin request" : "request"} and one approval in{" "}
+          <TextLink href="/operations" as={Link}>
+            Operations
+          </TextLink>
+          .
         </Alert>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Tenant presets</CardTitle>
-            <Text variant="small" tone="muted">
-              One click applies a complete brand: name, colours and font. Fine-tune any value below.
-            </Text>
-          </CardHeader>
-          <CardContent>
-            <RolePicker
-              aria-label="Tenant brand presets"
-              layout="grid"
-              searchable={false}
-              selectedId={active?.id}
-              roles={presets.map((p) => ({
-                id: p.id,
-                title: p.label,
-                description: p.description,
-                badge: active?.id === p.id ? "Active" : undefined,
-                icon: (
-                  <span className="flex -space-x-1.5" aria-hidden>
-                    {[p.brand.colors.primary, p.brand.colors.accent, p.brand.colors.neutral].map((c) => (
-                      <span key={c} className="size-5 rounded-full ring-2 ring-surface" style={{ backgroundColor: c }} />
-                    ))}
-                  </span>
-                ),
-              }))}
-              onSelect={(r) => {
-                const p = presets.find((x) => x.id === r.id)!;
-                if (p.id === "credigit") resetBrand();
-                else updateBrand(p.brand);
-              }}
-            />
-          </CardContent>
-        </Card>
+        {pending ? (
+          <Alert tone="warning" title="A brand change is awaiting approval">
+            {(pending.payload as BrandChangePayload).summary} — requested by {pending.requestedBy.name} {ago(pending.requestedAt)}.{" "}
+            <TextLink href={`/operations/item?id=${pending.id}`} as={Link}>
+              Open request
+            </TextLink>{" "}
+            ·{" "}
+            <TextLink href="/settings/branding?preview=pending" as={Link}>
+              Preview it live
+            </TextLink>
+          </Alert>
+        ) : null}
+
+        {previewing ? (
+          <Alert tone="info" title="Personal preview — only you see this, in this browser">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>
+                Previewing <span className="font-semibold">{describe(brand)}</span>. Other users still see the tenant brand.
+              </span>
+              <span className="flex flex-wrap gap-2">
+                <Button size="small" variant="tertiary" iconBefore={<Undo2 aria-hidden className="size-4" />} onClick={discard}>
+                  Discard preview
+                </Button>
+                {canRequest ? (
+                  <Button size="small" iconBefore={<Send aria-hidden className="size-4" />} disabled={Boolean(pending)} onClick={() => setSubmitOpen(true)}>
+                    Request as tenant brand
+                  </Button>
+                ) : null}
+              </span>
+            </div>
+          </Alert>
+        ) : null}
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <BrandSettingsPanel title="Colours, logos and font" description="Valid changes apply immediately. Logos: SVG, PNG or WebP up to 512 KB. Fonts other than Baloo 2 load from Google Fonts." />
-          <LivePreview />
+          {canEdit ? (
+            <BrandSettingsPanel
+              presets={brandPresets}
+              title="Colours, logos and font"
+              description="Changes apply immediately as your personal preview. Logos: SVG, PNG or WebP up to 512 KB. Fonts other than Baloo 2 load from Google Fonts."
+            />
+          ) : (
+            <Card>
+              <CardContent>
+                <Text tone="muted">Your role can view the tenant brand. Personal previews are turned off for this tenant (rule settings.brand.personalPreview).</Text>
+              </CardContent>
+            </Card>
+          )}
+          <LivePreview previewing={previewing} />
         </div>
       </Stack>
+      {submitOpen ? <SubmitBrandModal brand={brand} onClose={() => setSubmitOpen(false)} /> : null}
     </ModulePage>
   );
 }
 
-function LivePreview() {
+function SubmitBrandModal({ brand, onClose }: { brand: BrandConfig; onClose: () => void }) {
+  const minReason = useRule<number>("operations.minCommentLength");
+  const [reason, setReason] = useState("");
+  const [result, setResult] = useState<SubmitResult | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    if (reason.trim().length < minReason) return setResult({ ok: false, reason: `Give a reason of at least ${minReason} characters.` });
+    setBusy(true);
+    const before = await runHooks("settings.brand.change.before", { brand, reason: reason.trim() });
+    if (!before.ok) {
+      setBusy(false);
+      return setResult({ ok: false, reason: `Blocked by ${before.vetoedBy}: ${before.reason}` });
+    }
+    const payload: BrandChangePayload = { brand: before.ctx.brand, summary: auditSummary(before.ctx.brand), reason: before.ctx.reason };
+    const r = await submitOperation<BrandChangePayload>("brand.change", {
+      title: `Tenant brand: ${describe(payload.brand)}`,
+      subject: { type: "Branding", id: "tenant", title: "Tenant brand", href: "/settings/branding?preview=pending" },
+      payload,
+      summary: [
+        { label: "Brand name", value: payload.brand.name },
+        { label: "Font", value: payload.brand.font.family },
+        { label: "Logo", value: Object.values(payload.brand.logos).some(Boolean) ? "Custom logo uploaded" : "Credigit logo" },
+        { label: "Live preview", value: "Settings → Branding → “Preview it live”" },
+        { label: "Reason", value: payload.reason },
+      ],
+    });
+    await runHooks("settings.brand.change.after", { payload, result: r });
+    setBusy(false);
+    setResult(r);
+  };
+
+  return (
+    <Modal
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title="Request tenant brand change"
+      description={`${describe(brand)} — applies to every user once approved in Operations.`}
+      footer={
+        result?.ok ? (
+          <Button onClick={onClose}>Done</Button>
+        ) : (
+          <>
+            <Button variant="tertiary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button loading={busy} onClick={() => void submit()}>
+              Submit for approval
+            </Button>
+          </>
+        )
+      }
+    >
+      <Stack gap="medium">
+        <Field label="Reason for the change" htmlFor="brand-reason" required description="Shown to the approver; kept in the audit log.">
+          <Textarea id="brand-reason" rows={3} value={reason} disabled={Boolean(result?.ok)} onChange={(e) => setReason(e.target.value)} />
+        </Field>
+        {result ? (
+          result.ok ? (
+            <Alert tone="success" title={result.applied ? "Applied" : "Sent for approval"}>
+              {result.applied ? "The workflow has no approval steps, so the brand applies now." : "Your preview stays on in this browser until the approver decides."}{" "}
+              <TextLink href={`/operations/item?id=${result.instance.id}`} as={Link}>
+                Track request {result.instance.id}
+              </TextLink>
+            </Alert>
+          ) : (
+            <Alert tone="danger">{result.reason}</Alert>
+          )
+        ) : null}
+      </Stack>
+    </Modal>
+  );
+}
+
+function LivePreview({ previewing }: { previewing: boolean }) {
   const { brand } = useBrand();
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2">
           Live preview <Badge tone="accent">{brand.font.family}</Badge>
+          {previewing ? <Badge tone="warning">Personal preview</Badge> : <Badge tone="success">Tenant brand</Badge>}
         </CardTitle>
         <Text variant="small" tone="muted">
-          Real components from the app, rendered with the current brand.
+          Real components from the app, rendered with the brand you&apos;re seeing now.
         </Text>
       </CardHeader>
       <CardContent>

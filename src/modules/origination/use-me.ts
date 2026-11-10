@@ -25,6 +25,3 @@ export function useMe(): { user: User; roleId: RoleId | undefined } {
     return { user, roleId: role?.id };
   }, [users, session, role]);
 }
-
-/** Roles that may initiate an application (PRD §6.1.1 step 2: Account Officer; BDMs also originate). */
-export const initiatorRoles: RoleId[] = ["account-officer", "bdm"];

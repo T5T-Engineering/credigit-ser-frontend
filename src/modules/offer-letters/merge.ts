@@ -4,12 +4,14 @@
  */
 import type { Application, Collateral, Facility, Obligor, Tenant, User } from "@/lib/data/types";
 import { date, money } from "@/lib/format";
+import { getRule } from "@/lib/platform/rules";
 import { rand } from "../credit-admin/common";
 import type { Clause, ClauseLibrary } from "./library";
 import type { OfferLetter } from "./store";
 
 export type MergeContext = Record<string, string>;
 
+/** Repayment wording per product (TD-852: product catalogue copy — move to the tenant product configuration). */
 const repaymentByProduct: Record<string, string> = {
   "Term loan": "Equal monthly instalments of principal and interest after any agreed moratorium",
   Overdraft: "Interest monthly; principal from the cash flows of the business on demand / at expiry",
@@ -23,7 +25,7 @@ const repaymentByProduct: Record<string, string> = {
   "Asset finance": "Monthly instalments of principal and interest",
 };
 
-/** Approved pricing: the facility's rate when booked, else the application's approved pricing (demo value). */
+/** Approved pricing: the facility's rate when booked, else the application's approved pricing (demo value — TD-851: the approved rate isn't on the Application spine yet). */
 export function approvedRate(app: Application, facility?: Facility): number {
   return facility?.ratePct ?? Math.round((21.5 + rand(app.id, "rate") * 6) * 2) / 2;
 }
@@ -57,8 +59,8 @@ export function buildMergeContext(args: {
     "facility.repayment": repaymentByProduct[app.product] ?? "As agreed",
     "request.type": app.requestType.toLowerCase(),
     "collateral.summary": cols.length ? cols.map((c) => `${c.type} — ${c.description} (OMV ${money(c.marketValue)})`).join("; ") : "as approved",
-    "validity.days": String(letter?.validityDays ?? 7),
-    "notice.days": "10",
+    "validity.days": String(letter?.validityDays ?? getRule<number>("offer-letters.validityDaysDefault")),
+    "notice.days": String(getRule<number>("offer-letters.noticeDays")),
     "default.rate": "[default charge — set by tenant]",
     "turnover.commitment": "[turnover commitment — set at approval]",
     "ao.name": users.find((u) => u.id === (obligor?.relationshipManagerId ?? app.createdById))?.name ?? "your Relationship Manager",
