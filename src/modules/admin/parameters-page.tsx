@@ -30,7 +30,7 @@ import { useCan, useSession } from "@/lib/auth/session";
 import { useDbActions, useSectors, useUsers } from "@/lib/data/hooks";
 import type { CollateralType, Sector } from "@/lib/data/types";
 import { chartFlow } from "@/lib/workflow";
-import { RAR_MIDPOINT } from "@/lib/rar";
+import { rarMidpoint } from "@/lib/rar";
 import { roleById, roles, type RoleId } from "@/lib/rbac/roles";
 import { ago, money, moneyShort, pct } from "@/lib/format";
 import { useAuditLog } from "@/modules/workspace/use-audit-log";
@@ -239,7 +239,7 @@ function ThresholdsSection({ canEdit }: { canEdit: boolean }) {
             <NumberField id="p-fast" label="Fast-Track chart-flow ceiling" prefix="₦" value={d.fastTrack} onChange={set("fastTrack")} disabled={!canEdit} description="Parameter — set by tenant (PRD §6.1.3; demo default ₦50m)." />
           </Stack>
         </Section>
-        <Section title="360 RAR posture intensity" prd="§6.2.5" description={`Distance of the composite position from the ${RAR_MIDPOINT} midpoint sets the intensity band (12 intensity-graded postures + Neutral / Transitional).`}>
+        <Section title="360 RAR posture intensity" prd="§6.2.5" description={`Distance of the composite position from the ${rarMidpoint()} midpoint sets the intensity band (12 intensity-graded postures + Neutral / Transitional).`}>
           <Grid columns={{ base: 1, sm: 3 }} gap="medium">
             <NumberField id="p-neutral" label="Neutral below" step="0.1" value={d.neutral} onChange={set("neutral")} disabled={!canEdit} />
             <NumberField id="p-marginal" label="Marginal below" step="0.1" value={d.marginal} onChange={set("marginal")} disabled={!canEdit} />

@@ -11,7 +11,7 @@
  *    recomputed with the shared formula in `@/lib/rar` (never forked here).
  */
 import { createSeed } from "@/lib/data/seed";
-import { rarPosition, RAR_MIDPOINT, type RarPosition } from "@/lib/rar";
+import { rarPosition, rarMidpoint, type RarPosition } from "@/lib/rar";
 import type { Obligor, Posture, RarScores } from "@/lib/data/types";
 import {
   cardinalByKey,
@@ -401,8 +401,8 @@ export const overlayGuidance = {
 
 /** Parameters with the most leverage to flip the posture across the nearest composite midpoint (for Marginal readings). */
 export function flipCandidates(a: Assessment, limit = 3): { reading: ParameterReading; move: number; axis: "X" | "Y" }[] {
-  const dx = a.position.x - RAR_MIDPOINT;
-  const dy = a.position.y - RAR_MIDPOINT;
+  const dx = a.position.x - rarMidpoint();
+  const dy = a.position.y - rarMidpoint();
   const axis: "X" | "Y" = Math.abs(dx) <= Math.abs(dy) ? "X" : "Y";
   const d = Math.abs(axis === "X" ? dx : dy);
   const keys: CardinalKey[] = axis === "X" ? ["industry", "comparative"] : ["internal", "macro"];

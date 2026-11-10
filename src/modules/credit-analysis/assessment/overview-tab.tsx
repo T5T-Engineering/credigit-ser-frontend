@@ -24,7 +24,7 @@ import {
   type MatrixCell,
   type ScatterSeries,
 } from "@credigit/web-ui";
-import { defaultIntensityThresholds, postureTone, rarPosition, RAR_MIDPOINT } from "@/lib/rar";
+import { intensityThresholds, postureTone, rarPosition, rarMidpoint } from "@/lib/rar";
 import type { Obligor } from "@/lib/data/types";
 import { moneyShort } from "@/lib/format";
 import { walletPositionMeta, type WalletData } from "../data";
@@ -41,9 +41,10 @@ type Props = {
 };
 
 const mean = (xs: number[]) => (xs.length ? xs.reduce((s, x) => s + x, 0) / xs.length : 0);
-const t = defaultIntensityThresholds;
+// Thresholds are read at render time from business rules (see `t` inside the component).
 
 export function OverviewTab({ a, history, peers, wallet, onOpenTab }: Props) {
+  const t = intensityThresholds();
   const p = a.position;
   const peerAvg = useMemo(
     () => Object.fromEntries(cardinalPoints.map((c) => [c.key, Math.round(mean(peers.peers.map((o) => o.rar[c.key])) * 10) / 10])) as Record<string, number>,
@@ -61,8 +62,8 @@ export function OverviewTab({ a, history, peers, wallet, onOpenTab }: Props) {
     const thrust = Array.from({ length: steps - 1 }, (_, i) => {
       const f = (i + 1) / steps;
       return {
-        x: RAR_MIDPOINT + (p.x - RAR_MIDPOINT) * f,
-        y: RAR_MIDPOINT + (p.y - RAR_MIDPOINT) * f,
+        x: rarMidpoint() + (p.x - rarMidpoint()) * f,
+        y: rarMidpoint() + (p.y - rarMidpoint()) * f,
         size: 0.02,
       };
     });
@@ -156,8 +157,8 @@ export function OverviewTab({ a, history, peers, wallet, onOpenTab }: Props) {
               xLabel="X-Composite"
               yLabel="Y-Composite"
               referenceLines={[
-                { axis: "x", value: RAR_MIDPOINT },
-                { axis: "y", value: RAR_MIDPOINT },
+                { axis: "x", value: rarMidpoint() },
+                { axis: "y", value: rarMidpoint() },
               ]}
               xFormatter={(v) => v.toFixed(1)}
               yFormatter={(v) => v.toFixed(1)}
@@ -235,7 +236,7 @@ export function OverviewTab({ a, history, peers, wallet, onOpenTab }: Props) {
                   {
                     label: "Lead",
                     value: p.neutral ? "n/a" : p.lead,
-                    hint: `|Y−5.5| ${Math.abs(p.y - RAR_MIDPOINT).toFixed(2)} vs |X−5.5| ${Math.abs(p.x - RAR_MIDPOINT).toFixed(2)}`,
+                    hint: `|Y−5.5| ${Math.abs(p.y - rarMidpoint()).toFixed(2)} vs |X−5.5| ${Math.abs(p.x - rarMidpoint()).toFixed(2)}`,
                   },
                 ]}
               />

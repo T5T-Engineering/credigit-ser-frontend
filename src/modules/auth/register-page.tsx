@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { UserPlus } from "lucide-react";
 import { AuthCard, Button, Checkbox, Field, Input, Logo, PasswordInput, PasswordStrength, Select, Stack, Text, evaluatePassword } from "@credigit/web-ui";
-import { register } from "@/lib/auth/accounts";
+import { passwordPolicy, register } from "@/lib/auth/accounts";
 import { branches } from "@/lib/data/seed";
 import { roles, type RoleId } from "@/lib/rbac/roles";
 import { AuthShell } from "./auth-shell";
@@ -29,7 +29,7 @@ export function RegisterPage() {
     if (!form.institution.trim()) next.institution = "Enter your institution.";
     if (!form.branch) next.branch = "Choose your branch or office.";
     if (!form.role) next.role = "Choose the role you need. Your admin confirms it.";
-    if (!evaluatePassword(form.password).valid) next.password = "Your password doesn't meet all the requirements.";
+    if (!evaluatePassword(form.password, passwordPolicy()).valid) next.password = "Your password doesn't meet all the requirements.";
     if (form.confirm !== form.password) next.confirm = "Passwords don't match.";
     if (!form.terms) next.terms = "You need to accept the acceptable-use policy.";
     setErrors(next);
@@ -88,7 +88,7 @@ export function RegisterPage() {
             <Field label="Password" required error={errors.password}>
               <PasswordInput autoComplete="new-password" value={form.password} onChange={(e) => set("password")(e.target.value)} />
             </Field>
-            <PasswordStrength value={form.password} />
+            <PasswordStrength value={form.password} rules={passwordPolicy()} />
             <Field label="Confirm password" required error={errors.confirm}>
               <PasswordInput autoComplete="new-password" value={form.confirm} onChange={(e) => set("confirm")(e.target.value)} />
             </Field>

@@ -23,6 +23,7 @@ import { roles, canAccess } from "@/lib/rbac/roles";
 import { useRole, useSession } from "@/lib/auth/session";
 import { useApplications, useDbActions, useNotifications, useObligors, useTenant } from "@/lib/data/hooks";
 import { ago } from "@/lib/format";
+import { useRule } from "@/lib/platform/rules";
 import { demoAccessEnabled } from "./auth-guard";
 
 /** Normalise "/origination/" → "/origination". */
@@ -41,8 +42,6 @@ export function resetAllDemoData(resetSpine: () => void) {
   window.location.reload();
 }
 
-const IDLE_LIMIT_MS = 15 * 60 * 1000;
-const WARNING_SECONDS = 60;
 
 export function AppFrame({ children }: { children: ReactNode }) {
   const pathname = cleanPath(usePathname());
@@ -57,6 +56,8 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const applications = useApplications();
   const { update, resetDemo } = useDbActions();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const IDLE_LIMIT_MS = useRule<number>("session.idleTimeoutMinutes") * 60_000;
+  const WARNING_SECONDS = useRule<number>("session.warningSeconds");
 
   const groups: SideNavGroup[] = useMemo(
     () =>
@@ -125,7 +126,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
       events.forEach((e) => window.removeEventListener(e, bump));
       window.clearInterval(timer);
     };
-  }, [warnAt]);
+  }, [warnAt, IDLE_LIMIT_MS, WARNING_SECONDS]);
 
   const doSignOut = useCallback(async () => {
     setWarnAt(null);

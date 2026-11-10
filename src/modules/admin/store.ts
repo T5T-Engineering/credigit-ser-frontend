@@ -13,7 +13,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { roleById, roles, type Role, type RoleId } from "@/lib/rbac/roles";
 import { chartFlow } from "@/lib/workflow";
-import { defaultIntensityThresholds, type IntensityThresholds } from "@/lib/rar";
+import { intensityThresholds, type IntensityThresholds } from "@/lib/rar";
 import type { CollateralType, ProductType } from "@/lib/data/types";
 
 // ---------------------------------------------------------------- types
@@ -121,7 +121,8 @@ const allProducts: ProductType[] = [
 export const defaultParams: AdminParams = {
   stepUpThresholdNgn: 100_000_000,
   fastTrackCeilingNgn: 50_000_000,
-  rar: defaultIntensityThresholds,
+  // TECH-DEBT TD-002: demo default duplicated from business rules "rar.*" until the admin store is migrated to the rules registry.
+  rar: { neutralBelow: 0.4, marginalBelow: 1.2, moderateBelow: 2.4 },
   chartFlow: chartFlow.map((t) => ({ pair: t.pair, adjudicator: t.adjudicator ?? "" })),
   ifrs9: {
     stage2Dpd: 30,

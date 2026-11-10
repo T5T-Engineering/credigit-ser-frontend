@@ -25,7 +25,7 @@ import {
 import { ModulePage } from "@/components/module-page";
 import { useObligors, useSectors } from "@/lib/data/hooks";
 import { useHydrated } from "@/lib/auth/session";
-import { rarPosition, RAR_MIDPOINT, type RarPosition } from "@/lib/rar";
+import { rarPosition, rarMidpoint, type RarPosition } from "@/lib/rar";
 import type { Obligor } from "@/lib/data/types";
 import { CORPUS_VERSION, corpusMetrics, formatMetric, lifeCycleTone, ngxById, ngxForSector, sectorDistribution, sectorMapping } from "../data";
 import { assess, OUTLIER_SD, ratioBenchmarks, type RatioBenchmark } from "../logic";
@@ -280,8 +280,8 @@ export function BenchmarksPage() {
                     xLabel="X-Composite"
                     yLabel="Y-Composite"
                     referenceLines={[
-                      { axis: "x", value: RAR_MIDPOINT },
-                      { axis: "y", value: RAR_MIDPOINT },
+                      { axis: "x", value: rarMidpoint() },
+                      { axis: "y", value: rarMidpoint() },
                     ]}
                     xFormatter={(v) => v.toFixed(1)}
                     yFormatter={(v) => v.toFixed(1)}

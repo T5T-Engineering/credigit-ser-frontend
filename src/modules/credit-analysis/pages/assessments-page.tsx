@@ -24,7 +24,7 @@ import { ModulePage } from "@/components/module-page";
 import { useLookups, useObligors } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { useHydrated } from "@/lib/auth/session";
-import { rarPosition, RAR_MIDPOINT, type RarPosition } from "@/lib/rar";
+import { rarPosition, rarMidpoint, type RarPosition } from "@/lib/rar";
 import type { Obligor } from "@/lib/data/types";
 import { date } from "@/lib/format";
 import { ageDays, copBandFor, copRatio, STALE_AFTER_DAYS } from "../logic";
@@ -266,7 +266,7 @@ export function AssessmentsPage() {
             <div>
               <CardTitle>Portfolio composite positions</CardTitle>
               <CardDescription>
-                X-Composite (Operating Industry + Comparative) against Y-Composite (Internal Risk + Macro-Economic); quadrants split at the {RAR_MIDPOINT} midpoint.
+                X-Composite (Operating Industry + Comparative) against Y-Composite (Internal Risk + Macro-Economic); quadrants split at the {rarMidpoint()} midpoint.
               </CardDescription>
             </div>
           </CardHeader>
@@ -280,8 +280,8 @@ export function AssessmentsPage() {
                   xLabel="X-Composite — external & comparative position"
                   yLabel="Y-Composite — internal & macro stability"
                   referenceLines={[
-                    { axis: "x", value: RAR_MIDPOINT, label: "X 5.5" },
-                    { axis: "y", value: RAR_MIDPOINT, label: "Y 5.5" },
+                    { axis: "x", value: rarMidpoint(), label: "X 5.5" },
+                    { axis: "y", value: rarMidpoint(), label: "Y 5.5" },
                   ]}
                   height={320}
                   xFormatter={(v) => v.toFixed(1)}

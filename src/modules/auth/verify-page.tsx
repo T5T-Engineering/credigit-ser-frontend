@@ -8,6 +8,7 @@ import { Alert, AuthCard, Button, Logo, OtpVerification, Text } from "@credigit/
 import { demoAccessEnabled } from "@/components/auth-guard";
 import { maskEmail, platformUserFor, resendCode, useAccounts, verifyCode } from "@/lib/auth/accounts";
 import { useHydrated, useSession } from "@/lib/auth/session";
+import { getRule } from "@/lib/platform/rules";
 import { AuthShell } from "./auth-shell";
 
 const copy = {
@@ -115,7 +116,7 @@ export function VerifyPage() {
           }}
         />
         <Text variant="caption" tone="subtle" align="center">
-          Codes expire after 10 minutes. After 5 wrong codes you&apos;ll need a new one.
+          Codes expire after {getRule<number>("auth.otpTtlMinutes")} minutes. After {getRule<number>("auth.otpMaxAttempts")} wrong codes you&apos;ll need a new one.
         </Text>
       </AuthCard>
     </AuthShell>

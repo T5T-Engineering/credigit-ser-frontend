@@ -10,13 +10,17 @@
  * in the Rules & Parameters Engine — the values below are demo defaults, not product rules.
  */
 import type { Posture, RarScores } from "./data/types";
+import { getRule } from "./platform/rules";
 
-export const RAR_MIDPOINT = 5.5;
+/** PRD §6.2.5 midpoint, held as business rule "rar.midpoint". */
+export const rarMidpoint = () => getRule<number>("rar.midpoint");
 
 export type IntensityThresholds = { neutralBelow: number; marginalBelow: number; moderateBelow: number };
 
-/** Demo-tenant defaults (configurable in Admin → Rules & parameters). */
-export const defaultIntensityThresholds: IntensityThresholds = { neutralBelow: 0.4, marginalBelow: 1.2, moderateBelow: 2.4 };
+/** Current tenant thresholds from business rules (Operations → Business rules). */
+export function intensityThresholds(): IntensityThresholds {
+  return { neutralBelow: getRule<number>("rar.neutralBelow"), marginalBelow: getRule<number>("rar.marginalBelow"), moderateBelow: getRule<number>("rar.moderateBelow") };
+}
 
 export type Intensity = "Strongly" | "Moderately" | "Marginally";
 
@@ -36,7 +40,8 @@ export type RarPosition = {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-export function rarPosition(s: RarScores, t: IntensityThresholds = defaultIntensityThresholds): RarPosition {
+export function rarPosition(s: RarScores, t: IntensityThresholds = intensityThresholds()): RarPosition {
+  const RAR_MIDPOINT = rarMidpoint();
   const x = round2((s.industry + s.comparative) / 2);
   const y = round2((s.internal + s.macro) / 2);
   const dx = x - RAR_MIDPOINT;
