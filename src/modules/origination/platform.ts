@@ -12,7 +12,7 @@ import { useDb } from "@/lib/data/store";
 import { defineEvents, subscribe } from "@/lib/platform/events";
 import { defineHookPoints, registerHook } from "@/lib/platform/hooks";
 import { defineTemplates, type NotificationTemplate } from "@/lib/platform/notifications";
-import { getDefinition, registerOperation, useOperationsStore, type OperationInstance, type WorkflowStep } from "@/lib/platform/operations";
+import { currentStep, registerOperation, useOperationsStore, type OperationInstance, type WorkflowStep } from "@/lib/platform/operations";
 import { defineRules, getRule, type RuleDefinition } from "@/lib/platform/rules";
 import type { Actor } from "@/lib/platform/scope";
 import { approvalStepsFor, getChartFlow, getFastTrackTier, TIER_SLOTS } from "@/lib/workflow";
@@ -273,7 +273,7 @@ registerHook<DecideCtx>({
     const exception = useOriginationStore.getState().extras[app.id]?.exception;
     if (app.limitGate.startsWith("Breach") && exception?.decision !== "granted") return { veto: `Blocked by the portfolio-limit gate (${app.limitGate}) until the CRO / Board grant an exception.` };
     // PRD §6.1.1 step 3: the BDM can't submit until collateral due diligence is complete.
-    const step = getDefinition(instance.operationType).steps[instance.stepIndex];
+    const step = currentStep(instance);
     if (instance.stepIndex === 0 && step?.approverRoles.includes("bdm") && actor.roleId === "bdm") {
       const pending = useDb.getState().collateral.filter((c) => app.collateralIds.includes(c.id) && (c.perfection === "Not started" || c.perfection === "Search in progress"));
       if (pending.length) return { veto: "Collateral due diligence is not complete — Legal must finish the search before the BDM can concur (PRD §6.1.1 step 3)." };

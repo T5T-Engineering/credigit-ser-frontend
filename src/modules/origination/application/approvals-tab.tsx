@@ -24,7 +24,7 @@ import {
 } from "@credigit/web-ui";
 import { dateTime, money, moneyShort } from "@/lib/format";
 import { roleById } from "@/lib/rbac/roles";
-import { canDecide, currentStep, getDefinition, useOperationsStore } from "@/lib/platform/operations";
+import { canDecide, currentStep, getDefinition, instanceSteps, useOperationsStore } from "@/lib/platform/operations";
 import { useRule } from "@/lib/platform/rules";
 import { useScope } from "@/lib/platform/scope";
 import { collateralDueDiligenceDone, finalAuthority, isBreach } from "../logic";
@@ -51,7 +51,7 @@ export function ApprovalsTab({ c }: { c: AppCtx }) {
   const history = instances.filter((i) => isCreditOp(i.operationType) && i.subject.id === app.id);
   const op = history[0];
   const open = op && (op.status === "Pending" || op.status === "In progress");
-  const steps = op ? getDefinition(op.operationType).steps : [];
+  const steps = op ? instanceSteps(op) : [];
   const step = op ? currentStep(op) : undefined;
   const allowed = op && open ? canDecide(op, actor) : undefined;
   const inDecisionStage = app.stage === "Recommendation" || app.stage === "Approval";
