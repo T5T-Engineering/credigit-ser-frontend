@@ -6,6 +6,7 @@
  */
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { getRule } from "@/lib/platform/rules";
 import type { Run } from "./data";
 
 type Override = { lastRunAt?: string; status?: "Healthy" | "Degraded" | "Failed" | "Paused"; schedule?: string; enabled?: boolean };
@@ -25,7 +26,7 @@ export const useConnectors = create<State>()(
       runs: [],
       overrides: {},
       running: {},
-      addRun: (r) => set((s) => ({ runs: [r, ...s.runs].slice(0, 100) })),
+      addRun: (r) => set((s) => ({ runs: [r, ...s.runs].slice(0, getRule<number>("connectors.runHistoryLimit")) })),
       setOverride: (id, o) => set((s) => ({ overrides: { ...s.overrides, [id]: { ...s.overrides[id], ...o } } })),
       setRunning: (id, v) => set((s) => ({ running: { ...s.running, [id]: v } })),
     }),

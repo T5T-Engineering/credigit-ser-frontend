@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { addYears, format } from "date-fns";
-import { CheckCircle2, FileSearch, HelpCircle, Landmark, ShieldCheck } from "lucide-react";
+import { format } from "date-fns";
+import { FileSearch, Landmark, Send } from "lucide-react";
 import {
   ActivityFeed,
   Alert,
@@ -41,15 +41,30 @@ import {
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { useRole } from "@/lib/auth/session";
-import { useAudit, useDbActions, useDocuments, useFacilities, useLookups } from "@/lib/data/hooks";
-import { newId } from "@/lib/data/store";
+import { useAudit, useDocuments, useFacilities, useLookups } from "@/lib/data/hooks";
+import { usePendingFor } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { DocumentRecord, PerfectionStatus } from "@/lib/data/types";
 import { date, dateTime, money, moneyShort, number, pct } from "@/lib/format";
-import { useActor, useAuditLog } from "@/modules/monitoring/audit";
+import { PendingApproval } from "@/modules/monitoring/pending-approval";
 import { cbnClassTones } from "@/modules/monitoring/logic";
 import { insuranceOf, lienTones, moTones, valuationHistory, type ValuationEntry } from "../data";
 import { collateralAbilities, facilityExposure, perfectionIndex, perfectionSteps, perfectionTones, priceSeries } from "../logic";
+import {
+  advancePerfection,
+  confirmGenuineness,
+  cureDefect,
+  recordInsuranceRenewal,
+  recordSearch,
+  recordValuation,
+  reportDefect,
+  requestLegalSignoff,
+  requestVerification,
+  uploadDocuments,
+  vaultDocuments,
+  type Result,
+} from "../service";
 import { useCollateralStore, useCollateralView, useSharePrices } from "../store";
 
 const docStatus: Record<DocumentRecord["status"], DocumentItem["status"]> = {
@@ -71,13 +86,14 @@ export function CollateralItemPage() {
   const auditLog = useAudit();
   const role = useRole();
   const can = collateralAbilities(role?.id);
-  const actor = useActor();
-  const audit = useAuditLog();
-  const { update, upsert } = useDbActions();
   const store = useCollateralStore();
   const { asOf } = useSharePrices();
-  const [modal, setModal] = useState<null | "revalue" | "verify" | "query" | "insurance" | "search" | "signoff" | "vault" | "defect">(null);
+  const [modal, setModal] = useState<null | ModalKind>(null);
   const [files, setFiles] = useState<File[]>([]);
+  const [message, setMessage] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
+  const pending = usePendingFor("Collateral", id ?? "");
+  const docAccept = useRule<string>("collateral.documents.accept");
+  const docMaxMb = useRule<number>("collateral.documents.maxSizeMb");
 
   const history: ValuationEntry[] = useMemo(() => (c ? [...valuationHistory(c), ...(store.valuations[c.id] ?? [])] : []), [c, store.valuations]);
 
@@ -135,10 +151,10 @@ export function CollateralItemPage() {
   ];
   const activity = auditLog.filter((a) => a.entityId === c.id);
 
-  const setPerfection = (to: PerfectionStatus, action: string) => {
-    update("collateral", c.id, { perfection: to });
-    audit({ action, entityType: "Collateral", entityId: c.id, before: c.perfection, after: to });
-  };
+  const pendingType = pending?.operationType;
+  const report = (r: Result<{ operationId?: string }>, okText: string) =>
+    setMessage(r.ok ? { tone: "success", text: r.operationId ? `${okText} — submitted for approval (${r.operationId}).` : `${okText}.` } : { tone: "danger", text: r.reason });
+  const setPerfection = async (to: PerfectionStatus, action: string) => report(await advancePerfection(c, to, action), action);
 
   const nextStep = step >= 0 && step < perfectionSteps.length - 1 ? perfectionSteps[step + 1]! : step === -1 ? perfectionSteps[0]! : undefined;
   const canAdvance =
@@ -155,12 +171,7 @@ export function CollateralItemPage() {
           {shares ? "Upload CSCS valuation" : "Record revaluation"}
         </Button>
       )}
-      {can.verify && c.verification.status !== "Verified" && (
-        <Button iconBefore={<ShieldCheck aria-hidden className="size-4" />} onClick={() => setModal("verify")}>
-          Verify valuation
-        </Button>
-      )}
-      {can.legal && !legal.signOff && (c.perfection === "Perfected" || c.perfection === "Registration") && <Button onClick={() => setModal("signoff")}>Legal sign-off</Button>}
+      {can.legal && !legal.signOff && pendingType !== "collateral.legal.signoff" && (c.perfection === "Perfected" || c.perfection === "Registration") && <Button onClick={() => setModal("signoff")}>Legal sign-off</Button>}
     </Stack>
   );
 
@@ -191,6 +202,13 @@ export function CollateralItemPage() {
             { label: "MO verification", value: c.verification.status },
           ]}
         />
+
+        {message && (
+          <Alert tone={message.tone} title={message.tone === "danger" ? "Not completed" : "Done"}>
+            {message.text}
+          </Alert>
+        )}
+        {pending && pendingType !== "collateral.valuation.verify" && <PendingApproval subjectType="Collateral" subjectId={c.id} />}
 
         {!c.eligible && (
           <Alert tone="warning" title="Haircut adjustment not yet eligible">
@@ -304,15 +322,16 @@ export function CollateralItemPage() {
                           </Text>
                         )}
                         {c.verification.note && <Text variant="small">{c.verification.note}</Text>}
-                        {can.verify && c.verification.status !== "Verified" && (
-                          <Stack direction="horizontal" gap="small" wrap>
-                            <Button size="small" iconBefore={<CheckCircle2 aria-hidden className="size-4" />} onClick={() => setModal("verify")}>
-                              Verify
-                            </Button>
-                            <Button size="small" variant="tertiary" iconBefore={<HelpCircle aria-hidden className="size-4" />} onClick={() => setModal("query")}>
-                              Query
-                            </Button>
-                          </Stack>
+                        {pendingType === "collateral.valuation.verify" && <PendingApproval subjectType="Collateral" subjectId={c.id} label="Awaiting Middle Office verification" />}
+                        {can.manage && !pending && c.verification.status !== "Verified" && (
+                          <Button size="small" variant="secondary" iconBefore={<Send aria-hidden className="size-4" />} onClick={async () => report(await requestVerification(c), "Valuation sent for verification")}>
+                            Send for verification
+                          </Button>
+                        )}
+                        {can.verify && !pending && c.verification.status !== "Verified" && (
+                          <Text variant="caption" tone="subtle">
+                            Verification requests arrive in Operations → Approvals: approve to verify, reject to query.
+                          </Text>
                         )}
                         {can.manage && (
                           <Text variant="caption" tone="subtle">
@@ -404,8 +423,10 @@ export function CollateralItemPage() {
                         <CardTitle>Perfection workflow</CardTitle>
                         <CardDescription>Search and documentation by Legal; registration and perfection by Collateral Management.</CardDescription>
                       </div>
-                      {canAdvance && nextStep && (
-                        <Button onClick={() => setPerfection(nextStep.id, `Advanced perfection to ${nextStep.title}`)}>Advance to {nextStep.title.toLowerCase()}</Button>
+                      {canAdvance && nextStep && !(nextStep.id === "Perfected" && pendingType === "collateral.perfection.complete") && (
+                        <Button onClick={() => setPerfection(nextStep.id, `Advanced perfection to ${nextStep.title}`)}>
+                          {nextStep.id === "Perfected" ? "Request perfection sign-off" : `Advance to ${nextStep.title.toLowerCase()}`}
+                        </Button>
                       )}
                     </CardHeader>
                     <Steps
@@ -421,7 +442,7 @@ export function CollateralItemPage() {
                       <Alert tone="danger" title="Defect reported" className="mt-4">
                         Legal found a defect in the security documents. Cure the defect and restart documentation.
                         {can.legal && (
-                          <Button size="small" variant="secondary" className="ml-3" onClick={() => setPerfection("Documentation", "Defect cured — returned to documentation")}>
+                          <Button size="small" variant="secondary" className="ml-3" onClick={() => (cureDefect(c), setMessage({ tone: "success", text: "Defect cured — returned to documentation." }))}>
                             Mark defect cured
                           </Button>
                         )}
@@ -455,10 +476,7 @@ export function CollateralItemPage() {
                             <Button
                               size="small"
                               variant="secondary"
-                              onClick={() => {
-                                store.patchLegal(c.id, { genuineness: "Confirmed" });
-                                audit({ action: "Confirmed genuineness of security documents", entityType: "Collateral", entityId: c.id, before: legal.genuineness, after: "Confirmed" });
-                              }}
+                              onClick={() => confirmGenuineness(c, legal.genuineness)}
                             >
                               Confirm genuineness
                             </Button>
@@ -522,9 +540,9 @@ export function CollateralItemPage() {
                     <Card variant="filled">
                       <Stack gap="medium">
                         <FileUpload
-                          accept=".pdf,.jpg,.png,.docx"
+                          accept={docAccept}
                           multiple
-                          maxSizeMb={20}
+                          maxSizeMb={docMaxMb}
                           files={files}
                           onFilesChange={setFiles}
                         />
@@ -532,22 +550,7 @@ export function CollateralItemPage() {
                           <Button
                             disabled={!files.length}
                             onClick={() => {
-                              for (const f of files) {
-                                const docId = newId("DOC");
-                                upsert("documents", {
-                                  id: docId,
-                                  ownerType: "collateral",
-                                  ownerId: c.id,
-                                  name: f.name,
-                                  kind: /valu/i.test(f.name) ? "Valuation report" : "Title document",
-                                  sizeKb: Math.max(1, Math.round(f.size / 1024)),
-                                  version: 1,
-                                  uploadedById: actor.id,
-                                  uploadedAt: new Date().toISOString(),
-                                  status: "Processing OCR",
-                                });
-                                audit({ action: "Uploaded collateral document", entityType: "Collateral", entityId: c.id, after: f.name });
-                              }
+                              uploadDocuments(c, files);
                               setFiles([]);
                             }}
                           >
@@ -593,64 +596,29 @@ export function CollateralItemPage() {
           collateralName={`${c.id} · ${o?.name ?? ""}`}
           shares={shares}
           onClose={() => setModal(null)}
-          onSubmit={(v) => {
-            const now = new Date().toISOString();
+          onSubmit={async (v) => {
+            setModal(null);
             switch (modal) {
-              case "verify":
-                store.setVerification(c.id, { status: "Verified", by: actor.name, at: now, note: v.note });
-                audit({ action: "Verified collateral valuation (Middle Office)", entityType: "Collateral", entityId: c.id, before: c.verification.status, after: "Verified" });
+              case "revalue":
+                report(await recordValuation(c, { marketValue: Number(v.mv), forcedSaleValue: Number(v.fsv), valuer: v.valuer ?? "", basis: v.basis, assumptions: v.note, reference: v.reference }), "Valuation recorded");
                 break;
-              case "query":
-                store.setVerification(c.id, { status: "Queried", by: actor.name, at: now, note: v.note });
-                audit({ action: "Queried collateral valuation (Middle Office)", entityType: "Collateral", entityId: c.id, before: c.verification.status, after: `Queried: ${v.note}` });
-                break;
-              case "revalue": {
-                const mv = Number(v.mv);
-                const fsv = shares ? Math.round(mv * 0.8) : Number(v.fsv);
-                store.addValuation(c.id, {
-                  id: newId("VAL"),
-                  at: now,
-                  marketValue: mv,
-                  forcedSaleValue: fsv,
-                  valuer: shares ? "CSCS market data" : v.valuer,
-                  basis: v.basis || "Market comparison approach",
-                  assumptions: v.note || "As stated in the valuation report",
-                  fsvMethod: shares ? "Haircut applied per PRD §6.7.3" : "Per valuer's report",
-                  reference: v.reference || "—",
-                  source: "Recorded in prototype",
-                });
-                update("collateral", c.id, { marketValue: mv, forcedSaleValue: fsv, valuedAt: now, valuer: shares ? "CSCS market data" : v.valuer, nextRevaluation: addYears(DEMO_NOW, 3).toISOString() });
-                store.setVerification(c.id, { status: "Pending" });
-                audit({ action: "Recorded revaluation", entityType: "Collateral", entityId: c.id, before: `${moneyShort(c.marketValue)} / FSV ${moneyShort(c.forcedSaleValue)}`, after: `${moneyShort(mv)} / FSV ${moneyShort(fsv)} · ${v.valuer}` });
-                break;
-              }
               case "insurance":
-                store.renewInsurance(c.id, { expiry: new Date(v.date).toISOString(), by: actor.name });
-                audit({ action: "Recorded insurance renewal", entityType: "Collateral", entityId: c.id, before: c.insuranceExpiryEffective ? date(c.insuranceExpiryEffective) : "—", after: date(v.date) });
+                recordInsuranceRenewal(c, c.insuranceExpiryEffective, v.date!);
+                setMessage({ tone: "success", text: "Insurance renewal recorded." });
                 break;
               case "search":
-                store.patchLegal(c.id, { searchStatus: v.result as "Clean" | "Encumbrance found", searchAt: now });
-                audit({ action: "Recorded legal search result", entityType: "Collateral", entityId: c.id, before: legal.searchStatus, after: v.result });
-                if (c.perfection === "Not started") update("collateral", c.id, { perfection: "Search in progress" });
-                if (v.result === "Encumbrance found") update("collateral", c.id, { perfection: "Defective" });
+                recordSearch(c, legal.searchStatus, v.result as "Clean" | "Encumbrance found");
                 break;
-              case "vault": {
-                const ref = v.reference || `VLT-${Math.floor(10000 + Math.random() * 89999)}`;
-                store.patchLegal(c.id, { vaultRef: ref, vaultedAt: now });
-                audit({ action: "Vaulted security documents", entityType: "Collateral", entityId: c.id, after: ref });
+              case "vault":
+                setMessage({ tone: "success", text: `Documents vaulted — ${vaultDocuments(c, v.reference)}.` });
                 break;
-              }
               case "signoff":
-                store.patchLegal(c.id, { signOff: { by: actor.name, at: now, opinion: v.note } });
-                audit({ action: "Legal sufficiency sign-off", entityType: "Collateral", entityId: c.id, after: v.note });
+                report(await requestLegalSignoff(c, v.note ?? ""), "Legal sufficiency opinion");
                 break;
               case "defect":
-                update("collateral", c.id, { perfection: "Defective" });
-                store.patchLegal(c.id, { genuineness: "Doubtful" });
-                audit({ action: "Reported perfection defect", entityType: "Collateral", entityId: c.id, before: c.perfection, after: `Defective: ${v.note}` });
+                report(reportDefect(c, v.note ?? ""), "Defect reported");
                 break;
             }
-            setModal(null);
           }}
         />
       )}
@@ -658,30 +626,30 @@ export function CollateralItemPage() {
   );
 }
 
-type ModalKind = "revalue" | "verify" | "query" | "insurance" | "search" | "signoff" | "vault" | "defect";
+type ModalKind = "revalue" | "insurance" | "search" | "signoff" | "vault" | "defect";
 type Values = Record<string, string>;
 
 const modalMeta: Record<ModalKind, { title: string; cta: string }> = {
   revalue: { title: "Record revaluation", cta: "Save valuation" },
-  verify: { title: "Verify valuation", cta: "Mark verified" },
-  query: { title: "Query valuation", cta: "Send query" },
   insurance: { title: "Record insurance renewal", cta: "Save renewal" },
   search: { title: "Record legal search result", cta: "Save result" },
-  signoff: { title: "Legal sufficiency sign-off", cta: "Sign off" },
+  signoff: { title: "Legal sufficiency sign-off", cta: "Submit for acceptance" },
   vault: { title: "Vault security documents", cta: "Confirm vaulting" },
   defect: { title: "Report perfection defect", cta: "Report defect" },
 };
 
 function ActionModal({ kind, collateralName, shares, onClose, onSubmit }: { kind: ModalKind; collateralName: string; shares: boolean; onClose: () => void; onSubmit: (v: Values) => void }) {
   const [v, setV] = useState<Values>({ result: "Clean", note: kind === "signoff" ? "Security documents genuine; perfection complete; legally sufficient." : "" });
+  const bases = useRule<string[]>("collateral.valuation.bases");
+  const minText = useRule<number>("collateral.legal.minOpinionLength");
   const set = (k: string) => (e: { target: { value: string } }) => setV((s) => ({ ...s, [k]: e.target.value }));
   const valid =
     kind === "revalue"
       ? Number(v.mv) > 0 && (shares || (Number(v.fsv) > 0 && !!v.valuer?.trim()))
       : kind === "insurance"
         ? !!v.date
-        : kind === "query" || kind === "defect" || kind === "signoff"
-          ? (v.note?.trim().length ?? 0) > 4
+        : kind === "defect" || kind === "signoff"
+          ? (v.note?.trim().length ?? 0) >= minText
           : true;
   return (
     <Modal
@@ -718,9 +686,9 @@ function ActionModal({ kind, collateralName, shares, onClose, onSubmit }: { kind
                 <Field label="Valuation basis" htmlFor="m-basis">
                   <Select
                     id="m-basis"
-                    value={v.basis ?? "Market comparison approach"}
+                    value={v.basis ?? bases[0] ?? ""}
                     onChange={set("basis")}
-                    options={["Market comparison approach", "Depreciated replacement cost", "Investment (income) approach"].map((x) => ({ value: x, label: x }))}
+                    options={bases.map((x) => ({ value: x, label: x }))}
                   />
                 </Field>
               </>
@@ -736,8 +704,8 @@ function ActionModal({ kind, collateralName, shares, onClose, onSubmit }: { kind
             </Text>
           </>
         )}
-        {(kind === "verify" || kind === "query" || kind === "defect" || kind === "signoff") && (
-          <Field label={kind === "signoff" ? "Legal opinion" : kind === "verify" ? "Verification note" : "Reason"} htmlFor="m-note2" required={kind !== "verify"}>
+        {(kind === "defect" || kind === "signoff") && (
+          <Field label={kind === "signoff" ? "Legal opinion" : "Reason"} htmlFor="m-note2" required description={kind === "signoff" ? "Credit Administration accepts the opinion through the Operations workflow." : undefined}>
             <Textarea id="m-note2" rows={3} value={v.note} onChange={set("note")} />
           </Field>
         )}

@@ -2,33 +2,30 @@
 
 /**
  * Audit helper shared by the monitoring, collateral and connectors modules.
- * Every state-changing action calls `useAuditLog()(...)` so the shared immutable audit log records who/what/before/after.
+ * Every state-changing action writes to the shared immutable audit log (who / what / before / after) — from components
+ * with `useAuditLog()`, from services and Operations `apply` handlers with `auditAs(actor, …)`.
  */
 import { useCallback } from "react";
-import { useDbActions } from "@/lib/data/hooks";
-import { useSession } from "@/lib/auth/session";
+import { useDb } from "@/lib/data/store";
+import { currentActor, useScope, type Actor } from "@/lib/platform/scope";
 
-export type Actor = { id: string; name: string; roleId: string };
+export type { Actor };
 
-/** The signed-in user as an actor (for comments, assignments and audit). */
+/** The signed-in user as an actor (comments, assignments, audit). */
 export function useActor(): Actor {
-  const user = useSession((s) => s.user);
-  const roleId = useSession((s) => s.roleId);
-  return { id: user?.id ?? "USR-DEMO", name: user?.name ?? "Demo user", roleId: roleId ?? "system-admin" };
+  return useScope().actor;
 }
 
 export type AuditInput = { action: string; entityType: string; entityId: string; before?: string; after?: string };
 
+/** Write one audit event as `actor` (defaults to the signed-in user / System). Safe outside React. */
+export function auditAs(actor: Pick<Actor, "id" | "name" | "roleId"> | undefined, e: AuditInput) {
+  const a = actor ?? currentActor();
+  useDb.getState().log({ actorId: a.id, actorName: a.name, roleId: a.roleId, ...e });
+}
+
 /** Returns a function that writes one audit event as the signed-in user. */
 export function useAuditLog() {
-  const { log } = useDbActions();
-  const user = useSession((s) => s.user);
-  const roleId = useSession((s) => s.roleId);
-  return useCallback(
-    (e: AuditInput) => {
-      if (!user || !roleId) return;
-      log({ actorId: user.id, actorName: user.name, roleId, ...e });
-    },
-    [log, user, roleId],
-  );
+  const { actor } = useScope();
+  return useCallback((e: AuditInput) => auditAs(actor, e), [actor]);
 }

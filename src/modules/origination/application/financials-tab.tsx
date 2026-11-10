@@ -34,14 +34,19 @@ import { DEMO_NOW } from "@/lib/data/seed";
 import { date, money, moneyShort, pct } from "@/lib/format";
 import { extractedFinancials, ratiosFrom, type BureauReport } from "../data";
 import { copBand } from "../logic";
-import { originationParams as P, TENANT_PARAM_NOTE } from "../params";
+import { inGroup, TENANT_PARAM_NOTE } from "../params";
+import { getRule } from "@/lib/platform/rules";
+import { recordChange } from "../actions";
 import type { AppCtx } from "./context";
 
 export function FinancialsTab({ c }: { c: AppCtx }) {
   const { app, obligor, rec } = c;
   const fields = extractedFinancials(obligor);
   const band = copBand(app.copRatio);
-  const isAnalyst = c.canEdit && c.roleId === "credit-analyst";
+  const isAnalyst = c.canEdit && inGroup("analysts", c.roleId);
+  const high = getRule<number>("origination.cop.highBand");
+  const medium = getRule<number>("origination.cop.mediumBand");
+  const gaugeMax = getRule<number>("origination.cop.gaugeMax");
   const [explanation, setExplanation] = useState(c.extra.copExplanation ?? "");
 
   return (
@@ -60,18 +65,18 @@ export function FinancialsTab({ c }: { c: AppCtx }) {
                 <Gauge
                   value={app.copRatio}
                   min={0}
-                  max={1.2}
+                  max={gaugeMax}
                   label="COP Ratio"
                   valueFormatter={(v) => v.toFixed(2)}
                   bands={[
-                    { to: P.copBands.medium, tone: "danger" },
-                    { to: P.copBands.high, tone: "warning" },
-                    { to: 1.2, tone: "success" },
+                    { to: medium, tone: "danger" },
+                    { to: high, tone: "warning" },
+                    { to: gaugeMax, tone: "success" },
                   ]}
                 />
                 <Stack direction="horizontal" gap="small" align="center" wrap justify="center">
                   {band ? <StatusBadge status={band.label} tones={{ [band.label]: band.tone }} /> : null}
-                  <Tooltip content={`Bands: ≥ ${P.copBands.high} High · ${P.copBands.medium}–${(P.copBands.high - 0.01).toFixed(2)} Medium · < ${P.copBands.medium} Low (PRD §6.1.4 example; tenant-configurable)`}>
+                  <Tooltip content={`Bands: ≥ ${high} High · ${medium}–${(high - 0.01).toFixed(2)} Medium · < ${medium} Low (PRD §6.1.4 example; business rules)`}>
                     <Badge variant="outline">How bands work</Badge>
                   </Tooltip>
                 </Stack>
@@ -127,10 +132,12 @@ export function FinancialsTab({ c }: { c: AppCtx }) {
                 </Field>
                 <div>
                   <Button
-                    disabled={explanation.trim().length < 10 || explanation === c.extra.copExplanation}
+                    disabled={explanation.trim().length < getRule<number>("origination.cop.explanationMinLength") || explanation === c.extra.copExplanation}
                     onClick={() => {
-                      c.patchExtra({ copExplanation: explanation.trim() });
-                      c.log("Documented COP customer explanation", c.extra.copExplanation, explanation.trim());
+                      const before = c.extra.copExplanation;
+                      void recordChange(c.app.id, { point: "cop.explain", event: "origination.cop.explained", action: "Documented COP customer explanation", before, after: explanation.trim(), payload: { copRatio: c.app.copRatio } }).then((r) => {
+                        if (r.ok) c.patchExtra({ copExplanation: explanation.trim() });
+                      });
                     }}
                   >
                     Save explanation
@@ -149,7 +156,7 @@ export function FinancialsTab({ c }: { c: AppCtx }) {
       <Card>
         <CardHeader>
           <div><CardTitle>Extracted financial-statement fields</CardTitle>
-          <CardDescription>Parsed by OCR from the audited financial statements and mapped into the 360 RAR Internal Risk parameter table (PRD §5.4, §6.2.1). Fields below 90% confidence are flagged for review.</CardDescription></div>
+          <CardDescription>Parsed by OCR from the audited financial statements and mapped into the 360 RAR Internal Risk parameter table (PRD §5.4, §6.2.1). Fields below {getRule<number>("origination.ocr.reviewBelowPct")}% confidence are flagged for review.</CardDescription></div>
         </CardHeader>
         <CardContent>
           <Stack gap="large">
@@ -171,7 +178,7 @@ export function FinancialsTab({ c }: { c: AppCtx }) {
                       <TableCell numeric>{money(f.value)}</TableCell>
                       <TableCell numeric>
                         <Stack direction="horizontal" gap="small" justify="end" align="center">
-                          {f.confidence < 0.9 ? <Badge tone="warning">Review</Badge> : null}
+                          {f.confidence * 100 < getRule<number>("origination.ocr.reviewBelowPct") ? <Badge tone="warning">Review</Badge> : null}
                           <span>{pct(f.confidence * 100)}</span>
                         </Stack>
                       </TableCell>
@@ -199,9 +206,10 @@ function BureauSection({ c, isAnalyst }: { c: AppCtx; isAnalyst: boolean }) {
     setRunning(true);
     window.setTimeout(() => {
       const at = new Date().toISOString();
-      c.patchExtra({ bureauRunAt: at });
-      c.change({ bureauChecked: true, crmsChecked: true }, "Pulled credit bureau reports and CRMS search (simulated connector)", undefined, "CRC, FirstCentral, CRMS");
-      setRunning(false);
+      void recordChange(app.id, { point: "bureau.pull", event: "origination.bureau.pulled", action: "Pulled credit bureau reports and CRMS search (simulated connector)", changes: { bureauChecked: true, crmsChecked: true }, after: "CRC, FirstCentral, CRMS", payload: { at } }).then((r) => {
+        if (r.ok) c.patchExtra({ bureauRunAt: at });
+        setRunning(false);
+      });
     }, 1400);
   };
   const done = app.bureauChecked && app.crmsChecked;

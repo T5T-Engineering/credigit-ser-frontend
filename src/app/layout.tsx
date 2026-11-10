@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { BrandProvider, brandBootScript } from "@credigit/web-ui";
+import { PlatformProvider } from "@/components/platform-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -26,7 +27,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: brandBootScript() }} />
       </head>
       <body className="bg-bg font-sans text-fg antialiased">
-        <BrandProvider>{children}</BrandProvider>
+        <BrandProvider>
+          <PlatformProvider>{children}</PlatformProvider>
+        </BrandProvider>
       </body>
     </html>
   );

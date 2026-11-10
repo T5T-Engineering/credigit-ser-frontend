@@ -50,12 +50,14 @@ import { roleById } from "@/lib/rbac/roles";
 import { money, moneyShort, pct } from "@/lib/format";
 import { bureauAdverse, bureauReports, extractedFinancials, reconciliation, rng, useOriginationStore } from "../data";
 import { buildChainFor, copBand, finalAuthority, lendingValue, limitGate, runEngine, tagCovenants } from "../logic";
-import { fastTrackVariants, originationParams as P, productOptions, TENANT_PARAM_NOTE } from "../params";
+import { fastTrackVariants, haircutFor, inGroup, productOptions, requiredKinds, slaDays, TENANT_PARAM_NOTE } from "../params";
+import { getRule } from "@/lib/platform/rules";
+import { createApplication, submitApplication } from "../actions";
 import { toApprovalTiers } from "../view-models";
-import { documentKinds, requiredKinds } from "../application/documents-tab";
+import { documentKinds } from "../application/documents-tab";
 import { perfectionTones } from "../application/collateral-tab";
-import { initiatorRoles, useMe } from "../use-me";
-import { useHaircuts, useStepUpThreshold } from "../use-params";
+import { useMe } from "../use-me";
+import { useRulesVersion, useStepUpThreshold } from "../use-params";
 
 type UploadItem = { id: string; name: string; sizeKb: number; kind: DocumentRecord["kind"]; progress: number };
 type NewCollateral = { id: string; type: CollateralType; description: string; marketValue: string };
@@ -64,6 +66,7 @@ type NewObligorForm = { name: string; type: ObligorType; sectorId: string; rcNum
 const obligorTypes: ObligorType[] = ["Corporate", "Commercial", "SME", "Retail", "Public sector"];
 const requestTypes: Application["requestType"][] = ["New", "Renewal", "Enhancement", "Restructure", "Waiver"];
 const states = ["Lagos", "FCT", "Rivers", "Kano", "Oyo", "Enugu", "Kaduna", "Ogun", "Delta", "Anambra"];
+const collateralTypeOptions: CollateralType[] = ["Legal mortgage", "Equitable mortgage", "Debenture", "Quoted shares", "Cash / lien on deposit", "Vehicle", "Equipment", "Domiciliation of proceeds", "Personal guarantee", "Corporate guarantee", "Insurance policy"];
 const toNumber = (s: string) => Number(s.replace(/[^\d.]/g, "")) || 0;
 
 /** Next sequential application reference, e.g. APP-2026037. */
@@ -87,7 +90,8 @@ function guessKind(name: string): DocumentRecord["kind"] {
 export function NewApplicationPage() {
   const canEdit = useCan("origination", "edit");
   const { user: me, roleId } = useMe();
-  const allowed = canEdit && Boolean(roleId && initiatorRoles.includes(roleId));
+  useRulesVersion();
+  const allowed = canEdit && inGroup("initiators", roleId);
   return (
     <ModulePage module="origination" description="Initiate a credit request: obligor, facility, documents with OCR, financial-statement validation, bureau / CRMS checks, collateral and the chart-flow route.">
       {allowed ? (
@@ -117,7 +121,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
   const collateralAll = useCollateral();
   const applications = useApplications();
   const threshold = useStepUpThreshold();
-  const haircuts = useHaircuts();
+  useRulesVersion();
 
   // ---- state
   const [mode, setMode] = useState<"existing" | "new">("existing");
@@ -127,7 +131,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
   const [product, setProduct] = useState<ProductType>("Term loan");
   const [variant, setVariant] = useState("");
   const [amount, setAmount] = useState("");
-  const [tenor, setTenor] = useState("12");
+  const [tenor, setTenor] = useState(() => String(getRule<number>("origination.defaultTenorMonths")));
   const [purpose, setPurpose] = useState("");
   const [requestType, setRequestType] = useState<Application["requestType"]>("New");
   const [uploads, setUploads] = useState<UploadItem[]>([]);
@@ -171,7 +175,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
 
   const amountN = toNumber(amount);
   const tenorN = toNumber(tenor);
-  const variants = fastTrackVariants.filter((v) => v.product === product);
+  const variants = fastTrackVariants().filter((v) => v.product === product);
   const flow: Application["flow"] = variant ? "Fast-Track" : "Standard";
   const chain = useMemo(() => buildChainFor(flow, amountN, users), [flow, amountN, users]);
 
@@ -224,13 +228,13 @@ function NewApplicationWizard({ meId }: { meId: string }) {
   // ---- collateral
   const obligorCollateral = collateralAll.filter((c) => c.obligorId === obligor?.id);
   const chosen = obligorCollateral.filter((c) => collateralIds.includes(c.id));
-  const newCollValue = newCollateral.reduce((s, c) => s + lendingValue({ marketValue: toNumber(c.marketValue), haircutPct: haircuts[c.type] }), 0);
+  const newCollValue = newCollateral.reduce((s, c) => s + lendingValue({ marketValue: toNumber(c.marketValue), haircutPct: haircutFor(c.type) }), 0);
   const lendingTotal = chosen.reduce((s, c) => s + lendingValue(c), 0) + newCollValue;
   const coverage = amountN ? lendingTotal / amountN : 0;
 
   // ---- gate + engine preview
   const gate = obligor ? limitGate({ product, amount: amountN, obligorId: obligor.id }, obligor, facilities, obligors, sectors) : undefined;
-  const engine = obligor && gate ? runEngine({ obligor, copRatio: cop, copExplained: copExplanation.trim().length >= 10, limitGate: gate.result, bureauAdverse: bureauAdverse(reports), coverage }) : undefined;
+  const engine = obligor && gate ? runEngine({ obligor, copRatio: cop, copExplained: copExplanation.trim().length >= getRule<number>("origination.cop.explanationMinLength"), limitGate: gate.result, bureauAdverse: bureauAdverse(reports), coverage }) : undefined;
 
   // ---- persist
   const persist = (stage: Application["stage"]) => {
@@ -252,11 +256,11 @@ function NewApplicationWizard({ meId }: { meId: string }) {
         type: c.type,
         description: c.description || c.type,
         marketValue: toNumber(c.marketValue),
-        forcedSaleValue: Math.round(toNumber(c.marketValue) * 0.7),
-        haircutPct: haircuts[c.type],
+        forcedSaleValue: Math.round((toNumber(c.marketValue) * getRule<number>("origination.collateral.forcedSalePct")) / 100),
+        haircutPct: haircutFor(c.type),
         valuedAt: now.toISOString(),
         valuer: "Pending independent valuation",
-        nextRevaluation: addDays(now, 365).toISOString(),
+        nextRevaluation: addDays(now, getRule<number>("origination.collateral.revaluationDays")).toISOString(),
         perfection: "Search in progress",
         facilityIds: [],
       }));
@@ -280,7 +284,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
       obligorId: obligorRecord.id,
       product,
       amount: amountN,
-      tenorMonths: tenorN || 12,
+      tenorMonths: tenorN || getRule<number>("origination.defaultTenorMonths"),
       purpose: purpose.trim() || "To be confirmed",
       flow,
       requestType,
@@ -288,7 +292,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
       createdById: me.id,
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
-      slaDueAt: addDays(now, P.slaDays[flow]).toISOString(),
+      slaDueAt: addDays(now, slaDays(flow)).toISOString(),
       approvals: chain,
       documentIds: docs.map((d) => d.id),
       collateralIds: [...collateralIds, ...createdColl.map((c) => c.id)],
@@ -386,7 +390,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
             setProduct(e.target.value as ProductType);
             setVariant("");
           }}
-          options={productOptions.map((p) => ({ value: p, label: p }))}
+          options={productOptions().map((p) => ({ value: p, label: p }))}
         />
       </Field>
       <Field label="Fast-Track product" htmlFor="f-variant" description={variants.length ? "Lower-risk standardised products run on the Fast-Track chart-flow (PRD §6.1.3)." : "Not available for this product — Standard chart-flow."}>
@@ -419,7 +423,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
       <Grid columns={{ base: 1, lg: 3 }} gap="large">
         <div className="lg:col-span-2">
           <Stack gap="medium">
-            <FileUpload accept=".pdf,.doc,.docx,.xlsx,.png,.jpg,.jpeg,.tif" multiple maxSizeMb={25} files={picked} onFilesChange={setPicked} />
+            <FileUpload accept={getRule<string>("origination.docs.acceptedTypes")} multiple maxSizeMb={getRule<number>("origination.docs.maxUploadMb")} files={picked} onFilesChange={setPicked} />
             <Stack direction="horizontal" gap="small" wrap>
               <Button
                 disabled={!picked.length}
@@ -504,7 +508,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
         ) : (
           <Grid columns={{ base: 1, lg: 2 }} gap="large">
             <Stack gap="medium">
-              <Gauge value={cop} min={0} max={1.2} label="COP Ratio" valueFormatter={(v) => v.toFixed(2)} bands={[{ to: P.copBands.medium, tone: "danger" }, { to: P.copBands.high, tone: "warning" }, { to: 1.2, tone: "success" }]} />
+              <Gauge value={cop} min={0} max={getRule<number>("origination.cop.gaugeMax")} label="COP Ratio" valueFormatter={(v) => v.toFixed(2)} bands={[{ to: getRule<number>("origination.cop.mediumBand"), tone: "danger" }, { to: getRule<number>("origination.cop.highBand"), tone: "warning" }, { to: getRule<number>("origination.cop.gaugeMax"), tone: "success" }]} />
               {band ? (
                 <Stack direction="horizontal" justify="center">
                   <StatusBadge status={band.label} tones={{ [band.label]: band.tone }} />
@@ -533,7 +537,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
           </Field>
         ) : null}
         <Text variant="caption" tone="muted">
-          Bands: ≥ {P.copBands.high} High, {P.copBands.medium}–{P.copBands.high} Medium, below {P.copBands.medium} Low — PRD §6.1.4 example banding, tenant-configurable.
+          Bands: ≥ {getRule<number>("origination.cop.highBand")} High, {getRule<number>("origination.cop.mediumBand")}–{getRule<number>("origination.cop.highBand")} Medium, below {getRule<number>("origination.cop.mediumBand")} Low — PRD §6.1.4 example banding (business rules).
         </Text>
       </Stack>
     );
@@ -613,7 +617,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
         <Text variant="eyebrow">New collateral offered</Text>
         {newCollateral.map((c, i) => (
           <Grid key={c.id} columns={{ base: 1, md: 3 }} gap="small">
-            <Select aria-label="Collateral type" value={c.type} onChange={(e) => setNewCollateral((l) => l.map((x, j) => (j === i ? { ...x, type: e.target.value as CollateralType } : x)))} options={Object.keys(haircuts).map((t) => ({ value: t, label: t }))} />
+            <Select aria-label="Collateral type" value={c.type} onChange={(e) => setNewCollateral((l) => l.map((x, j) => (j === i ? { ...x, type: e.target.value as CollateralType } : x)))} options={collateralTypeOptions.map((t) => ({ value: t, label: `${t} (haircut ${haircutFor(t)}%)` }))} />
             <Input aria-label="Description" placeholder="Description / location" value={c.description} onChange={(e) => setNewCollateral((l) => l.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))} />
             <Stack direction="horizontal" gap="small">
               <Input aria-label="Market value" prefix="₦" inputMode="numeric" placeholder="Market value" value={c.marketValue} onChange={(e) => setNewCollateral((l) => l.map((x, j) => (j === i ? { ...x, marketValue: e.target.value } : x)))} />
@@ -644,9 +648,9 @@ function NewApplicationWizard({ meId }: { meId: string }) {
       <KeyValueGrid
         columns={4}
         items={[
-          { label: "Chart-flow", value: flow, hint: variant ? fastTrackVariants.find((v) => v.id === variant)?.label : "Standard credit" },
+          { label: "Chart-flow", value: flow, hint: variant ? fastTrackVariants().find((v) => v.id === variant)?.label : "Standard credit" },
           { label: "Final authority", value: finalAuthority(chain), hint: `${chain.length} approval steps` },
-          { label: "SLA target", value: `${P.slaDays[flow]} days`, hint: TENANT_PARAM_NOTE },
+          { label: "SLA target", value: `${slaDays(flow)} days`, hint: TENANT_PARAM_NOTE },
           { label: "Step-up authentication", value: amountN > threshold ? "Required" : "Not required", hint: `Above ${moneyShort(threshold)}` },
         ]}
       />
@@ -667,7 +671,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
         items={[
           { label: "Obligor", value: `${obligor.name}${mode === "new" ? " (new customer)" : ""}` },
           { label: "Sector", value: sector?.name },
-          { label: "Product", value: `${product}${variant ? ` · ${fastTrackVariants.find((v) => v.id === variant)?.label}` : ""}` },
+          { label: "Product", value: `${product}${variant ? ` · ${fastTrackVariants().find((v) => v.id === variant)?.label}` : ""}` },
           { label: "Amount", value: money(amountN), mono: true },
           { label: "Tenor", value: `${tenorN} months`, mono: true },
           { label: "Request type", value: requestType },
@@ -717,7 +721,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
           title: "Financial validation",
           description: "COP Ratio confidence",
           content: validationStep,
-          validate: () => (cop === undefined ? "The COP Ratio needs extracted financials and statements." : band?.requiresExplanation && copExplanation.trim().length < 10 ? "Low confidence — document the customer's explanation." : true),
+          validate: () => (cop === undefined ? "The COP Ratio needs extracted financials and statements." : band?.requiresExplanation && copExplanation.trim().length < getRule<number>("origination.cop.explanationMinLength") ? "Low confidence — document the customer's explanation." : true),
         },
         {
           id: "checks",
@@ -738,15 +742,26 @@ function NewApplicationWizard({ meId }: { meId: string }) {
           toast({ title: "Choose an obligor first", description: "A draft needs at least the obligor.", tone: "warning" });
           return;
         }
-        const id = persist("Draft");
-        toast({ title: "Draft saved", description: `${id} is in your queue as a draft.`, tone: "success" });
-        if (id) router.push(`/origination/application/?id=${id}`);
+        void createApplication(() => persist("Draft")).then((res) => {
+          if (!res.ok) { toast({ title: "Draft not saved", description: res.reason, tone: "danger" }); return; }
+          toast({ title: "Draft saved", description: `${res.appId} is in your queue as a draft.`, tone: "success" });
+          router.push(`/origination/application/?id=${res.appId}`);
+        });
       }}
-      onSubmit={() => {
+      onSubmit={async () => {
         setSubmitting(true);
-        const id = persist("Analysis");
-        toast({ title: "Application submitted", description: `${id} sent to the BDM, Legal (collateral search) and Credit Analysis.`, tone: "success" });
-        if (id) router.push(`/origination/application/?id=${id}`);
+        const created = await createApplication(() => persist("Draft"));
+        if (!created.ok) {
+          setSubmitting(false);
+          { toast({ title: "Application not created", description: created.reason, tone: "danger" }); return; }
+        }
+        const submitted = await submitApplication(created.appId!);
+        toast(
+          submitted.ok
+            ? { title: "Application submitted", description: `${created.appId} sent to the BDM, Legal (collateral search) and Credit Analysis.`, tone: "success" }
+            : { title: "Saved as draft — submission blocked", description: submitted.reason, tone: "warning" },
+        );
+        router.push(`/origination/application/?id=${created.appId}`);
       }}
     />
   );

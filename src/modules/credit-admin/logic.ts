@@ -9,6 +9,7 @@ import type { ChecklistStatus } from "@credigit/web-ui";
 import { useApplications, useCollateral, useFacilities, useObligors, useUsers } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { Application, Collateral, Facility, Obligor, User } from "@/lib/data/types";
+import { getRule } from "@/lib/platform/rules";
 import { roleById, type RoleId } from "@/lib/rbac/roles";
 import { chartFlow } from "@/lib/workflow";
 import { seedClauses, type Clause } from "../offer-letters/library";
@@ -21,15 +22,18 @@ export function isCleared(status: ChecklistStatus) {
   return status === "met" || status === "waived" || status === "deferred";
 }
 
-/** Tenant parameter: Credit Administration's delegated tolerance (PRD §6.3.2 routes other requests to the approving tier). */
-export const DELEGATED_TOLERANCE = {
-  maxDeferralDays: 30,
-  categories: ["Documentation", "Fees", "Corporate authorisation"],
-  note: "Parameter — set by tenant (demo: deferrals ≤ 30 days on documentation, fee and corporate-authorisation conditions)",
-};
+/**
+ * Credit Administration's delegated tolerance (PRD §4.1; §6.3.2 routes other requests to the approving tier).
+ * Business rules `credit-admin.delegatedMaxDeferralDays` / `credit-admin.delegatedCategories`, read at call time.
+ */
+export function isWithinTolerance(kind: WaiverRequest["kind"], category: string | undefined, days: number): boolean {
+  return kind === "Deferral" && !!category && getRule<string[]>("credit-admin.delegatedCategories").includes(category) && days <= getRule<number>("credit-admin.delegatedMaxDeferralDays");
+}
 
-/** Reminder window before a waiver/deferral lapses (Parameter — set by tenant). */
-export const REMINDER_DAYS = 7;
+/** Human-readable delegated tolerance (from business rules). */
+export function toleranceNote(): string {
+  return `deferrals of up to ${getRule<number>("credit-admin.delegatedMaxDeferralDays")} days on ${getRule<string[]>("credit-admin.delegatedCategories").join(", ").toLowerCase()} conditions (business rule — set by tenant)`;
+}
 
 export type CpItem = { id: string; title: string; category: string; text: string; status: ChecklistStatus; byName?: string; at?: string; note?: string; source: "letter" | "default" };
 
@@ -175,7 +179,7 @@ function seedWaivers(rows: Array<Omit<FacilityRow, "cps" | "cleared"> & { cpIds:
         reason: "Customer has executed the security documents; registration is awaiting stamping. Request to defer to post-disbursement.",
         expiryDate: addDaysIso(DEMO_NOW, 21),
         requestedAt: addDaysIso(DEMO_NOW, -1),
-        withinTolerance: DELEGATED_TOLERANCE.categories.includes(cp.category),
+        withinTolerance: isWithinTolerance("Deferral", cp.category, 21),
       }),
     );
   }
@@ -274,7 +278,7 @@ function useFacilityBase() {
 }
 
 function statusFromWaivers(waivers: WaiverRequest[], key: string, id: string): ChecklistStatus | undefined {
-  const w = waivers.find((x) => x.cpKey === key && x.conditionId === id && x.status !== "Pending approval" && x.status !== "Declined");
+  const w = waivers.find((x) => x.cpKey === key && x.conditionId === id && ["Approved", "Lapsed", "Closed", "Routed to Operational Risk"].includes(x.status));
   if (!w) return undefined;
   const st = waiverStatus(w);
   if (w.kind === "Sanction for breach" || st === "Lapsed") return "breached";

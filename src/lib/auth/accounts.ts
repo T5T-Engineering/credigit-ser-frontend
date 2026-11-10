@@ -15,12 +15,41 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { RoleId } from "../rbac/roles";
 import { useDb, newId } from "../data/store";
+import { publish } from "../platform/events";
+import { notify } from "../platform/notifications";
+import { submitOperation } from "../platform/operations";
+import { getRule } from "../platform/rules";
+import { roleById } from "../rbac/roles";
+import type { PasswordRule } from "@credigit/web-ui";
 
 /** Seeded demo users sign in with this password (shown on the sign-in page in demo mode). */
 export const DEMO_PASSWORD = "Credigit@2026!";
-export const OTP_TTL_MS = 10 * 60 * 1000;
-export const MAX_OTP_ATTEMPTS = 5;
-export const MAX_PASSWORD_ATTEMPTS = 5;
+
+/** Limits come from business rules (Operations → Business rules). */
+const otpTtlMs = () => getRule<number>("auth.otpTtlMinutes") * 60_000;
+const maxOtpAttempts = () => getRule<number>("auth.otpMaxAttempts");
+const maxPasswordAttempts = () => getRule<number>("auth.passwordMaxAttempts");
+
+/** Password policy as checklist rules, built from business rules. */
+export function passwordPolicy(): PasswordRule[] {
+  const min = getRule<number>("auth.passwordMinLength");
+  const mixed = getRule<boolean>("auth.passwordRequireMixed");
+  const list: PasswordRule[] = [{ id: "length", label: `At least ${min} characters`, test: (v) => v.length >= min }];
+  if (mixed) {
+    list.push(
+      { id: "upper", label: "An uppercase letter", test: (v) => /[A-Z]/.test(v) },
+      { id: "lower", label: "A lowercase letter", test: (v) => /[a-z]/.test(v) },
+      { id: "number", label: "A number", test: (v) => /\d/.test(v) },
+      { id: "symbol", label: "A symbol (e.g. ! @ # ?)", test: (v) => /[^A-Za-z0-9]/.test(v) },
+    );
+  }
+  return list;
+}
+
+/** Wrong-code attempts allowed (for UI copy). */
+export function maxOtpAttemptsRule() {
+  return maxOtpAttempts();
+}
 
 export type AccountStatus = "Pending verification" | "Pending approval" | "Active" | "Locked" | "Rejected";
 
@@ -135,7 +164,7 @@ function saveAccount(account: Account) {
 }
 
 function createChallenge(email: string, purpose: OtpPurpose): Challenge {
-  const challenge: Challenge = { id: newId("OTP"), email: norm(email), purpose, code: sixDigits(), expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 };
+  const challenge: Challenge = { id: newId("OTP"), email: norm(email), purpose, code: sixDigits(), expiresAt: Date.now() + otpTtlMs(), attempts: 0 };
   useAccounts.setState((s) => ({ challenges: { ...s.challenges, [challenge.id]: challenge } }));
   return challenge;
 }
@@ -164,9 +193,9 @@ export async function signInWithPassword(email: string, password: string): Promi
   const hash = await hashPassword(password, account.salt);
   if (hash !== account.hash) {
     const failedAttempts = account.failedAttempts + 1;
-    saveAccount({ ...account, failedAttempts, status: failedAttempts >= MAX_PASSWORD_ATTEMPTS ? "Locked" : account.status });
-    audit("Failed password sign-in", email, `${failedAttempts} of ${MAX_PASSWORD_ATTEMPTS}`);
-    return { ok: false, error: failedAttempts >= MAX_PASSWORD_ATTEMPTS ? "Too many attempts. The account is now locked — reset your password to unlock it." : generic };
+    saveAccount({ ...account, failedAttempts, status: failedAttempts >= maxPasswordAttempts() ? "Locked" : account.status });
+    audit("Failed password sign-in", email, `${failedAttempts} of ${maxPasswordAttempts()}`);
+    return { ok: false, error: failedAttempts >= maxPasswordAttempts() ? "Too many attempts. The account is now locked — reset your password to unlock it." : generic };
   }
   saveAccount({ ...account, failedAttempts: 0 });
   return { ok: true, challengeId: createChallenge(email, "signin").id };
@@ -208,7 +237,7 @@ export async function requestPasswordReset(email: string): Promise<{ challengeId
 export function resendCode(challengeId: string): Challenge | undefined {
   const c = getChallenge(challengeId);
   if (!c) return undefined;
-  const fresh = { ...c, code: sixDigits(), expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 };
+  const fresh = { ...c, code: sixDigits(), expiresAt: Date.now() + otpTtlMs(), attempts: 0 };
   useAccounts.setState((s) => ({ challenges: { ...s.challenges, [c.id]: fresh } }));
   return fresh;
 }
@@ -223,10 +252,10 @@ export async function verifyCode(challengeId: string, code: string): Promise<Ver
   const c = getChallenge(challengeId);
   if (!c) return { ok: false, error: "This code request has expired. Start again.", expired: true };
   if (Date.now() > c.expiresAt) return { ok: false, error: "This code has expired. Request a new one.", expired: true };
-  if (c.attempts >= MAX_OTP_ATTEMPTS) return { ok: false, error: "Too many wrong codes. Request a new one.", expired: true };
+  if (c.attempts >= maxOtpAttempts()) return { ok: false, error: "Too many wrong codes. Request a new one.", expired: true };
   if (code !== c.code) {
     useAccounts.setState((s) => ({ challenges: { ...s.challenges, [c.id]: { ...c, attempts: c.attempts + 1 } } }));
-    return { ok: false, error: `That code isn't right. ${MAX_OTP_ATTEMPTS - c.attempts - 1} attempts left.` };
+    return { ok: false, error: `That code isn't right. ${maxOtpAttempts() - c.attempts - 1} attempts left.` };
   }
   const account = await getAccount(c.email);
   if (!account) return { ok: false, error: "Account not found.", expired: true };
@@ -239,6 +268,21 @@ export async function verifyCode(challengeId: string, code: string): Promise<Ver
     const updated = { ...account, status: "Pending approval" as const };
     saveAccount(updated);
     audit("Verified email for access request", c.email);
+    const roleId = updated.requestedRoleId ?? "account-officer";
+    const roleName = roleById[roleId]?.name ?? roleId;
+    void submitOperation("access.request", {
+      title: `Access request — ${updated.name} (${roleName})`,
+      subject: { type: "Account", id: updated.email, title: updated.name, href: "/admin" },
+      payload: { email: updated.email, name: updated.name, roleId },
+      summary: [
+        { label: "Name", value: updated.name },
+        { label: "Email", value: updated.email },
+        { label: "Institution / branch", value: `${updated.institution ?? ""} · ${updated.branch ?? ""}` },
+        { label: "Requested role", value: roleName },
+      ],
+    });
+    publish("auth.access.requested", { module: "platform", subject: { type: "Account", id: updated.email, title: updated.name }, payload: { roleId } });
+    notify({ templateId: "auth.access-requested", toRoles: ["system-admin"], href: "/operations", data: { name: updated.name, email: updated.email, institution: updated.institution ?? "", branch: updated.branch ?? "", role: roleName } });
     return { ok: true, purpose: "signup", account: updated };
   }
   return { ok: true, purpose: "signin", account };
@@ -254,6 +298,8 @@ export async function resetPassword(token: string, password: string): Promise<Re
   saveAccount({ ...account, salt, hash: await hashPassword(password, salt), passwordChangedAt: new Date().toISOString(), failedAttempts: 0, status: account.status === "Locked" ? "Active" : account.status });
   removeChallenge(c.id);
   audit("Reset password", c.email);
+  publish("auth.password.changed", { module: "platform", subject: { type: "Account", id: c.email }, payload: {} });
+  { const u = useDb.getState().users.find((x) => x.email.toLowerCase() === c.email); if (u) notify({ templateId: "auth.password-changed", toUserIds: [u.id], href: "/settings/password", data: { email: c.email, when: new Date().toUTCString() } }); }
   return { ok: true };
 }
 
@@ -269,6 +315,8 @@ export async function changePassword(email: string, current: string, next: strin
   const salt = randomHex(16);
   saveAccount({ ...account, salt, hash: await hashPassword(next, salt), passwordChangedAt: new Date().toISOString() });
   audit("Changed password", email);
+  publish("auth.password.changed", { module: "platform", subject: { type: "Account", id: norm(email) }, payload: {} });
+  { const u = useDb.getState().users.find((x) => x.email.toLowerCase() === norm(email)); if (u) notify({ templateId: "auth.password-changed", toUserIds: [u.id], href: "/settings/password", data: { email: norm(email), when: new Date().toUTCString() } }); }
   return { ok: true };
 }
 

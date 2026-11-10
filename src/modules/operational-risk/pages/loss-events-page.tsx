@@ -22,6 +22,7 @@ import {
   MiniBarList,
   Modal,
   ProgressBar,
+  SegmentedControl,
   Select,
   Stack,
   StatCard,
@@ -32,9 +33,17 @@ import {
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
+import { newId } from "@/lib/data/store";
 import { branches, DEMO_NOW } from "@/lib/data/seed";
 import { date, money, moneyShort, pct } from "@/lib/format";
-import { baselEventTypes, businessLines, indicatorCategories, lossLimits, monthlyNetLoss, netLoss, type IndicatorCategory, type LossEvent, type LossEventStatus } from "../data";
+import { publish } from "@/lib/platform/events";
+import { runHooks } from "@/lib/platform/hooks";
+import { submitOperation, usePendingFor, type SubmitResult } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import { baselEventTypes, businessLines, indicatorCategories, monthlyNetLoss, netLoss, type IndicatorCategory, type LossEvent, type LossEventStatus } from "../data";
+import { PendingBadge, SubmitOutcome } from "../operation-ui";
+import { OPRISK, notifyLossThresholds, orKeys, type LossClosurePayload } from "../platform";
 import { useOpRisk } from "../store";
 import { useActorName, useAuditLog } from "../shared";
 
@@ -43,21 +52,31 @@ const statusFlow: LossEventStatus[] = ["Reported", "Under investigation", "Remed
 
 export function LossEventsPage() {
   const canEdit = useCan("operational-risk", "edit");
-  const events = useOpRisk((s) => s.lossEvents);
+  const { actor } = useScope();
+  const allEvents = useOpRisk((s) => s.lossEvents);
   const { addLossEvent, updateLossEvent } = useOpRisk.getState();
   const audit = useAuditLog();
+  const annualLimit = useRule<number>(orKeys.annualNetLimit);
+  const monthlyLimit = useRule<number>(orKeys.monthlyNetLimit);
+  const singleEvent = useRule<number>(orKeys.singleEvent);
+  const boardMateriality = useRule<number>(orKeys.boardMateriality);
+  const warnShare = useRule<number>(orKeys.limitWarningPct) / 100;
   const [openId, setOpenId] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
-  const [flash, setFlash] = useState<string | null>(null);
-  const selected = events.find((e) => e.id === openId) ?? null;
+  const [flash, setFlash] = useState<{ tone: "success" | "danger"; title: string; text: string } | null>(null);
+  const [outcome, setOutcome] = useState<SubmitResult | null>(null);
+  const [scopeView, setScopeView] = useState<"all" | "mine">("all");
+  const mine = allEvents.filter((e) => e.reportedById === actor.id);
+  const events = scopeView === "mine" ? mine : allEvents;
+  const selected = allEvents.find((e) => e.id === openId) ?? null;
 
-  const ytd = useMemo(() => events.filter((e) => new Date(e.discoveredAt).getFullYear() === 2026), [events]);
+  const ytd = useMemo(() => allEvents.filter((e) => new Date(e.discoveredAt).getFullYear() === DEMO_NOW.getFullYear()), [allEvents]);
   const gross = ytd.reduce((s, e) => s + e.grossLoss, 0);
   const rec = ytd.reduce((s, e) => s + e.recovery, 0);
   const net = gross - rec;
-  const monthly = monthlyNetLoss(events, 12);
+  const monthly = monthlyNetLoss(allEvents, 12);
   const byType = baselEventTypes.map((t) => ({ label: t, value: ytd.filter((e) => e.eventType === t).reduce((s, e) => s + netLoss(e), 0), meta: `${ytd.filter((e) => e.eventType === t).length} events` })).filter((x) => x.value > 0);
-  const largeOpen = events.filter((e) => netLoss(e) >= lossLimits.singleEventEscalation && e.status !== "Closed");
+  const largeOpen = allEvents.filter((e) => netLoss(e) >= singleEvent && e.status !== "Closed");
 
   const columns: DataTableColumn<LossEvent>[] = [
     { id: "id", header: "Event", accessor: "id", sortable: true, cell: (e) => <span className="font-mono text-xs">{e.id}</span> },
@@ -77,8 +96,19 @@ export function LossEventsPage() {
     { id: "discoveredAt", header: "Discovered", accessor: (e) => date(e.discoveredAt), sortValue: (e) => e.discoveredAt, sortable: true },
     { id: "gross", header: "Gross loss", numeric: true, sortable: true, accessor: (e) => e.grossLoss, cell: (e) => (e.nearMiss ? <Badge tone="info" variant="outline">Near miss</Badge> : moneyShort(e.grossLoss)) },
     { id: "recovery", header: "Recovered", numeric: true, sortable: true, accessor: (e) => e.recovery, cell: (e) => moneyShort(e.recovery) },
-    { id: "net", header: "Net loss", numeric: true, sortable: true, accessor: (e) => netLoss(e), cell: (e) => <span className={netLoss(e) >= lossLimits.singleEventEscalation ? "font-semibold text-danger-strong" : undefined}>{moneyShort(netLoss(e))}</span> },
-    { id: "status", header: "Status", accessor: "status", sortable: true, cell: (e) => <StatusBadge status={e.status} tones={statusTones} /> },
+    { id: "net", header: "Net loss", numeric: true, sortable: true, accessor: (e) => netLoss(e), cell: (e) => <span className={netLoss(e) >= singleEvent ? "font-semibold text-danger-strong" : undefined}>{moneyShort(netLoss(e))}</span> },
+    {
+      id: "status",
+      header: "Status",
+      accessor: "status",
+      sortable: true,
+      cell: (e) => (
+        <div className="flex flex-col items-start gap-1">
+          <StatusBadge status={e.status} tones={statusTones} />
+          <PendingBadge subjectType="LossEvent" subjectId={e.id} />
+        </div>
+      ),
+    },
     { id: "source", header: "Source", accessor: "source", hidden: true },
     { id: "category", header: "Indicator category", accessor: "category", hidden: true },
   ];
@@ -86,6 +116,24 @@ export function LossEventsPage() {
   const moveStatus = (e: LossEvent, to: LossEventStatus) => {
     updateLossEvent(e.id, { status: to });
     audit("Updated loss event status", "Loss event", e.id, e.status, to);
+    publish("operational-risk.loss-event.status-changed", { module: OPRISK, subject: { type: "LossEvent", id: e.id, title: e.title, href: "/operational-risk/loss-events" }, payload: { from: e.status, to } });
+  };
+  /** Closure (and write-off of the unrecovered remainder) needs approval — routed through Operations. */
+  const requestClosure = async (e: LossEvent) => {
+    const net = netLoss(e);
+    const r = await submitOperation<LossClosurePayload>("operational-risk.loss-event.closure", {
+      title: `Close ${e.id} — write off ${moneyShort(net)}`,
+      subject: { type: "LossEvent", id: e.id, title: e.title, href: "/operational-risk/loss-events" },
+      payload: { eventId: e.id, title: e.title, netLoss: net, writeOff: net, reason: e.actionPlan ?? "Remediation complete" },
+      summary: [
+        { label: "Event", value: `${e.id} — ${e.title}` },
+        { label: "Gross loss", value: money(e.grossLoss) },
+        { label: "Recovered", value: money(e.recovery) },
+        { label: "Write-off on closure", value: money(net) },
+      ],
+    });
+    if (r.ok) audit("Requested loss-event closure", "Loss event", e.id, e.status, `Closure requested · ${r.instance.id}`);
+    setOutcome(r);
   };
 
   return (
@@ -95,19 +143,20 @@ export function LossEventsPage() {
       actions={canEdit ? <Button iconBefore={<FilePlus2 aria-hidden />} onClick={() => setLogOpen(true)}>Log loss event</Button> : undefined}
     >
       <Stack gap="large">
-        {flash && <Alert tone="success" title="Loss event logged">{flash}</Alert>}
+        {flash && <Alert tone={flash.tone} title={flash.title}>{flash.text}</Alert>}
+        <SubmitOutcome result={outcome} />
         <Grid columns={{ base: 1, sm: 2, lg: 4 }} gap="medium">
           <StatCard label="Gross loss YTD" value={<span className="font-mono">{moneyShort(gross)}</span>} hint={`${ytd.filter((e) => !e.nearMiss).length} loss events · ${ytd.filter((e) => e.nearMiss).length} near misses`} icon={<Receipt aria-hidden />} />
           <StatCard label="Recoveries YTD" value={<span className="font-mono">{moneyShort(rec)}</span>} hint={`${pct(gross ? (rec / gross) * 100 : 0)} recovery rate`} icon={<HandCoins aria-hidden />} tone="success" />
-          <StatCard label="Net loss YTD" value={<span className="font-mono">{moneyShort(net)}</span>} hint="Gross loss − recoveries" icon={<Banknote aria-hidden />} tone={net > lossLimits.annualNet ? "danger" : "neutral"} />
-          <StatCard label="Annual loss-limit used" value={<span className="font-mono">{pct((net / lossLimits.annualNet) * 100)}</span>} hint={`of ${moneyShort(lossLimits.annualNet)} limit (tenant parameter)`} icon={<Scale aria-hidden />} tone={net / lossLimits.annualNet > 0.75 ? "warning" : "success"}>
-            <ProgressBar value={Math.min(1, net / lossLimits.annualNet)} tone={net / lossLimits.annualNet > 0.75 ? "warning" : "success"} size="small" ariaLabel="Annual loss-limit utilisation" />
+          <StatCard label="Net loss YTD" value={<span className="font-mono">{moneyShort(net)}</span>} hint="Gross loss − recoveries" icon={<Banknote aria-hidden />} tone={net > annualLimit ? "danger" : "neutral"} />
+          <StatCard label="Annual loss-limit used" value={<span className="font-mono">{pct((net / annualLimit) * 100)}</span>} hint={`of ${moneyShort(annualLimit)} limit (business rule)`} icon={<Scale aria-hidden />} tone={net / annualLimit > warnShare ? "warning" : "success"}>
+            <ProgressBar value={Math.min(1, net / annualLimit)} tone={net / annualLimit > warnShare ? "warning" : "success"} size="small" ariaLabel="Annual loss-limit utilisation" />
           </StatCard>
         </Grid>
 
         {largeOpen.length > 0 && (
-          <Alert tone="warning" title={`${largeOpen.length} open event${largeOpen.length === 1 ? "" : "s"} above the single-event escalation threshold (${moneyShort(lossLimits.singleEventEscalation)})`}>
-            Auto-escalated through the §6.4.4 protocol; events above {moneyShort(lossLimits.boardMateriality)} are notified to the Board Risk Committee.
+          <Alert tone="warning" title={`${largeOpen.length} open event${largeOpen.length === 1 ? "" : "s"} above the single-event escalation threshold (${moneyShort(singleEvent)})`}>
+            Auto-escalated through the §6.4.4 protocol; events above {moneyShort(boardMateriality)} are notified to the Board Risk Committee.
           </Alert>
         )}
 
@@ -115,11 +164,11 @@ export function LossEventsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Net loss by month vs monthly limit</CardTitle>
-              <CardDescription>Monthly limit {moneyShort(lossLimits.monthlyNet)} (Loss Limit Framework — demo parameter)</CardDescription>
+              <CardDescription>Monthly limit {moneyShort(monthlyLimit)} (Loss Limit Framework — business rule)</CardDescription>
             </CardHeader>
             <CardContent>
               <BarChart
-                data={monthly.map((m) => ({ label: m.label.replace(" (MTD)", "*").replace(/ \d\d/, ""), value: m.value, caption: m.value > lossLimits.monthlyNet ? "Above limit" : undefined }))}
+                data={monthly.map((m) => ({ label: m.label.replace(" (MTD)", "*").replace(/ \d\d/, ""), value: m.value, caption: m.value > monthlyLimit ? "Above limit" : undefined }))}
                 valueFormatter={(v) => moneyShort(v)}
                 tone="accent"
                 height={220}
@@ -138,6 +187,18 @@ export function LossEventsPage() {
           </Card>
         </Grid>
 
+        <div className="flex justify-end">
+          <SegmentedControl
+            label="Register scope"
+            size="small"
+            value={scopeView}
+            onChange={setScopeView}
+            options={[
+              { value: "all", label: `All events (${allEvents.length})` },
+              { value: "mine", label: `Reported by me (${mine.length})` },
+            ]}
+          />
+        </div>
         <DataTable
           label="Loss-event register"
           columns={columns}
@@ -164,19 +225,20 @@ export function LossEventsPage() {
         description={selected ? `${selected.id} · ${selected.eventType}` : undefined}
         footer={
           selected && canEdit && selected.status !== "Closed" ? (
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button onClick={() => moveStatus(selected, statusFlow[statusFlow.indexOf(selected.status) + 1]!)}>Move to {statusFlow[statusFlow.indexOf(selected.status) + 1]}</Button>
-            </div>
+            <ClosureActions event={selected} onMove={moveStatus} onClose={requestClosure} />
           ) : undefined
         }
       >
         {selected && (
           <Stack gap="large">
-            <StatusBadge status={selected.status} tones={statusTones} />
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={selected.status} tones={statusTones} />
+              <PendingBadge subjectType="LossEvent" subjectId={selected.id} />
+            </div>
             <Grid columns={3} gap="small">
               <StatCard label="Gross" value={<span className="font-mono text-lg">{moneyShort(selected.grossLoss)}</span>} />
               <StatCard label="Recovered" value={<span className="font-mono text-lg">{moneyShort(selected.recovery)}</span>} />
-              <StatCard label="Net" value={<span className="font-mono text-lg">{moneyShort(netLoss(selected))}</span>} tone={netLoss(selected) >= lossLimits.singleEventEscalation ? "danger" : "neutral"} />
+              <StatCard label="Net" value={<span className="font-mono text-lg">{moneyShort(netLoss(selected))}</span>} tone={netLoss(selected) >= singleEvent ? "danger" : "neutral"} />
             </Grid>
             <DescriptionList
               columns={1}
@@ -193,6 +255,8 @@ export function LossEventsPage() {
                 { label: "Source", value: selected.source },
                 { label: "Reported by", value: selected.reportedBy },
                 { label: "Action plan", value: selected.actionPlan },
+                { label: "Written off on closure", value: selected.writeOff !== undefined ? money(selected.writeOff) : undefined },
+                { label: "Closure approved by", value: selected.closedBy },
               ]}
             />
             {canEdit && selected.status !== "Closed" && !selected.nearMiss && (
@@ -202,6 +266,7 @@ export function LossEventsPage() {
                   const after = Math.min(selected.grossLoss, selected.recovery + amount);
                   updateLossEvent(selected.id, { recovery: after });
                   audit("Recorded loss recovery", "Loss event", selected.id, money(selected.recovery), money(after));
+                  publish("operational-risk.loss-event.recovery-recorded", { module: OPRISK, subject: { type: "LossEvent", id: selected.id, title: selected.title, href: "/operational-risk/loss-events" }, payload: { before: selected.recovery, after } });
                 }}
               />
             )}
@@ -212,14 +277,42 @@ export function LossEventsPage() {
       <LogEventModal
         open={logOpen}
         onOpenChange={setLogOpen}
-        onSubmit={(e) => {
+        singleEvent={singleEvent}
+        onSubmit={async (draft) => {
+          const before = await runHooks("operational-risk.loss-event.log.before", { event: draft, actor });
+          if (!before.ok) {
+            setFlash({ tone: "danger", title: "Loss event not logged", text: `Blocked by ${before.vetoedBy}: ${before.reason}` });
+            setLogOpen(false);
+            return;
+          }
+          const e = { ...before.ctx.event, reportedById: actor.id };
           addLossEvent(e);
           audit("Logged loss event", "Loss event", e.id, undefined, `${e.title} · gross ${money(e.grossLoss)}`);
-          setFlash(`${e.id} — ${e.title}. ${netLoss(e) >= lossLimits.singleEventEscalation ? "Above the single-event threshold: escalated to Head of Risk." : "Within single-event threshold."}`);
+          const above = netLoss(e) >= singleEvent;
+          publish("operational-risk.loss-event.logged", { module: OPRISK, subject: { type: "LossEvent", id: e.id, title: e.title, href: "/operational-risk/loss-events" }, payload: { netLoss: netLoss(e), aboveThreshold: above, nearMiss: e.nearMiss } });
+          notifyLossThresholds(e, money);
+          await runHooks("operational-risk.loss-event.log.after", { event: e, actor });
+          setFlash({ tone: "success", title: "Loss event logged", text: `${e.id} — ${e.title}. ${above ? "Above the single-event threshold: escalation roles notified." : "Within single-event threshold."}` });
           setLogOpen(false);
         }}
       />
     </ModulePage>
+  );
+}
+
+function ClosureActions({ event, onMove, onClose }: { event: LossEvent; onMove: (e: LossEvent, to: LossEventStatus) => void; onClose: (e: LossEvent) => Promise<void> }) {
+  const next = statusFlow[statusFlow.indexOf(event.status) + 1]!;
+  const pending = usePendingFor("LossEvent", event.id);
+  return (
+    <div className="flex flex-wrap justify-end gap-2">
+      {next === "Closed" ? (
+        <Button disabled={!!pending} onClick={() => void onClose(event)}>
+          {pending ? "Closure awaiting approval" : `Request closure & write-off (${moneyShort(netLoss(event))})`}
+        </Button>
+      ) : (
+        <Button onClick={() => onMove(event, next)}>Move to {next}</Button>
+      )}
+    </div>
   );
 }
 
@@ -242,9 +335,11 @@ function RecoveryForm({ event, onSave }: { event: LossEvent; onSave: (amount: nu
 }
 
 type Draft = { title: string; eventType: string; category: string; businessLine: string; branch: string; occurredAt: string; discoveredAt: string; gross: string; recovery: string; rootCause: string; description: string; nearMiss: boolean };
-const emptyDraft: Draft = { title: "", eventType: "", category: "", businessLine: "", branch: "", occurredAt: "", discoveredAt: "2026-11-10", gross: "", recovery: "0", rootCause: "", description: "", nearMiss: false };
+/** Demo "today" (DEMO_NOW) as yyyy-mm-dd for date inputs. */
+const TODAY = DEMO_NOW.toISOString().slice(0, 10);
+const emptyDraft: Draft = { title: "", eventType: "", category: "", businessLine: "", branch: "", occurredAt: "", discoveredAt: TODAY, gross: "", recovery: "0", rootCause: "", description: "", nearMiss: false };
 
-function LogEventModal({ open, onOpenChange, onSubmit }: { open: boolean; onOpenChange: (o: boolean) => void; onSubmit: (e: LossEvent) => void }) {
+function LogEventModal({ open, onOpenChange, onSubmit, singleEvent }: { open: boolean; onOpenChange: (o: boolean) => void; onSubmit: (e: LossEvent) => void | Promise<void>; singleEvent: number }) {
   const actor = useActorName();
   const [d, setD] = useState<Draft>(emptyDraft);
   const [touched, setTouched] = useState(false);
@@ -281,7 +376,7 @@ function LogEventModal({ open, onOpenChange, onSubmit }: { open: boolean; onOpen
               setTouched(true);
               if (!valid) return;
               onSubmit({
-                id: `OLE-${Date.now().toString(36).toUpperCase()}`,
+                id: newId("OLE"),
                 title: d.nearMiss ? `Near miss — ${d.title.trim()}` : d.title.trim(),
                 description: d.description.trim() || d.title.trim(),
                 eventType: d.eventType as LossEvent["eventType"],
@@ -289,7 +384,7 @@ function LogEventModal({ open, onOpenChange, onSubmit }: { open: boolean; onOpen
                 businessLine: d.businessLine,
                 branch: d.branch,
                 occurredAt: new Date(d.occurredAt).toISOString(),
-                discoveredAt: d.discoveredAt === "2026-11-10" ? DEMO_NOW.toISOString() : new Date(d.discoveredAt).toISOString(),
+                discoveredAt: d.discoveredAt === TODAY ? DEMO_NOW.toISOString() : new Date(d.discoveredAt).toISOString(),
                 grossLoss: d.nearMiss ? 0 : gross,
                 recovery: d.nearMiss ? 0 : recovery,
                 nearMiss: d.nearMiss,
@@ -325,10 +420,10 @@ function LogEventModal({ open, onOpenChange, onSubmit }: { open: boolean; onOpen
             <Select id="le-branch" placeholder="Select" value={d.branch} onChange={(e) => set("branch", e.target.value)} options={["Head office", ...branches].map((b) => ({ value: b, label: b }))} />
           </Field>
           <Field label="Date occurred" htmlFor="le-occ" required error={err("occurredAt")}>
-            <Input id="le-occ" type="date" max="2026-11-10" value={d.occurredAt} onChange={(e) => set("occurredAt", e.target.value)} />
+            <Input id="le-occ" type="date" max={TODAY} value={d.occurredAt} onChange={(e) => set("occurredAt", e.target.value)} />
           </Field>
           <Field label="Date discovered" htmlFor="le-disc" required>
-            <Input id="le-disc" type="date" max="2026-11-10" value={d.discoveredAt} onChange={(e) => set("discoveredAt", e.target.value)} />
+            <Input id="le-disc" type="date" max={TODAY} value={d.discoveredAt} onChange={(e) => set("discoveredAt", e.target.value)} />
           </Field>
         </Grid>
         <Checkbox label="Near miss (no monetary loss)" checked={d.nearMiss} onChange={(e) => set("nearMiss", e.target.checked)} />
@@ -348,9 +443,9 @@ function LogEventModal({ open, onOpenChange, onSubmit }: { open: boolean; onOpen
         <Field label="Description" htmlFor="le-desc" optional>
           <Textarea id="le-desc" rows={2} value={d.description} onChange={(e) => set("description", e.target.value)} />
         </Field>
-        {!d.nearMiss && gross - recovery >= lossLimits.singleEventEscalation && (
+        {!d.nearMiss && gross - recovery >= singleEvent && (
           <Alert tone="warning" title="Above the single-event escalation threshold">
-            Net loss of {money(gross - recovery)} exceeds {money(lossLimits.singleEventEscalation)}; the event will be escalated to the Head of Risk on save.
+            Net loss of {money(gross - recovery)} is at or above {money(singleEvent)}; the escalation roles are notified on save.
           </Alert>
         )}
       </Stack>

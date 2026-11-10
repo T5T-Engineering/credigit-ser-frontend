@@ -8,7 +8,7 @@ import { useCallback, type ReactNode } from "react";
 import { Info } from "lucide-react";
 import { Accordion, AccordionItem, Alert, Button, DataTable, type DataTableColumn, DescriptionList, Popover, Stack, Text } from "@credigit/web-ui";
 import { useDbActions } from "@/lib/data/hooks";
-import { useRole, useSession } from "@/lib/auth/session";
+import { currentActor, useScope } from "@/lib/platform/scope";
 import { moneyShort } from "@/lib/format";
 import type { RoleId } from "@/lib/rbac/roles";
 
@@ -29,24 +29,22 @@ export const clamp = (v: number, min: number, max: number) => Math.min(max, Math
 export const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
 export const round = (v: number, d = 2) => Math.round(v * 10 ** d) / 10 ** d;
 
-/** Audit-log writer bound to the signed-in user and role (PRD §10.3: who, what, entity, before/after). */
+/** Audit-log writer bound to the signed-in actor (PRD §10.3: who, what, entity, before/after). */
 export function useAuditLog() {
   const { log } = useDbActions();
-  const user = useSession((s) => s.user);
-  const roleId = useSession((s) => s.roleId);
   return useCallback(
     (action: string, entityType: string, entityId: string, before?: string, after?: string) => {
-      log({ actorId: user?.id ?? "demo", actorName: user?.name ?? "Demo user", roleId: (roleId ?? "cro") as RoleId, action, entityType, entityId, before, after });
+      const actor = currentActor();
+      log({ actorId: actor.id, actorName: actor.name, roleId: actor.roleId, action, entityType, entityId, before, after });
     },
-    [log, user, roleId],
+    [log],
   );
 }
 
-/** Name + role of the current user, for sign-off stamps. */
-export function useActorName(): { name: string; role: string; roleId: RoleId | null } {
-  const user = useSession((s) => s.user);
-  const role = useRole();
-  return { name: user?.name ?? "Demo user", role: role?.name ?? "—", roleId: role?.id ?? null };
+/** Signed-in actor with display name + role, for sign-off stamps and "my" views. */
+export function useActorName(): { id: string; name: string; role: string; roleId: RoleId | null } {
+  const { actor, role } = useScope();
+  return { id: actor.id, name: actor.name, role: role?.name ?? "—", roleId: role?.id ?? null };
 }
 
 /** A metric's traceability record (PRD §8: formula + source of each variable). */
@@ -133,6 +131,3 @@ export function DemoNote({ children, title = "Demo model parameters" }: { childr
     </Alert>
   );
 }
-
-/** Roles that act as the tenant-configured approving officer for IFRS 9 / ILAAP governance (demo configuration). */
-export const APPROVING_ROLES: RoleId[] = ["cro", "head-of-risk"];

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
+  Alert,
   Button,
   Card,
   CardContent,
@@ -28,25 +29,37 @@ import {
   TableHeaderCell,
   TableRow,
   Text,
+  SegmentedControl,
   Textarea,
+  useToast,
 } from "@credigit/web-ui";
+import Link from "next/link";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { dateTime, number, pct } from "@/lib/format";
-import { CalcPopover, CalcRegister, DemoNote, sum, useAuditLog, type CalcSpec, ms } from "../../ifrs9/common";
+import { useOperationsStore } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import { CalcPopover, CalcRegister, DemoNote, sum, type CalcSpec, ms } from "../../ifrs9/common";
+import { operationHref } from "../../ifrs9/governance";
+import { escalateBreach, raiseBreach, requestBreachClose, roleName, type ActionResult, type BreachInput } from "../actions";
 import {
-  ESCALATION,
-  FX_RATES,
   INTERBANK_QUOTES,
   INTERBANK_SPREAD_TREND,
   MONTHS,
-  NOP_LIMIT_PCT,
   VAR_TREND,
   desks,
+  escalationRoles,
   eveSensitivity,
   fxPositions,
+  fxRates,
+  interbankSpreadLimit,
+  irrbbLadder,
+  irrbbShock,
   niiAtRisk,
+  nopLimitPct,
   repricingGap,
+  utilisationTone,
   type Breach,
   type Desk,
   type FxPosition,
@@ -57,35 +70,100 @@ import { useMarketBase } from "../use-market";
 const breachTones = { Open: "danger", Escalated: "warning", Closed: "success" } as const;
 
 export function MarketRiskPage() {
-  const { rows, capital, bs } = useMarketBase();
+  const { rows, capital, bs, rules } = useMarketBase();
   const canEdit = useCan("market-risk", "edit");
-  const audit = useAuditLog();
+  const { actor } = useScope();
+  const { toast } = useToast();
   const breaches = useMarketRisk((s) => s.breaches);
-  const setBreach = useMarketRisk((s) => s.setBreach);
+  const instances = useOperationsStore((s) => s.instances);
+  const stopLossWarn = useRule<number>("market-risk.stopLossEarlyWarningPct") / 100;
   const [closing, setClosing] = useState<Breach | null>(null);
   const [note, setNote] = useState("");
+  const [scope, setScope] = useState<"all" | "mine">("all");
 
-  const positions = useMemo(() => fxPositions(capital), [capital]);
-  const deskList = useMemo(() => desks(capital), [capital]);
-  const gap = useMemo(() => repricingGap(rows, bs), [rows, bs]);
+  const { positions, deskList, gap, nopLimit, spreadLimit, shock, ladder, rates, ladderRoles } = useMemo(() => {
+    void rules; // recompute when business rules change
+    return {
+      positions: fxPositions(capital),
+      deskList: desks(capital),
+      gap: repricingGap(rows, bs),
+      nopLimit: nopLimitPct(),
+      spreadLimit: interbankSpreadLimit(),
+      shock: irrbbShock(),
+      ladder: irrbbLadder(),
+      rates: fxRates(),
+      ladderRoles: escalationRoles(),
+    };
+  }, [capital, rows, bs, rules]);
+  const topRole = ladderRoles[ladderRoles.length - 1];
   const nop = sum(positions.map((p) => p.netNgn));
   const nopPct = (nop / capital) * 100;
   const totalVar = sum(deskList.map((d) => d.varNgn));
   const totalVarLimit = sum(deskList.map((d) => d.limitNgn));
   const spread = Math.max(...INTERBANK_QUOTES.map((q) => q.rate)) - Math.min(...INTERBANK_QUOTES.map((q) => q.rate));
-  const shocks = [-200, -100, 100, 200];
 
-  const escalate = (b: Breach) => {
-    const next = ESCALATION[Math.min(ESCALATION.length - 1, ESCALATION.indexOf(b.level) + 1)]!;
-    setBreach(b.id, { level: next, status: "Escalated" });
-    audit("Escalated market-risk limit breach (§6.4.4)", "LimitBreach", b.id, `${b.status} · ${b.level}`, `Escalated · ${next}`);
-  };
-  const close = () => {
+  /** Breaches with an open closure request in Operations. */
+  const closeRequests = useMemo(
+    () => new Map(instances.filter((i) => i.operationType === "market-risk.breach.close" && ["Pending", "In progress"].includes(i.status)).map((i) => [i.subject.id, i.id])),
+    [instances],
+  );
+  const shownBreaches = scope === "mine" ? breaches.filter((b) => b.levelRole === actor.roleId || b.raisedBy === actor.name) : breaches;
+
+  /** Live limit exceedances not yet logged as an open breach (§6.8 auto-escalation). */
+  const share = (v: number) => (v / capital) * 100;
+  const detected: BreachInput[] = [
+    ...(Math.abs(nopPct) >= nopLimit ? [{ metric: "NOP to capital", desk: "Aggregate", actual: pct(nopPct, 2), limit: `${nopLimit}%`, utilisation: Math.round((Math.abs(nopPct) / nopLimit) * 100) }] : []),
+    ...positions
+      .filter((p) => Math.abs(share(p.netNgn)) >= p.limitPct)
+      .map((p) => ({ metric: `NOP — ${p.ccy}`, desk: "FX trading desk", actual: `${pct(share(p.netNgn), 2)} of capital`, limit: `${p.limitPct}%`, utilisation: Math.round((Math.abs(share(p.netNgn)) / p.limitPct) * 100) })),
+    ...deskList
+      .filter((d) => d.varNgn >= d.limitNgn)
+      .map((d) => ({ metric: "VaR limit utilisation", desk: d.name, actual: pct((d.varNgn / d.limitNgn) * 100, 0), limit: "100%", utilisation: Math.round((d.varNgn / d.limitNgn) * 100) })),
+    ...deskList
+      .filter((d) => d.mtmLossNgn >= d.stopLossNgn)
+      .map((d) => ({ metric: "Stop-loss trigger", desk: d.name, actual: `₦ loss ${Math.round((d.mtmLossNgn / d.stopLossNgn) * 100)}% of trigger`, limit: "100%", utilisation: Math.round((d.mtmLossNgn / d.stopLossNgn) * 100) })),
+    ...(spread >= spreadLimit ? [{ metric: "Interbank spread", desk: "Money market", actual: `${spread.toFixed(2)} pp`, limit: `${spreadLimit} pp`, utilisation: Math.round((spread / spreadLimit) * 100) }] : []),
+  ].filter((x) => !breaches.some((b) => b.status !== "Closed" && b.metric === x.metric && b.desk === x.desk));
+
+  const report = (res: ActionResult, success: string) => (res.ok ? toast({ title: success, tone: "success" }) : toast({ title: "Not done", description: res.reason, tone: "danger" }));
+  const raise = async (d: BreachInput) => report(await raiseBreach(d), "Breach raised and alert recipients notified");
+  const escalate = async (b: Breach) => report(await escalateBreach(b), "Breach escalated");
+  const close = async () => {
     if (!closing) return;
-    setBreach(closing.id, { status: "Closed", note });
-    audit("Closed market-risk limit breach", "LimitBreach", closing.id, closing.status, `Closed: ${note}`);
+    const res = await requestBreachClose(closing, note);
+    if (res.ok) toast({ title: res.applied ? "Breach closed" : "Closure submitted for approval", description: res.applied ? undefined : `Follow it in Operations (${res.instance.id}).`, tone: "success" });
+    else toast({ title: "Not submitted", description: res.reason, tone: "danger" });
     setClosing(null);
     setNote("");
+  };
+
+  const BreachActions = ({ b }: { b: Breach }) => {
+    const pendingId = closeRequests.get(b.id);
+    if (b.status === "Closed")
+      return b.closedBy ? (
+        <Text variant="caption" tone="muted">
+          Closed · {b.closedBy}
+        </Text>
+      ) : null;
+    if (pendingId)
+      return (
+        <Button as={Link} href={operationHref(pendingId)} size="small" variant="text">
+          Closure awaiting approval
+        </Button>
+      );
+    if (!canEdit) return null;
+    return (
+      <Stack direction="horizontal" gap="xsmall">
+        {b.levelRole !== topRole && (
+          <Button size="small" variant="secondary" onClick={() => escalate(b)}>
+            Escalate
+          </Button>
+        )}
+        <Button size="small" variant="tertiary" onClick={() => setClosing(b)}>
+          Request close
+        </Button>
+      </Stack>
+    );
   };
 
   const specs: CalcSpec[] = [
@@ -130,24 +208,24 @@ export function MarketRiskPage() {
       prd: "§6.8.1",
     },
     {
-      metric: "NII at Risk (+200 bps)",
+      metric: `NII at Risk (+${shock} bps)`,
       formula: "Σ gap × shock × (12 − bucket midpoint) / 12",
       sources: "Repricing gap × IRRBB shock (Rules & Parameters Engine); NMD behaviour from the model registry",
-      value: ms(niiAtRisk(gap, 200)),
+      value: ms(niiAtRisk(gap, shock)),
       prd: "§6.8.1",
     },
     {
-      metric: "EVE (+200 bps)",
+      metric: `EVE (+${shock} bps)`,
       formula: "ΔPV(assets) − ΔPV(liabilities) ≈ −Σ gap × modified duration × shock",
       sources: "Cash-flow schedule (CBA) discounted at the shocked yield curve (market-data feed)",
-      value: ms(eveSensitivity(gap, 200)),
+      value: ms(eveSensitivity(gap, shock)),
       prd: "§6.8.1",
     },
     {
       metric: "Interbank rate spread",
       formula: "Highest interbank rate − lowest interbank rate",
       sources: "Treasury / money-market dealing system feed",
-      value: `${spread.toFixed(2)} pp`,
+      value: `${spread.toFixed(2)} pp (limit ${spreadLimit} pp)`,
       prd: "§6.8.1",
     },
   ];
@@ -168,7 +246,7 @@ export function MarketRiskPage() {
         return (
           <ProgressBar
             value={Math.min(1, u)}
-            tone={u >= 1 ? "danger" : u >= 0.8 ? "warning" : "success"}
+            tone={utilisationTone(u)}
             ariaLabel={`${p.ccy} use of ${p.limitPct}% limit`}
             showValue
             size="small"
@@ -191,7 +269,7 @@ export function MarketRiskPage() {
       cell: (d) => (
         <ProgressBar
           value={Math.min(1, d.varNgn / d.limitNgn)}
-          tone={d.varNgn >= d.limitNgn ? "danger" : d.varNgn / d.limitNgn >= 0.8 ? "warning" : "success"}
+          tone={utilisationTone(d.varNgn / d.limitNgn)}
           ariaLabel={`${d.name} VaR use of limit`}
           showValue
           size="small"
@@ -205,7 +283,7 @@ export function MarketRiskPage() {
       accessor: (d) => d.mtmLossNgn / d.stopLossNgn,
       cell: (d) => {
         const u = d.mtmLossNgn / d.stopLossNgn;
-        return <RagIndicator status={u >= 1 ? "red" : u >= 0.6 ? "amber" : "green"} label={`${Math.round(u * 100)}% of trigger`} />;
+        return <RagIndicator status={u >= 1 ? "red" : u >= stopLossWarn ? "amber" : "green"} label={`${Math.round(u * 100)}% of trigger`} />;
       },
     },
   ];
@@ -224,26 +302,14 @@ export function MarketRiskPage() {
         </span>
       ),
     },
-    { id: "level", header: "With", accessor: "level" },
+    { id: "level", header: "With", accessor: (b) => roleName(b.levelRole) },
     { id: "status", header: "Status", accessor: "status", cell: (b) => <StatusBadge status={b.status} tones={breachTones} /> },
     { id: "note", header: "Resolution", accessor: (b) => b.note ?? "" },
     {
       id: "act",
       header: "",
       exportable: false,
-      cell: (b) =>
-        canEdit && b.status !== "Closed" ? (
-          <Stack direction="horizontal" gap="xsmall">
-            {b.level !== "Board Risk Committee" && (
-              <Button size="small" variant="secondary" onClick={() => escalate(b)}>
-                Escalate
-              </Button>
-            )}
-            <Button size="small" variant="tertiary" onClick={() => setClosing(b)}>
-              Close
-            </Button>
-          </Stack>
-        ) : null,
+      cell: (b) => <BreachActions b={b} />,
     },
   ];
 
@@ -259,19 +325,19 @@ export function MarketRiskPage() {
           <StatCard
             label="NOP / capital"
             value={pct(nopPct, 2)}
-            hint={`Limit ${NOP_LIMIT_PCT}% (tenant, demo)`}
-            tone={nopPct >= NOP_LIMIT_PCT ? "danger" : nopPct >= NOP_LIMIT_PCT * 0.8 ? "warning" : "success"}
+            hint={`Limit ${nopLimit}% (business rule)`}
+            tone={utilisationTone(Math.abs(nopPct) / nopLimit)}
           />
           <StatCard label="FCY loans / total" value={pct((bs.fcyLoans / bs.totalLoans) * 100, 1)} hint={`${ms(bs.fcyLoans)} of ${ms(bs.totalLoans)}`} />
           <StatCard
             label="VaR (99%, 1-day)"
             value={ms(totalVar)}
             hint={`${pct((totalVar / totalVarLimit) * 100, 0)} of limit`}
-            tone={totalVar / totalVarLimit >= 0.9 ? "warning" : "neutral"}
+            tone={utilisationTone(totalVar / totalVarLimit)}
           />
-          <StatCard label="NII at risk +200 bps" value={ms(niiAtRisk(gap, 200))} hint="12-month horizon" />
-          <StatCard label="ΔEVE +200 bps" value={ms(eveSensitivity(gap, 200))} hint={pct((eveSensitivity(gap, 200) / capital) * 100, 1) + " of capital"} />
-          <StatCard label="Interbank spread" value={`${spread.toFixed(2)} pp`} hint="Highest − lowest quote" />
+          <StatCard label={`NII at risk +${shock} bps`} value={ms(niiAtRisk(gap, shock))} hint="12-month horizon" />
+          <StatCard label={`ΔEVE +${shock} bps`} value={ms(eveSensitivity(gap, shock))} hint={pct((eveSensitivity(gap, shock) / capital) * 100, 1) + " of capital"} />
+          <StatCard label="Interbank spread" value={`${spread.toFixed(2)} pp`} hint={`Limit ${spreadLimit} pp · highest − lowest quote`} tone={utilisationTone(spread / spreadLimit)} />
         </Grid>
 
         <Grid columns={{ base: 1, lg: 12 }} gap="large">
@@ -317,7 +383,7 @@ export function MarketRiskPage() {
                 label="FX rate trend"
                 height={240}
                 yFormatter={(v) => `₦${number(v)}`}
-                series={FX_RATES.filter((r) => r.ccy !== "CNY").map((r, i) => ({
+                series={rates.filter((r) => r.ccy !== "CNY").map((r, i) => ({
                   name: `${r.ccy}/NGN`,
                   tone: (["accent", "brand", "info"] as const)[i],
                   points: r.history.map((y, k) => ({ x: MONTHS[k]!, y })),
@@ -454,7 +520,7 @@ export function MarketRiskPage() {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {shocks.map((s) => (
+                      {ladder.map((s) => (
                         <TableRow key={s}>
                           <TableCell className="font-mono">{s > 0 ? `+${s}` : s} bps</TableCell>
                           <TableCell numeric>{ms(niiAtRisk(gap, s))}</TableCell>
@@ -491,20 +557,49 @@ export function MarketRiskPage() {
           </Card>
         </Grid>
 
+        {detected.length > 0 && (
+          <Alert tone="danger" title={`${detected.length} limit exceedance${detected.length > 1 ? "s" : ""} not yet in the breach log`}>
+            <Stack gap="small">
+              {detected.map((d) => (
+                <Stack key={`${d.metric}-${d.desk}`} direction="horizontal" justify="between" align="center" gap="small" wrap>
+                  <Text variant="small">
+                    <span className="font-semibold">{d.metric}</span> · {d.desk}: <span className="font-mono">{d.actual}</span> vs {d.limit}
+                  </Text>
+                  {canEdit && (
+                    <Button size="small" variant="secondary" onClick={() => raise(d)}>
+                      Raise breach
+                    </Button>
+                  )}
+                </Stack>
+              ))}
+            </Stack>
+          </Alert>
+        )}
+
         <Card variant="outlined">
           <CardHeader>
             <Stack gap="xsmall">
               <CardTitle>Limit breaches &amp; escalation</CardTitle>
               <CardDescription>
-                Escalated through the §6.4.4 protocol: Market Risk Analyst → Head of Risk → CRO → Board Risk Committee. Visible on the CRO Dashboard (§6.11).
+                Escalated through the §6.4.4 protocol: {ladderRoles.map(roleName).join(" → ")}. Closure is approved in Operations. Visible on the CRO Dashboard (§6.11).
               </CardDescription>
             </Stack>
+            <SegmentedControl
+              label="Breaches shown"
+              size="small"
+              value={scope}
+              onChange={(v) => setScope(v as "all" | "mine")}
+              options={[
+                { value: "all", label: "All" },
+                { value: "mine", label: "Mine" },
+              ]}
+            />
           </CardHeader>
           <CardContent>
             <DataTable
               label="Limit breach log"
               columns={breachCols}
-              data={breaches}
+              data={shownBreaches}
               getRowId={(b) => b.id}
               filters={[{ id: "status", label: "Status", columnId: "status" }]}
               defaultSort={{ id: "at", direction: "desc" }}
@@ -518,18 +613,9 @@ export function MarketRiskPage() {
                     <StatusBadge status={b.status} tones={breachTones} />
                   </Stack>
                   <Text variant="caption" tone="muted">
-                    {b.desk} · {b.actual} vs {b.limit} · with {b.level}
+                    {b.desk} · {b.actual} vs {b.limit} · with {roleName(b.levelRole)}
                   </Text>
-                  {canEdit && b.status !== "Closed" && (
-                    <Stack direction="horizontal" gap="xsmall">
-                      <Button size="small" variant="secondary" onClick={() => escalate(b)}>
-                        Escalate
-                      </Button>
-                      <Button size="small" variant="tertiary" onClick={() => setClosing(b)}>
-                        Close
-                      </Button>
-                    </Stack>
-                  )}
+                  <BreachActions b={b} />
                 </Stack>
               )}
             />
@@ -542,7 +628,7 @@ export function MarketRiskPage() {
       <Modal
         open={!!closing}
         onOpenChange={(o) => !o && setClosing(null)}
-        title="Close limit breach"
+        title="Request breach closure"
         description={closing ? `${closing.id} · ${closing.metric} · ${closing.desk}` : undefined}
         footer={
           <Stack direction="horizontal" gap="small" justify="end">
@@ -550,12 +636,12 @@ export function MarketRiskPage() {
               Cancel
             </Button>
             <Button onClick={close} disabled={note.trim().length < 5}>
-              Close breach
+              Submit for approval
             </Button>
           </Stack>
         }
       >
-        <Field label="Resolution note" required description="Recorded in the breach log and the audit trail.">
+        <Field label="Resolution note" required description="Closure is approved in Operations (Head of Risk / CRO); the note is recorded in the breach log and the audit trail.">
           <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
         </Field>
       </Modal>

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
+  Button,
   Card,
   CardContent,
   CardDescription,
@@ -21,20 +22,64 @@ import {
   StackedBarChart,
   StatCard,
   Text,
+  useToast,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
+import { useCan } from "@/lib/auth/session";
 import { pct } from "@/lib/format";
 import { CalcPopover, CalcRegister, DemoNote, sum, type CalcSpec, ms } from "../../ifrs9/common";
-import { CONCENTRATION_CUTOFFS, EARLY_WARNING, FUNDING_MIX, LCR_FLOOR, LDR_MIN, LIQUIDITY_RATIO_MIN, LIQUID_ASSETS, NSFR_FLOOR, maturityLadder, topDepositors } from "../data";
+import { raiseBreach, rasValues } from "../actions";
+import {
+  LIQUID_ASSETS,
+  concentrationCutoffs,
+  earlyWarnings,
+  fundingMix,
+  lcrFloor,
+  ldrMin,
+  liquidityRatioMin,
+  maturityLadder,
+  nsfrFloor,
+  ratioWarningMargin,
+  topDepositors,
+  type EarlyWarning,
+} from "../data";
+import { useMarketRisk } from "../store";
 import { useMarketBase } from "../use-market";
 
 export function LiquidityPage() {
-  const { bs, liq } = useMarketBase();
+  const { bs, liq, rules } = useMarketBase();
+  const canEdit = useCan("market-risk", "edit");
+  const { toast } = useToast();
+  const breaches = useMarketRisk((s) => s.breaches);
+  const p = useMemo(() => {
+    void rules; // recompute when business rules change
+    return {
+      cutoffs: concentrationCutoffs(),
+      ew: earlyWarnings(),
+      mix: fundingMix(),
+      lrMin: liquidityRatioMin(),
+      lcr: lcrFloor(),
+      nsfr: nsfrFloor(),
+      ldr: ldrMin(),
+      margin: ratioWarningMargin(),
+      top20: rasValues().top20!,
+    };
+  }, [rules]);
   const [cutoff, setCutoff] = useState("10");
   const ladder = useMemo(() => maturityLadder(bs, liq.liquid), [bs, liq.liquid]);
   const depositors = useMemo(() => topDepositors(bs), [bs]);
-  const concentration = CONCENTRATION_CUTOFFS.map((n) => ({ n, balance: sum(depositors.slice(0, n).map((d) => d.balance)) }));
+  const concentration = p.cutoffs.map((n) => ({ n, balance: sum(depositors.slice(0, n).map((d) => d.balance)) }));
   const shown = depositors.slice(0, Number(cutoff));
+  const top20Share = (sum(depositors.slice(0, 20).map((d) => d.balance)) / bs.deposits) * 100;
+  const ewLogged = (e: EarlyWarning) => breaches.some((b) => b.status !== "Closed" && b.metric === `Early warning — ${e.trigger}`);
+  const raiseEw = async (e: EarlyWarning) => {
+    const res = await raiseBreach(
+      { metric: `Early warning — ${e.trigger}`, desk: "Treasury / ALM", actual: `${e.current} ${e.unit}`, limit: e.threshold, utilisation: Math.round((e.current / e.limit) * 100) },
+      "early-warning",
+      e,
+    );
+    toast(res.ok ? { title: "Early warning raised and escalated", tone: "success" } : { title: "Not raised", description: res.reason, tone: "danger" });
+  };
 
   const specs: CalcSpec[] = [
     {
@@ -61,7 +106,7 @@ export function LiquidityPage() {
     {
       metric: "Loan-to-deposit ratio",
       formula: "(Total loans + 150% weighting uplift on qualifying SME/retail/mortgage/consumer lending) / total deposits",
-      sources: "CBA facility book (SME/retail/mortgage flag from Origination) / CBA deposit ledger; minimum 65%",
+      sources: `CBA facility book (SME/retail/mortgage flag from Origination) / CBA deposit ledger; minimum ${p.ldr}% (business rule)`,
       value: pct(liq.ldrWeighted, 1),
       prd: "§6.8.2, §9.1",
     },
@@ -73,9 +118,9 @@ export function LiquidityPage() {
     },
     {
       metric: "Depositor concentration",
-      formula: "Top-N depositors' balance / total deposits × 100 (N = 5/10/25/50/100/200)",
+      formula: `Top-N depositors' balance / total deposits × 100 (N = ${p.cutoffs.join("/")})`,
       sources: "CBA deposit ledger ranked by balance",
-      value: pct((concentration[1]!.balance / bs.deposits) * 100, 1) + " (top 10)",
+      value: concentration[1] ? `${pct((concentration[1].balance / bs.deposits) * 100, 1)} (top ${concentration[1].n})` : "—",
       prd: "§6.8.2",
     },
     {
@@ -90,14 +135,14 @@ export function LiquidityPage() {
     {
       label: "Liquidity ratio",
       value: liq.liquidityRatio,
-      floor: LIQUIDITY_RATIO_MIN,
-      floorLabel: `Minimum ${LIQUIDITY_RATIO_MIN}% — tenant parameter (demo)`,
+      floor: p.lrMin,
+      floorLabel: `Minimum ${p.lrMin}% — business rule`,
       max: 80,
       spec: specs[0]!,
     },
-    { label: "LCR", value: liq.lcr, floor: LCR_FLOOR, floorLabel: `Floor ${LCR_FLOOR}%`, max: 300, spec: specs[1]! },
-    { label: "NSFR", value: liq.nsfr, floor: NSFR_FLOOR, floorLabel: `Floor ${NSFR_FLOOR}%`, max: 200, spec: specs[2]! },
-    { label: "LDR (weighted)", value: liq.ldrWeighted, floor: LDR_MIN, floorLabel: `CBN minimum ${LDR_MIN}% · gross ${pct(liq.ldrGross, 1)}`, max: 120, spec: specs[3]! },
+    { label: "LCR", value: liq.lcr, floor: p.lcr, floorLabel: `Floor ${p.lcr}%`, max: 300, spec: specs[1]! },
+    { label: "NSFR", value: liq.nsfr, floor: p.nsfr, floorLabel: `Floor ${p.nsfr}%`, max: 200, spec: specs[2]! },
+    { label: "LDR (weighted)", value: liq.ldrWeighted, floor: p.ldr, floorLabel: `CBN minimum ${p.ldr}% · gross ${pct(liq.ldrGross, 1)}`, max: 120, spec: specs[3]! },
   ];
 
   return (
@@ -120,7 +165,7 @@ export function LiquidityPage() {
                   valueFormatter={(v) => pct(v, 0)}
                   bands={[
                     { to: c.floor, tone: "danger" },
-                    { to: c.floor * 1.1, tone: "warning" },
+                    { to: c.floor * (1 + p.margin), tone: "warning" },
                     { to: c.max, tone: "success" },
                   ]}
                 />
@@ -193,7 +238,10 @@ export function LiquidityPage() {
           <CardHeader>
             <Stack gap="xsmall">
               <CardTitle>Depositor concentration</CardTitle>
-              <CardDescription>Share of total deposits held by the top-N depositors (cut-offs configurable in Portfolio &amp; MIS).</CardDescription>
+              <CardDescription>
+                Share of total deposits held by the top-N depositors (cut-offs are a business rule). Top 20: {pct(top20Share, 1)} vs RAS early warning {p.top20.earlyWarning}% / limit{" "}
+                {p.top20.buffer}%.
+              </CardDescription>
             </Stack>
             <CalcPopover spec={specs[5]!} />
           </CardHeader>
@@ -209,7 +257,7 @@ export function LiquidityPage() {
                       </Text>
                       <ProgressBar
                         value={c.balance / bs.deposits}
-                        tone={c.n <= 20 && c.balance / bs.deposits > 0.22 ? "warning" : "brand"}
+                        tone={c.n <= 20 && (c.balance / bs.deposits) * 100 > p.top20.earlyWarning ? "warning" : "brand"}
                         ariaLabel={`Top ${c.n} share of deposits`}
                         size="small"
                       />
@@ -222,7 +270,7 @@ export function LiquidityPage() {
                 size="small"
                 value={cutoff}
                 onChange={setCutoff}
-                options={["5", "10", "25", "50", "100", "200"].map((v) => ({ value: v, label: `Top ${v}` }))}
+                options={p.cutoffs.map((v) => ({ value: String(v), label: `Top ${v}` }))}
               />
               {Number(cutoff) <= 10 ? (
                 <MiniBarList
@@ -267,7 +315,7 @@ export function LiquidityPage() {
             <CardContent>
               <DonutChart
                 label="Funding mix"
-                segments={FUNDING_MIX.map((f, i) => ({ label: f.label, value: f.pct, tone: (["brand", "accent", "info", "warning"] as const)[i] }))}
+                segments={p.mix.map((f, i) => ({ label: f.label, value: f.pct, tone: (["brand", "accent", "info", "warning"] as const)[i] }))}
                 centerLabel="Deposits"
                 centerValue={ms(bs.deposits)}
                 valueFormatter={(v) => `${v}%`}
@@ -278,22 +326,34 @@ export function LiquidityPage() {
             <CardHeader>
               <Stack gap="xsmall">
                 <CardTitle>Illiquidity early-warning triggers</CardTitle>
-                <CardDescription>CBN 3.13(c) — auto-escalated via §6.4.4 to the Market Risk Analyst, Head of Risk and CRO.</CardDescription>
+                <CardDescription>CBN 3.13(c) — thresholds are business rules; raising an indicator escalates it via §6.4.4 and notifies the alert recipients.</CardDescription>
               </Stack>
             </CardHeader>
             <CardContent>
               <Stack gap="medium">
-                {EARLY_WARNING.map((e) => (
+                {p.ew.map((e) => (
                   <Stack key={e.id} gap="xsmall">
                     <Stack direction="horizontal" justify="between" align="start" gap="small">
                       <Text variant="small" className="font-semibold text-fg">
                         {e.trigger}
                       </Text>
-                      <RagIndicator status={e.status} label={e.status === "green" ? "Clear" : "Watch"} />
+                      <RagIndicator status={e.status} label={e.status === "green" ? "Clear" : e.status === "amber" ? "Watch" : "Triggered"} />
                     </Stack>
-                    <Text variant="caption" tone="muted">
-                      Trigger: {e.threshold} · current: {e.current} {e.unit}
-                    </Text>
+                    <Stack direction="horizontal" justify="between" align="center" gap="small" wrap>
+                      <Text variant="caption" tone="muted">
+                        Trigger: {e.threshold} · current: {e.current} {e.unit}
+                      </Text>
+                      {canEdit && e.status !== "green" && !ewLogged(e) && (
+                        <Button size="small" variant="secondary" onClick={() => raiseEw(e)}>
+                          Raise &amp; escalate
+                        </Button>
+                      )}
+                      {ewLogged(e) && (
+                        <Text variant="caption" tone="muted">
+                          In breach log
+                        </Text>
+                      )}
+                    </Stack>
                   </Stack>
                 ))}
               </Stack>

@@ -1,17 +1,26 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { AiInsightCard, Alert, AreaChart, Badge, ChipList, Chip, DataTable, Grid, PhaseBadge, SegmentedControl, Stack, StatusBadge, Text, useToast, type DataTableColumn } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
+import { useCan } from "@/lib/auth/session";
+import { publish } from "@/lib/platform/events";
+import { runHooks } from "@/lib/platform/hooks";
+import { getDefinition, stepApproverLabel, usePendingFor } from "@/lib/platform/operations";
+import { useScope } from "@/lib/platform/scope";
+import { roleById } from "@/lib/rbac/roles";
 import { dateTime, pct } from "@/lib/format";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { KpiCard } from "../components/calc-note";
+import { operationHref, PendingApproval, useSubmitOperation } from "../components/governance";
 import { Panel } from "../components/panel";
 import { bookProjection, macroVariables, projectedWarr, sectorProjections, type Scenario, type SectorProjection } from "../data";
 import { useActor, usePortfolioModel } from "../hooks";
+import type { ProjectionAdoptPayload } from "../platform";
 import { usePortfolioStore } from "../store";
 
-const REVIEWERS = ["credit-analyst", "head-of-risk", "cro"];
+const OPERATION = "portfolio.projection.adopt";
 const phaseTone = { Expansion: "success", Peak: "info", Contraction: "danger", Trough: "warning" } as const;
 const dirTone = { Improving: "success", Stable: "info", Deteriorating: "danger" } as const;
 
@@ -19,16 +28,44 @@ export function ProjectionsPage() {
   const { facilities, obligors, sectors, totals, warr } = usePortfolioModel();
   const [scenario, setScenario] = useState<Scenario>("Base");
   const actor = useActor();
+  const { actor: me } = useScope();
   const { toast } = useToast();
-  const signOff = usePortfolioStore((s) => s.signOffs["projection-commentary"]);
-  const sign = usePortfolioStore((s) => s.signOff);
-  const canSign = !!actor.roleId && REVIEWERS.includes(actor.roleId);
+  const submit = useSubmitOperation();
+  const canView = useCan("portfolio", "view");
+  const key = `projection-commentary:${scenario}`;
+  const signOff = usePortfolioStore((s) => s.signOffs[key]);
+  const pending = usePendingFor("ProjectionCommentary", key);
+  const approvers = getDefinition(OPERATION).steps.map(stepApproverLabel).join(" → ") || "no approval step (applied directly)";
 
   const proj = useMemo(() => sectorProjections(facilities, obligors, sectors, scenario), [facilities, obligors, sectors, scenario]);
   const path = useMemo(() => bookProjection(totals.nplRatio), [totals.nplRatio]);
   const fw = projectedWarr(warr.warr).find((x) => x.scenario === scenario)!;
   const sel = path.find((s) => s.name === scenario)!;
   const deteriorating = proj.filter((x) => x.direction === "Deteriorating");
+  const headline = `Under the ${scenario.toLowerCase()} scenario the bank-wide NPL ratio moves from ${pct(totals.nplRatio, 2)} to ${pct(sel.points[12]!.y, 2)} over 12 months.`;
+
+  /** Submit the AI commentary for adoption; it's adopted only when the Operations workflow approves it. */
+  const submitForAdoption = async () => {
+    const hook = await runHooks("portfolio.projection.submit.before", { key, scenario, actor: me });
+    if (!hook.ok) {
+      toast({ title: "Can't submit commentary", description: `${hook.vetoedBy}: ${hook.reason}`, tone: "danger" });
+      return;
+    }
+    const res = await submit<ProjectionAdoptPayload>(OPERATION, {
+      title: `Adopt projection commentary — ${scenario} scenario`,
+      subject: { type: "ProjectionCommentary", id: key, title: `Projection commentary — ${scenario}`, href: "/portfolio/projections" },
+      payload: { key, scenario, summary: headline },
+      summary: [
+        { label: "Scenario", value: scenario },
+        { label: "Headline", value: headline },
+        { label: "Deteriorating sectors", value: deteriorating.map((d) => d.sector.name).slice(0, 5).join(", ") || "None" },
+      ],
+    });
+    if (!res.ok) return;
+    actor.log("Submitted AI projection commentary for adoption", "Projection", key, "AI-drafted", "Submitted for adoption");
+    publish("portfolio.projection.submitted", { module: "portfolio", subject: { type: "ProjectionCommentary", id: key, title: `Projection commentary — ${scenario}`, href: "/portfolio/projections" }, payload: { scenario, operationId: res.instance.id } });
+    await runHooks("portfolio.projection.submit.after", { key, scenario, operationId: res.instance.id });
+  };
 
   const columns: DataTableColumn<SectorProjection>[] = [
     { id: "sector", header: "Sector", accessor: (r) => r.sector.name, sortable: true, cell: (r) => <span className="font-semibold text-fg">{r.sector.name}</span> },
@@ -84,20 +121,27 @@ export function ProjectionsPage() {
             generatedAt={dateTime(DEMO_NOW)}
             confidence={0.72}
             paragraphs={[
-              `Under the ${scenario.toLowerCase()} scenario the bank-wide NPL ratio moves from ${pct(totals.nplRatio, 2)} to ${pct(sel.points[12]!.y, 2)} over 12 months.`,
+              headline,
               deteriorating.length ? `${deteriorating.map((d) => d.sector.name).slice(0, 3).join(", ")} ${deteriorating.length > 1 ? "show" : "shows"} the steepest projected deterioration, driven mainly by ${deteriorating[0]!.drivers.join(" and ")}.` : "No sector shows material projected deterioration.",
             ]}
             bullets={["Consider earlier origination gating for deteriorating sectors (§6.2.6).", "Feed projected roll-rates into ILAAP cash-inflow assumptions (§6.8.4)."]}
             sources={[{ label: "Macro feed (§5.5)", detail: "MPR, inflation, FX, crude, GDP, PMI, T-bill" }, { label: "Sector NPL history (§6.6.5)" }]}
-            signedOffBy={signOff ? `Reviewed and adopted by ${signOff.by} (${signOff.role}), ${dateTime(signOff.at)}` : undefined}
-            signOffNote={canSign ? undefined : "Review and adoption by the Credit Analyst, Head of Risk or CRO is required before this affects any decision."}
-            onAccept={canSign ? () => {
-              sign("projection-commentary", { by: actor.name, role: actor.roleName, at: new Date().toISOString() });
-              actor.log("Adopted AI projection commentary", "Projection", `SCN-${scenario}`, "AI-drafted", "Adopted");
-              toast({ title: "Commentary adopted", description: "Recorded in the audit log.", tone: "success" });
-            } : undefined}
+            signedOffBy={signOff ? `${signOff.by} (${roleById[signOff.role as keyof typeof roleById]?.name ?? signOff.role}), ${dateTime(signOff.at)} — adopted through Operations` : undefined}
+            signOffNote={
+              pending ? (
+                <span>
+                  Awaiting adoption in Operations — <Link href={operationHref(pending.id)} className="font-semibold text-link">{pending.id}</Link>
+                </span>
+              ) : (
+                `Adoption (${approvers}) is required before this affects any decision.`
+              )
+            }
+            labels={{ accept: "Submit for adoption" }}
+            onAccept={canView && !pending ? () => void submitForAdoption() : undefined}
           />
         </Grid>
+
+        {pending ? <PendingApproval subjectType="ProjectionCommentary" subjectId={key} /> : null}
 
         <Panel title="Sector projections" description={`3/6/12-month projected NPL ratio range (confidence band) per sector — ${scenario.toLowerCase()} scenario — with the driving variables, not a single unexplained figure.`}>
           <DataTable label="Sector projections" data={proj} columns={columns} getRowId={(r) => r.sector.id} paginate={false} exportFilename={`sector-projection-${scenario.toLowerCase()}.csv`} defaultSort={{ id: "m12", direction: "desc" }} />

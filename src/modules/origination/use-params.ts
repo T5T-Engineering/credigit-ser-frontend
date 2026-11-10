@@ -1,15 +1,16 @@
 "use client";
 
-/** Live tenant parameters from Admin → Rules & parameters, with the module's demo defaults as fallback. */
-import { useAdminParams } from "@/modules/admin/store";
-import { collateralHaircuts, originationParams } from "./params";
+/** Reactive business-rule access for origination components (re-render when a rule changes). */
+import { useRule, useRulesStore } from "@/lib/platform/rules";
 
 export function useStepUpThreshold(): number {
-  const p = useAdminParams();
-  return p?.stepUpThresholdNgn ?? originationParams.highValueThreshold;
+  return useRule<number>("approvals.stepUpThresholdNgn");
 }
 
-export function useHaircuts() {
-  const p = useAdminParams();
-  return p?.haircuts ?? collateralHaircuts;
+/**
+ * Subscribe a component to rule changes. Origination helpers read rules with `getRule()` at call time; calling this
+ * once in a page makes those reads re-run when a tenant rule changes.
+ */
+export function useRulesVersion() {
+  return useRulesStore((s) => s.values);
 }

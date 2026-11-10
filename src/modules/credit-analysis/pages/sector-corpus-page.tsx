@@ -24,6 +24,7 @@ import {
 import { ModulePage } from "@/components/module-page";
 import { useSectors } from "@/lib/data/hooks";
 import { date } from "@/lib/format";
+import { useRulesStore } from "@/lib/platform/rules";
 import {
   CORPUS_REFRESHED,
   CORPUS_VERSION,
@@ -32,6 +33,7 @@ import {
   lifeCycleTone,
   macroSnapshot,
   ngxById,
+  ngxPrimaryFor,
   ngxSectors,
   sectorMapping,
   type CorpusYear,
@@ -41,16 +43,18 @@ import {
 export function SectorCorpusPage() {
   const sectors = useSectors();
   const [selected, setSelected] = useState(ngxSectors[0]!.id);
+  const ruleValues = useRulesStore((st) => st.values);
   const s = ngxById.get(selected)!;
 
   const mappedTo = useMemo(() => {
     const m = new Map<string, string[]>();
     for (const sec of sectors) {
-      const map = sectorMapping[sec.id];
-      if (map?.primary) m.set(map.primary, [...(m.get(map.primary) ?? []), sec.name]);
+      const primary = ngxPrimaryFor(sec.id);
+      if (primary) m.set(primary, [...(m.get(primary) ?? []), sec.name]);
     }
     return m;
-  }, [sectors]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ruleValues: mapping is a business rule
+  }, [sectors, ruleValues]);
 
   const sectorColumns: DataTableColumn<NgxSector>[] = [
     {
@@ -292,7 +296,7 @@ export function SectorCorpusPage() {
                   {
                     id: "primary",
                     header: "Primary NGX",
-                    accessor: (x) => ngxById.get(sectorMapping[x.id]?.primary ?? "")?.name ?? "No listed proxy",
+                    accessor: (x) => ngxById.get(ngxPrimaryFor(x.id) ?? "")?.name ?? "No listed proxy",
                   },
                   {
                     id: "secondary",

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, DescriptionList, Grid, RadarChart, Stack, StatusBadge, Text } from "@credigit/web-ui";
 import { date } from "@/lib/format";
-import { postureTone, RAR_MIDPOINT } from "@/lib/rar";
+import { postureTone, rarMidpoint } from "@/lib/rar";
 import { copBand } from "../logic";
 import type { AppCtx } from "./context";
 
@@ -48,7 +48,7 @@ export function RarTab({ c }: { c: AppCtx }) {
                 items={[
                   { label: "X-Composite", value: p.x.toFixed(2), mono: true, hint: "Mean of Operating Industry and Comparative" },
                   { label: "Y-Composite", value: p.y.toFixed(2), mono: true, hint: "Mean of Internal Risk and Macro-Economic" },
-                  { label: "Distance from midpoint", value: p.magnitude.toFixed(2), mono: true, hint: `Midpoint ${RAR_MIDPOINT} on the 1–10 scale` },
+                  { label: "Distance from midpoint", value: p.magnitude.toFixed(2), mono: true, hint: `Midpoint ${rarMidpoint()} on the 1–10 scale` },
                   { label: "Lead", value: p.lead },
                 ]}
               />

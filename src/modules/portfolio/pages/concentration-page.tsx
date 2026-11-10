@@ -8,7 +8,7 @@ import { KpiCard } from "../components/calc-note";
 import { Panel } from "../components/panel";
 import { cbnSectorMap } from "../data";
 import { usePortfolioModel } from "../hooks";
-import { concentration, portfolioParams, productGroup, sum, type ObligorExposure } from "../selectors";
+import { concentration, param, productGroup, sum, type ObligorExposure } from "../selectors";
 
 const CUTS = ["10", "20", "50", "100"] as const;
 type Cut = (typeof CUTS)[number];
@@ -85,7 +85,7 @@ export function ConcentrationPage() {
           <KpiCard
             label="% of shareholders' funds"
             value={pct(c.pctOfShf, 0)}
-            hint={`SHF ${moneyShort(portfolioParams.shareholdersFunds.value)} (demo value)`}
+            hint={`SHF ${moneyShort(param("shareholdersFunds"))} (demo value)`}
             tone="warning"
             calc={{ metric: "% of SHF", formula: "Top-N exposure / Shareholders' funds unimpaired by losses × 100", source: "SHF from GL capital accounts — demo value.", prd: "§6.6.3", demo: true }}
           />

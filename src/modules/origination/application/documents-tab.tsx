@@ -4,17 +4,16 @@ import { useEffect, useState } from "react";
 import { BadgeCheck } from "lucide-react";
 import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ChecklistPanel, DocumentList, Field, FileUpload, Grid, Select, Stack, useToast } from "@credigit/web-ui";
 import { useDbActions, useLookups } from "@/lib/data/hooks";
-import { newId } from "@/lib/data/store";
+import { getRule } from "@/lib/platform/rules";
 import type { DocumentRecord } from "@/lib/data/types";
 import { toDocumentItem } from "../view-models";
+import { uploadDocument, verifyDocuments } from "../actions";
+import { inGroup, requiredKinds } from "../params";
+
+export { requiredKinds };
 import type { AppCtx } from "./context";
 
 export const documentKinds: DocumentRecord["kind"][] = ["Audited financials", "Management accounts", "Bank statement", "KYC", "Board resolution", "Title document", "Valuation report", "Other"];
-
-export function requiredKinds(obligorType: string): DocumentRecord["kind"][] {
-  const base: DocumentRecord["kind"][] = ["Audited financials", "Bank statement", "KYC"];
-  return obligorType === "Retail" ? base : [...base, "Board resolution"];
-}
 
 /** Simulate OCR on a document: Processing OCR → Extracted after a short delay. */
 export function useSimulatedOcr() {
@@ -34,33 +33,23 @@ export function useOcrCompletion(docs: DocumentRecord[]) {
 }
 
 export function DocumentsTab({ c }: { c: AppCtx }) {
-  const db = useDbActions();
   const { user } = useLookups();
   const ocr = useSimulatedOcr();
   const { toast } = useToast();
   const [kind, setKind] = useState<DocumentRecord["kind"]>("Management accounts");
   const [files, setFiles] = useState<File[]>([]);
-  const canUpload = c.canEdit && (c.roleId === "account-officer" || c.roleId === "bdm" || c.roleId === "credit-analyst");
-  const canVerify = c.canEdit && c.roleId === "credit-analyst";
+  const canUpload = c.canEdit && inGroup("uploaders", c.roleId);
+  const canVerify = c.canEdit && inGroup("analysts", c.roleId);
   const required = requiredKinds(c.obligor.type);
 
-  const add = (file: { name: string; size: number }, k: DocumentRecord["kind"], replaces?: DocumentRecord) => {
-    const prior = c.docs.filter((d) => d.kind === k);
-    const doc: DocumentRecord = {
-      id: newId("DOC"),
-      ownerType: "application",
-      ownerId: c.app.id,
-      name: replaces ? replaces.name : file.name,
-      kind: k,
-      sizeKb: Math.max(1, Math.round(file.size / 1024)),
-      version: replaces ? replaces.version + 1 : prior.length ? Math.max(...prior.map((d) => d.version)) + 1 : 1,
-      uploadedById: c.me.id,
-      uploadedAt: new Date().toISOString(),
-      status: "Processing OCR",
-    };
-    db.upsert("documents", doc);
-    c.change({ documentIds: [...c.app.documentIds, doc.id] }, replaces ? `Uploaded new version v${doc.version} of ${k}` : `Uploaded document (${k})`, replaces ? `v${replaces.version}` : undefined, `${doc.name} v${doc.version}`);
-    ocr(doc.id);
+  const add = async (file: { name: string; size: number }, k: DocumentRecord["kind"], replaces?: DocumentRecord) => {
+    const res = await uploadDocument(c.app.id, file, k, replaces);
+    if (!res.ok) {
+      toast({ title: "Upload blocked", description: res.reason, tone: "danger" });
+      return false;
+    }
+    if (res.docId) ocr(res.docId);
+    return true;
   };
 
   const unverified = c.docs.filter((d) => d.status === "Extracted");
@@ -79,10 +68,9 @@ export function DocumentsTab({ c }: { c: AppCtx }) {
                 <Button
                   variant="tertiary"
                   iconBefore={<BadgeCheck aria-hidden />}
-                  onClick={() => {
-                    unverified.forEach((d) => db.update("documents", d.id, { status: "Verified" }));
-                    c.log(`Verified ${unverified.length} extracted document(s)`, "Extracted", "Verified");
-                    toast({ title: "Documents verified", description: `${unverified.length} document(s) marked verified.`, tone: "success" });
+                  onClick={async () => {
+                    const res = await verifyDocuments(c.app.id, unverified.map((d) => d.id));
+                    toast(res.ok ? { title: "Documents verified", description: `${unverified.length} document(s) marked verified.`, tone: "success" } : { title: "Not verified", description: res.reason, tone: "danger" });
                   }}
                 >
                   Verify {unverified.length} extracted
@@ -97,7 +85,7 @@ export function DocumentsTab({ c }: { c: AppCtx }) {
                 canUpload
                   ? (item) => {
                       const d = c.docs.find((x) => x.id === item.id);
-                      if (d) add({ name: d.name, size: d.sizeKb * 1024 }, d.kind, d);
+                      if (d) void add({ name: d.name, size: d.sizeKb * 1024 }, d.kind, d).then((ok) => ok && toast({ title: "New version uploaded", description: `${d.name} v${d.version + 1} — the Credit Analyst is notified; earlier versions are kept.`, tone: "info" }));
                     }
                   : undefined
               }
@@ -127,12 +115,12 @@ export function DocumentsTab({ c }: { c: AppCtx }) {
                 <Field label="Document type" htmlFor="doc-kind">
                   <Select id="doc-kind" value={kind} onChange={(e) => setKind(e.target.value as DocumentRecord["kind"])} options={documentKinds.map((k) => ({ value: k, label: k }))} />
                 </Field>
-                <FileUpload accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.tif" multiple maxSizeMb={25} files={files} onFilesChange={setFiles} />
+                <FileUpload accept={getRule<string>("origination.docs.acceptedTypes")} multiple maxSizeMb={getRule<number>("origination.docs.maxUploadMb")} files={files} onFilesChange={setFiles} />
                 <div>
                   <Button
                     disabled={!files.length}
-                    onClick={() => {
-                      files.forEach((f) => add(f, kind));
+                    onClick={async () => {
+                      for (const f of files) await add(f, kind);
                       toast({ title: "Uploaded", description: `${files.length} file(s) sent for OCR extraction.`, tone: "info" });
                       setFiles([]);
                     }}

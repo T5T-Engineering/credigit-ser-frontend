@@ -5,23 +5,33 @@ import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, DataT
 import { ModulePage } from "@/components/module-page";
 import type { CbnClass, Ifrs9Stage } from "@/lib/data/types";
 import { date, pct } from "@/lib/format";
+import { useCan } from "@/lib/auth/session";
 import { CalcRegister, sum, type CalcSpec, ms } from "../common";
-import { CBN_SPECIFIC_RATE, sicrTriggers, stageTransfers, type EclRow, type SicrTrigger, type StageTransfer } from "../data";
+import { cbnDpdBands, cbnSpecificRate, generalProvisionRate, reportingPeriod, sicrTriggers, stageTransfers, type EclRow, type SicrTrigger, type StageTransfer } from "../data";
+import { RulesPanel } from "../governance";
+import { IFRS9_RULE_GROUPS } from "../platform";
 import { EclDetailDrawer, EclTable, StageBadge } from "../parts";
 import { useEcl } from "../use-ecl";
 
-const CLASSES: { id: CbnClass; dpd: string; prov: string }[] = [
-  { id: "Performing", dpd: "Up to date", prov: "0% specific · general provision applies" },
-  { id: "Watchlist", dpd: "30–89 days or qualitative", prov: "Not specifically provisioned; enhanced monitoring" },
-  { id: "Substandard", dpd: "90–179 days", prov: "10% (CBN 12.2(a)(2)(i))" },
-  { id: "Doubtful", dpd: "180–359 days", prov: "50% (CBN 12.2(a)(2)(ii))" },
-  { id: "Lost", dpd: "360+ days", prov: "100% (CBN 12.2(a)(2)(iii))" },
-];
+/** CBN classes with DPD bands and provisioning rates from the business rules (PRD §6.7.1). */
+function cbnClasses(): { id: CbnClass; dpd: string; prov: string }[] {
+  const b = cbnDpdBands();
+  const rate = (c: CbnClass) => pct(cbnSpecificRate(c) * 100, 0);
+  return [
+    { id: "Performing", dpd: "Up to date", prov: `0% specific · general provision ${pct(generalProvisionRate() * 100, 2)} applies` },
+    { id: "Watchlist", dpd: `${b.watchlist}–${b.substandard - 1} days or qualitative`, prov: "Not specifically provisioned; enhanced monitoring" },
+    { id: "Substandard", dpd: `${b.substandard}–${b.doubtful - 1} days`, prov: `${rate("Substandard")} (CBN 12.2(a)(2)(i))` },
+    { id: "Doubtful", dpd: `${b.doubtful}–${b.lost - 1} days`, prov: `${rate("Doubtful")} (CBN 12.2(a)(2)(ii))` },
+    { id: "Lost", dpd: `${b.lost}+ days`, prov: `${rate("Lost")} (CBN 12.2(a)(2)(iii))` },
+  ];
+}
 /** PRD §6.7.1 expected mapping. */
 const EXPECTED: Record<CbnClass, Ifrs9Stage> = { Performing: 1, Watchlist: 2, Substandard: 3, Doubtful: 3, Lost: 3 };
 
 export function Ifrs9StagingPage() {
   const { input, rows } = useEcl();
+  const canEdit = useCan("ifrs9", "edit");
+  const CLASSES = cbnClasses();
   const [open, setOpen] = useState<EclRow | null>(null);
   const [cell, setCell] = useState<{ row: string; column: string } | null>(null);
   const transfers = useMemo(() => stageTransfers(rows, input), [rows, input]);
@@ -98,7 +108,7 @@ export function Ifrs9StagingPage() {
     },
     {
       metric: "CBN specific provision",
-      formula: `Sub-Standard ${CBN_SPECIFIC_RATE.Substandard * 100}% · Doubtful ${CBN_SPECIFIC_RATE.Doubtful * 100}% · Lost ${CBN_SPECIFIC_RATE.Lost * 100}% of outstanding`,
+      formula: `Sub-Standard ${pct(cbnSpecificRate("Substandard") * 100, 0)} · Doubtful ${pct(cbnSpecificRate("Doubtful") * 100, 0)} · Lost ${pct(cbnSpecificRate("Lost") * 100, 0)} of outstanding`,
       sources: "CBN classification by DPD (Loan Review §6.4.1)",
       prd: "§6.7.1",
     },
@@ -108,7 +118,7 @@ export function Ifrs9StagingPage() {
     <ModulePage module="ifrs9" description="IFRS 9 stages mapped against the CBN prudential classification, with the triggers that moved each exposure.">
       <Stack gap="large">
         <Grid columns={{ base: 2, lg: 4 }} gap="medium">
-          <StatCard label="Facilities staged" value={String(rows.length)} hint="Month-end staging run · 31 Oct 2026" />
+          <StatCard label="Facilities staged" value={String(rows.length)} hint={`Month-end staging run · ${reportingPeriod()}`} />
           <StatCard label="Transfers this quarter" value={String(transfers.length)} hint={`${transfers.filter((t) => t.to > t.from).length} deteriorations`} tone="warning" />
           <StatCard label="ECL impact of transfers" value={ms(sum(transfers.map((t) => t.eclAfter - t.eclBefore)))} hint="12-month → lifetime re-pricing" />
           <StatCard label="Off-diagonal exposures" value={String(mismatches)} hint="Stage differs from the default CBN mapping" tone="info" />
@@ -186,6 +196,8 @@ export function Ifrs9StagingPage() {
             <DataTable label="SICR triggers" columns={triggerCols} data={triggers} getRowId={(t) => t.id} paginate={false} />
           </CardContent>
         </Card>
+
+        <RulesPanel title="Staging triggers (business rules)" keys={IFRS9_RULE_GROUPS.staging} canRequest={canEdit} />
 
         <Card variant="outlined">
           <CardHeader>

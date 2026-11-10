@@ -4,70 +4,65 @@
  * Exported for reuse by other modules (dashboard, IFRS 9, executive). Every function is deterministic and
  * side-effect free, so the same figures appear wherever they are shown.
  *
- * Regulatory values are taken from the PRD where it states them (CBN 3.2(a)–(e), §9.1 CAR and CCF categories).
- * Everything else is a tenant parameter (Rules & Parameters Engine) with a clearly labelled demo value.
+ * Every limit, threshold, rate and table is a business rule (./platform.ts, read at call time): PRD-stated values
+ * (CBN 3.2(a)–(e), §9.1 CAR and CCF categories) carry their PRD section; the rest are labelled demo values.
  */
-import { SHAREHOLDERS_FUNDS } from "@/lib/params";
 import type { Application, CbnClass, Facility, Ifrs9Stage, Obligor, ProductType, Sector } from "@/lib/data/types";
+import { getRule, ruleDefinition, useRulesStore } from "@/lib/platform/rules";
 import { rarPosition } from "@/lib/rar";
+import { ccfRuleKey, OBLIGOR_TYPES, PARAM_RULES, PORTFOLIO_RULES, PRODUCT_TYPES, riskWeightRuleKey, type PortfolioParamName } from "./rule-keys";
 
 // ---------------------------------------------------------------------------------------------------------------
-// Parameters
+// Parameters — business rules (registered in ./platform.ts; shareholders' funds is the core platform rule).
+// Values are read with getRule at call time, so an approved rule change applies everywhere immediately.
 // ---------------------------------------------------------------------------------------------------------------
 
 export type ParamSource = "PRD" | "Tenant parameter (demo value)";
-export type Param = { value: number; label: string; source: ParamSource; ref: string };
+export type Param = { key: string; value: number; label: string; source: ParamSource; ref: string };
 
-/** Parameters used by the portfolio computations. PRD-stated values are marked "PRD"; the rest are demo values. */
-export const portfolioParams = {
-  shareholdersFunds: { value: SHAREHOLDERS_FUNDS, label: "Shareholders' funds unimpaired by losses", source: "Tenant parameter (demo value)", ref: "GL capital accounts — §8" },
-  totalQualifyingCapital: { value: 52e9, label: "Total qualifying capital (Tier 1 + Tier 2)", source: "Tenant parameter (demo value)", ref: "Regulatory capital return — §6.6.5" },
-  singleObligorLimitPct: { value: 20, label: "Single-obligor limit (% of shareholders' funds)", source: "PRD", ref: "CBN 3.2(a) — §5.6" },
-  offBalanceSolWeight: { value: 1 / 3, label: "Off-balance-sheet weighting for single-obligor limit", source: "PRD", ref: "CBN 3.2(b) — §5.6, §9.1" },
-  largeExposurePct: { value: 10, label: "Large exposure threshold (% of shareholders' funds)", source: "PRD", ref: "CBN 3.2(d) — §5.6" },
-  aggregateLargeExposureMultiple: { value: 8, label: "Aggregate large-exposure ceiling (× shareholders' funds)", source: "PRD", ref: "CBN 3.2(e) — §5.6" },
-  governmentCeilingPct: { value: 10, label: "All tiers of government (% of total credit portfolio)", source: "PRD", ref: "CBN 3.2(c) — §6.6.2" },
-  earlyWarningPct: { value: 90, label: "Near-breach early-warning threshold (% of limit)", source: "Tenant parameter (demo value)", ref: "§6.6.2 (e.g. 90%)" },
-  minCarPct: { value: 10, label: "Minimum CAR — national authorisation", source: "PRD", ref: "CBN Regulatory Capital 2021 — §9.1" },
-  warrCeiling: { value: 4.5, label: "Board-approved WARR ceiling (whole book)", source: "Tenant parameter (demo value)", ref: "§6.6.9 / §6.10" },
-  warrEarlyWarning: { value: 4.3, label: "WARR early-warning band", source: "Tenant parameter (demo value)", ref: "§6.6.9" },
-  nplAppetitePct: { value: 5, label: "NPL ratio appetite (Risk Appetite Statement)", source: "Tenant parameter (demo value)", ref: "§6.10" },
-  costOfFundsPct: { value: 13.5, label: "Average cost of funds (interest expense rate)", source: "Tenant parameter (demo value)", ref: "CBA GL — §6.6.5" },
-  feeIncomePct: { value: 1, label: "Fee income (% of approved amount, annual)", source: "Tenant parameter (demo value)", ref: "Product sub-ledger — §6.6.5" },
-  opexAllocationPct: { value: 2.5, label: "Operating cost allocation (% of outstanding)", source: "Tenant parameter (demo value)", ref: "Cost-allocation key — §6.6.5" },
-  rarocHurdlePct: { value: 20, label: "RAROC hurdle rate", source: "Tenant parameter (demo value)", ref: "§6.6.5" },
-} satisfies Record<string, Param>;
+/** Current value of a portfolio parameter (business rule). */
+export function param(name: PortfolioParamName): number {
+  return getRule<number>(PARAM_RULES[name]);
+}
+
+/** All portfolio parameters with their rule metadata (PRD-stated vs demo). */
+export function getPortfolioParams(): Record<PortfolioParamName, Param> {
+  const out = {} as Record<PortfolioParamName, Param>;
+  for (const name of Object.keys(PARAM_RULES) as PortfolioParamName[]) {
+    const key = PARAM_RULES[name];
+    const def = ruleDefinition(key);
+    const src = def?.source ?? "";
+    out[name] = { key, value: getRule<number>(key), label: def?.label ?? key, source: src.startsWith("PRD") && !/demo/i.test(src) ? "PRD" : "Tenant parameter (demo value)", ref: src };
+  }
+  return out;
+}
+
+/** Reactive portfolio parameters for components (re-renders when any rule changes). */
+export function usePortfolioParams() {
+  useRulesStore((s) => s.values);
+  return getPortfolioParams();
+}
 
 /** Credit-conversion factors for undrawn / contingent amounts (WARR exposure basis, §6.6.9 → §9.1 categories). */
-export const ccfTable: Record<ProductType, { pct: number; basis: string }> = {
-  "Bank guarantee": { pct: 100, basis: "Financial guarantee — direct credit substitute (§9.1: 100%)" },
-  "Advance payment guarantee": { pct: 50, basis: "Transaction-related contingency (§9.1: 50%)" },
-  "Trade finance (LC)": { pct: 20, basis: "Trade-related instrument (§9.1: 20%)" },
-  Overdraft: { pct: 0, basis: "Unconditionally cancellable (§9.1: 0%) — demo classification" },
-  "Revolving credit": { pct: 0, basis: "Unconditionally cancellable (§9.1: 0%) — demo classification" },
-  "Term loan": { pct: 50, basis: "Committed undrawn — tenant parameter (demo 50%)" },
-  "Lease finance": { pct: 50, basis: "Committed undrawn — tenant parameter (demo 50%)" },
-  "Invoice discounting": { pct: 50, basis: "Committed undrawn — tenant parameter (demo 50%)" },
-  Mortgage: { pct: 50, basis: "Committed undrawn — tenant parameter (demo 50%)" },
-  "Asset finance": { pct: 50, basis: "Committed undrawn — tenant parameter (demo 50%)" },
-};
+export function ccfTable(): Record<ProductType, { pct: number; basis: string }> {
+  return Object.fromEntries(PRODUCT_TYPES.map((p) => [p, { pct: getRule<number>(ccfRuleKey(p)), basis: ruleDefinition(ccfRuleKey(p))?.source ?? "" }])) as Record<ProductType, { pct: number; basis: string }>;
+}
+export const ccfPct = (p: ProductType) => getRule<number>(ccfRuleKey(p));
 
-/** Demo Basel/CBN risk-weight table by obligor type (tenant asset-classification table, §6.6.5). */
-export const riskWeightTable: Record<Obligor["type"], number> = {
-  Corporate: 100,
-  Commercial: 100,
-  SME: 75,
-  Retail: 75,
-  "Public sector": 20,
-};
+/** Risk-weight table by obligor type (tenant asset-classification table, §6.6.5). */
+export function riskWeightTable(): Record<Obligor["type"], number> {
+  return Object.fromEntries(OBLIGOR_TYPES.map((t) => [t, getRule<number>(riskWeightRuleKey(t))])) as Record<Obligor["type"], number>;
+}
 
-/** Demo ECL proxy until the IFRS 9 engine (§6.7) feeds RAROC: % of outstanding by stage / CBN class. */
-export const eclProxyPct: { stage1: number; stage2: number; stage3: Record<"Substandard" | "Doubtful" | "Lost", number> } = {
-  stage1: 1,
-  stage2: 6,
-  // CBN prudential provisioning rates (§6.7.1 table) used as the Stage 3 proxy.
-  stage3: { Substandard: 10, Doubtful: 50, Lost: 100 },
-};
+/** ECL proxy until the IFRS 9 engine (§6.7) feeds RAROC: % of outstanding by stage / CBN class. */
+export function eclProxyPct(): { stage1: number; stage2: number; stage3: Record<"Substandard" | "Doubtful" | "Lost", number> } {
+  const R = PORTFOLIO_RULES;
+  return {
+    stage1: getRule<number>(R.eclStage1Pct),
+    stage2: getRule<number>(R.eclStage2Pct),
+    stage3: { Substandard: getRule<number>(R.eclSubstandardPct), Doubtful: getRule<number>(R.eclDoubtfulPct), Lost: getRule<number>(R.eclLostPct) },
+  };
+}
 
 // ---------------------------------------------------------------------------------------------------------------
 // Facility-level helpers
@@ -118,12 +113,12 @@ export function undrawn(f: Facility): number {
 }
 /** WARR default exposure basis: gross outstanding + undrawn/contingent × CCF (§6.6.9). */
 export function warrExposure(f: Facility): number {
-  const ccf = ccfTable[f.product].pct / 100;
+  const ccf = ccfPct(f.product) / 100;
   return onBalance(f) + (undrawn(f) + offBalance(f)) * ccf;
 }
-/** Single-obligor limit exposure: on-balance + 33⅓% of off-balance (CBN 3.2(b), §8). */
+/** Single-obligor limit exposure: on-balance + off-balance × statutory weighting (CBN 3.2(b), §8). */
 export function solExposure(f: Facility): number {
-  return onBalance(f) + offBalance(f) * portfolioParams.offBalanceSolWeight.value;
+  return onBalance(f) + (offBalance(f) * param("offBalanceSolWeight")) / 100;
 }
 export const isNpl = (f: Facility) => NPL_CLASSES.includes(f.cbnClass);
 
@@ -244,8 +239,8 @@ export type ObligorExposure = {
 /** Aggregate exposure per obligor (connected groups not yet modelled in the spine — see OPEN-QUESTIONS). */
 export function obligorExposures(all: Facility[], obligors: Obligor[], sectors: Sector[]): ObligorExposure[] {
   const fac = liveFacilities(all);
-  const shf = portfolioParams.shareholdersFunds.value;
-  const sol = (shf * portfolioParams.singleObligorLimitPct.value) / 100;
+  const shf = param("shareholdersFunds");
+  const sol = (shf * param("singleObligorLimitPct")) / 100;
   const sectorById = new Map(sectors.map((s) => [s.id, s]));
   const byObligor = new Map<string, Facility[]>();
   for (const f of fac) byObligor.set(f.obligorId, [...(byObligor.get(f.obligorId) ?? []), f]);
@@ -280,7 +275,7 @@ export function obligorExposures(all: Facility[], obligors: Obligor[], sectors: 
 export type LimitStatus = "Within limit" | "Near breach" | "Breach";
 export function limitStatus(utilisationPct: number): LimitStatus {
   if (utilisationPct >= 100) return "Breach";
-  if (utilisationPct >= portfolioParams.earlyWarningPct.value) return "Near breach";
+  if (utilisationPct >= param("earlyWarningPct")) return "Near breach";
   return "Within limit";
 }
 export const limitStatusTone: Record<LimitStatus, "success" | "warning" | "danger"> = { "Within limit": "success", "Near breach": "warning", Breach: "danger" };
@@ -305,13 +300,14 @@ export function sectorExposures(all: Facility[], obligors: Obligor[], sectors: S
   const fac = liveFacilities(all);
   const obligorById = new Map(obligors.map((o) => [o.id, o]));
   const total = sum(fac, onBalance);
+  const governmentCeiling = param("governmentCeilingPct");
   return sectors
     .map((s) => {
       const list = fac.filter((f) => obligorById.get(f.obligorId)?.sectorId === s.id);
       const exposure = sum(list, onBalance);
       const sharePct = share(exposure, total);
       const statutory = s.id === "SEC-GOV";
-      const limitPct = statutory ? portfolioParams.governmentCeilingPct.value : s.limitPct;
+      const limitPct = statutory ? governmentCeiling : s.limitPct;
       const limitAmount = (total * limitPct) / 100;
       const utilisationPct = limitPct ? (sharePct / limitPct) * 100 : 0;
       const npl = sum(list.filter(isNpl), onBalance);
@@ -335,17 +331,18 @@ export function sectorExposures(all: Facility[], obligors: Obligor[], sectors: S
 
 /** Large exposures (≥10% of SHF, CBN 3.2(d)) and the aggregate ceiling (8× SHF, CBN 3.2(e)). */
 export function largeExposures(exposures: ObligorExposure[]) {
-  const shf = portfolioParams.shareholdersFunds.value;
-  const list = exposures.filter((e) => e.pctOfShf >= portfolioParams.largeExposurePct.value);
+  const shf = param("shareholdersFunds");
+  const threshold = param("largeExposurePct");
+  const list = exposures.filter((e) => e.pctOfShf >= threshold);
   const aggregate = sum(list, (e) => e.solExposure);
-  const ceiling = shf * portfolioParams.aggregateLargeExposureMultiple.value;
+  const ceiling = shf * param("aggregateLargeExposureMultiple");
   return {
     list,
     aggregate,
     ceiling,
     utilisationPct: (aggregate / ceiling) * 100,
     /** Large Exposures to Capital = Aggregate large exposures / Total qualifying capital × 100 (§6.6.5). */
-    toCapitalPct: (aggregate / portfolioParams.totalQualifyingCapital.value) * 100,
+    toCapitalPct: (aggregate / param("totalQualifyingCapital")) * 100,
   };
 }
 
@@ -358,7 +355,7 @@ export function concentration(exposures: ObligorExposure[], n: number, grossBook
     top,
     exposure,
     pctOfBook: share(exposure, totalExposure),
-    pctOfShf: (exposure / portfolioParams.shareholdersFunds.value) * 100,
+    pctOfShf: (exposure / param("shareholdersFunds")) * 100,
     grossBook,
   };
 }
@@ -421,12 +418,12 @@ export function warrBy<T extends WarrRow>(rows: T[], keyOf: (r: T) => string) {
 // Sector performance — capital consumption & RAROC (§6.6.5)
 // ---------------------------------------------------------------------------------------------------------------
 
-export function eclProxy(f: Facility): number {
+export function eclProxy(f: Facility, rates = eclProxyPct()): number {
   const base = onBalance(f);
-  if (f.stage === 1) return (base * eclProxyPct.stage1) / 100;
-  if (f.stage === 2) return (base * eclProxyPct.stage2) / 100;
+  if (f.stage === 1) return (base * rates.stage1) / 100;
+  if (f.stage === 2) return (base * rates.stage2) / 100;
   const cls = (NPL_CLASSES.includes(f.cbnClass) ? f.cbnClass : "Substandard") as "Substandard" | "Doubtful" | "Lost";
-  return (base * eclProxyPct.stage3[cls]) / 100;
+  return (base * rates.stage3[cls]) / 100;
 }
 
 export type Profitability = {
@@ -448,12 +445,15 @@ export type Profitability = {
 
 /** Annualised profitability of a facility set. RWA = exposure × risk weight; capital = RWA × min CAR. */
 export function profitability(list: Facility[], obligorById: Map<string, Obligor>): Profitability {
-  const p = portfolioParams;
+  const p = getPortfolioParams();
+  const ccf = ccfTable();
+  const weights = riskWeightTable();
+  const ecls = eclProxyPct();
   let exposure = 0, rwa = 0, ii = 0, ie = 0, fees = 0, opex = 0, ecl = 0, earning = 0;
   for (const f of list) {
     const o = obligorById.get(f.obligorId);
-    const ead = onBalance(f) + offBalance(f) * (ccfTable[f.product].pct / 100);
-    const rw = (o ? riskWeightTable[o.type] : 100) / 100;
+    const ead = onBalance(f) + offBalance(f) * (ccf[f.product].pct / 100);
+    const rw = (o ? weights[o.type] : 100) / 100; // TD-501: unclassified obligor defaults to 100%
     exposure += onBalance(f) + offBalance(f);
     rwa += ead * rw;
     const funded = onBalance(f);
@@ -462,7 +462,7 @@ export function profitability(list: Facility[], obligorById: Map<string, Obligor
     ie += (funded * p.costOfFundsPct.value) / 100;
     fees += (f.approvedAmount * p.feeIncomePct.value) / 100;
     opex += (funded * p.opexAllocationPct.value) / 100;
-    ecl += eclProxy(f);
+    ecl += eclProxy(f, ecls);
   }
   const capital = (rwa * p.minCarPct.value) / 100;
   const nii = ii - ie;

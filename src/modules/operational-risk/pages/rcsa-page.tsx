@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { CalendarClock, ClipboardCheck, ListChecks, ShieldX } from "lucide-react";
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -34,35 +35,69 @@ import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { date } from "@/lib/format";
 import { DEMO_NOW } from "@/lib/data/seed";
-import { kris, overallEffectiveness, rcsaCycle, type AssessmentStatus, type RcsaRisk } from "../data";
-import { impactLabels, likelihoodLabels, riskScore, scoreBand } from "../logic";
+import { publish } from "@/lib/platform/events";
+import { submitOperation, useMyApprovalQueue, usePendingFor, type SubmitResult } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import { kris, overallEffectiveness, rcsaCycle, type RcsaRisk } from "../data";
+import { riskScales, riskScore, scoreBand, scoreLegend } from "../logic";
+import { PendingBadge, SubmitOutcome } from "../operation-ui";
+import { OPRISK, orKeys, type RcsaSignOffPayload } from "../platform";
 import { useOpRisk } from "../store";
-import { useAuditLog } from "../shared";
+import { useAuditLog, useRuleValues } from "../shared";
 
 const effTones = { Effective: "success", "Partially effective": "warning", Ineffective: "danger", "Not tested": "neutral" } as const;
 const statusTones = { Reviewed: "success", Submitted: "info", "In progress": "warning", "Not started": "neutral" } as const;
 const actionTones = { Open: "info", "In progress": "warning", Completed: "success", Overdue: "danger" } as const;
 
+function RcsaActions({ risk, onStart, onSubmit }: { risk: RcsaRisk; onStart: (r: RcsaRisk) => void; onSubmit: (r: RcsaRisk) => Promise<void> }) {
+  const pending = usePendingFor("RcsaRisk", risk.id);
+  if (pending) return <Alert tone="info">Second-line sign-off is with the approvers in Operations ({pending.id}).</Alert>;
+  return (
+    <div className="flex justify-end">
+      {risk.status === "Not started" ? (
+        <Button onClick={() => onStart(risk)}>Start self-assessment</Button>
+      ) : (
+        <Button onClick={() => void onSubmit(risk)}>{risk.status === "Submitted" ? "Route for second-line sign-off" : "Submit for second-line sign-off"}</Button>
+      )}
+    </div>
+  );
+}
+
 export function RcsaPage() {
   const canEdit = useCan("operational-risk", "edit");
-  const risks = useOpRisk((s) => s.rcsa);
+  const { actor } = useScope();
+  const rules = useRuleValues();
+  const cycleMonths = useRule<number>(orKeys.rcsaCycleMonths);
+  const allRisks = useOpRisk((s) => s.rcsa);
   const { updateRcsa } = useOpRisk.getState();
   const audit = useAuditLog();
+  const queue = useMyApprovalQueue(actor);
   const [view, setView] = useState<"inherent" | "residual">("residual");
   const [cell, setCell] = useState<{ row: string; column: string } | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
-  const selected = risks.find((r) => r.id === openId) ?? null;
+  const [scopeView, setScopeView] = useState<"all" | "mine">("all");
+  const [outcome, setOutcome] = useState<SubmitResult | null>(null);
+  const awaitingMe = new Set(queue.filter((o) => o.operationType === "operational-risk.rcsa.sign-off").map((o) => o.subject.id));
+  /** "My assessments": ones I submitted, or awaiting my second-line sign-off. */
+  const mine = allRisks.filter((r) => r.submittedById === actor.id || awaitingMe.has(r.id));
+  const risks = scopeView === "mine" ? mine : allRisks;
+  const selected = allRisks.find((r) => r.id === openId) ?? null;
+  const scales = riskScales();
+  const lMax = scales.likelihood.length;
+  const iMax = scales.impact.length;
 
   const cells: MatrixCell[] = useMemo(() => {
     const out: MatrixCell[] = [];
-    for (let l = 5; l >= 1; l--)
-      for (let i = 1; i <= 5; i++) {
+    for (let l = lMax; l >= 1; l--)
+      for (let i = 1; i <= iMax; i++) {
         const n = risks.filter((r) => r[view].likelihood === l && r[view].impact === i).length;
         const band = scoreBand(l * i);
         out.push({ row: String(l), column: String(i), value: n, label: n ? String(n) : "", tone: band.tone, description: `${band.label} (score ${l * i}) — ${n} risk${n === 1 ? "" : "s"}` });
       }
     return out;
-  }, [risks, view]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `rules` re-runs the banding when a rule changes
+  }, [risks, view, lMax, iMax, rules]);
 
   const filtered = cell ? risks.filter((r) => String(r[view].likelihood) === cell.row && String(r[view].impact) === cell.column) : risks;
   const done = risks.filter((r) => r.status === "Submitted" || r.status === "Reviewed").length;
@@ -77,25 +112,57 @@ export function RcsaPage() {
     { id: "inherent", header: "Inherent", numeric: true, sortable: true, accessor: (r) => riskScore(r.inherent), cell: (r) => <Badge tone={scoreBand(riskScore(r.inherent)).tone}>{riskScore(r.inherent)} · {scoreBand(riskScore(r.inherent)).label}</Badge> },
     { id: "effectiveness", header: "Control effectiveness", accessor: (r) => overallEffectiveness(r), sortable: true, cell: (r) => <StatusBadge status={overallEffectiveness(r)} tones={effTones} /> },
     { id: "residual", header: "Residual", numeric: true, sortable: true, accessor: (r) => riskScore(r.residual), cell: (r) => <Badge tone={scoreBand(riskScore(r.residual)).tone}>{riskScore(r.residual)} · {scoreBand(riskScore(r.residual)).label}</Badge> },
-    { id: "status", header: "Assessment", accessor: "status", sortable: true, cell: (r) => <StatusBadge status={r.status} tones={statusTones} /> },
+    {
+      id: "status",
+      header: "Assessment",
+      accessor: "status",
+      sortable: true,
+      cell: (r) => (
+        <div className="flex flex-col items-start gap-1">
+          <StatusBadge status={r.status} tones={statusTones} />
+          <PendingBadge subjectType="RcsaRisk" subjectId={r.id} />
+        </div>
+      ),
+    },
   ];
 
-  const advance = (r: RcsaRisk) => {
-    const next: Record<AssessmentStatus, AssessmentStatus> = { "Not started": "In progress", "In progress": "Submitted", Submitted: "Reviewed", Reviewed: "Reviewed" };
-    updateRcsa(r.id, { status: next[r.status], assessedAt: DEMO_NOW.toISOString() });
-    audit(next[r.status] === "Reviewed" ? "Reviewed RCSA self-assessment" : "Updated RCSA self-assessment", "RCSA", r.id, r.status, next[r.status]);
+  const start = (r: RcsaRisk) => {
+    updateRcsa(r.id, { status: "In progress", assessedAt: DEMO_NOW.toISOString() });
+    audit("Started RCSA self-assessment", "RCSA", r.id, r.status, "In progress");
+  };
+  /** Submit the self-assessment and route the second-line sign-off through Operations. */
+  const submitForSignOff = async (r: RcsaRisk) => {
+    const res = await submitOperation<RcsaSignOffPayload>("operational-risk.rcsa.sign-off", {
+      title: `RCSA sign-off — ${r.title}`,
+      subject: { type: "RcsaRisk", id: r.id, title: r.title, href: "/operational-risk/rcsa" },
+      payload: { riskId: r.id, title: r.title, residual: riskScore(r.residual), comment: "Self-assessment submitted for second-line review" },
+      summary: [
+        { label: "Risk", value: `${r.id} — ${r.title}` },
+        { label: "Business unit", value: r.businessUnit },
+        { label: "Residual score", value: `${riskScore(r.residual)} (${scoreBand(riskScore(r.residual)).label})` },
+        { label: "Control effectiveness", value: overallEffectiveness(r) },
+        { label: "Open actions", value: String(r.actions.filter((a) => a.status !== "Completed").length) },
+      ],
+    });
+    setOutcome(res);
+    if (!res.ok) return;
+    if (r.status !== "Submitted" && !res.applied) updateRcsa(r.id, { status: "Submitted", submittedBy: actor.name, submittedById: actor.id, assessedAt: DEMO_NOW.toISOString() });
+    audit("Submitted RCSA self-assessment for sign-off", "RCSA", r.id, r.status, `Submitted · ${res.instance.id}`);
+    publish("operational-risk.rcsa.submitted", { module: OPRISK, subject: { type: "RcsaRisk", id: r.id, title: r.title, href: "/operational-risk/rcsa" }, payload: { operationId: res.instance.id } });
   };
   const completeAction = (r: RcsaRisk, actionId: string) => {
     updateRcsa(r.id, { actions: r.actions.map((a) => (a.id === actionId ? { ...a, status: "Completed" } : a)) });
     audit("Completed RCSA action plan", "RCSA action", actionId, r.actions.find((a) => a.id === actionId)?.status, "Completed");
+    publish("operational-risk.rcsa.action-completed", { module: OPRISK, subject: { type: "RcsaRisk", id: r.id, title: r.title, href: "/operational-risk/rcsa" }, payload: { actionId } });
   };
 
   return (
     <ModulePage module="operational-risk" description="Risk & Control Self-Assessment, refreshed on a configurable cycle and mapped to each indicator category so control owners are identified before an incident — structured on COSO's identify-assess-respond-monitor cycle.">
       <Stack gap="large">
+        <SubmitOutcome result={outcome} />
         <Grid columns={{ base: 1, sm: 2, lg: 4 }} gap="medium">
-          <StatCard label={rcsaCycle.name} value={<span className="font-mono">{done}/{risks.length}</span>} hint={`Assessments submitted · closes ${date(rcsaCycle.closesAt)}`} icon={<CalendarClock aria-hidden />}>
-            <ProgressBar value={done / risks.length} size="small" ariaLabel="RCSA cycle completion" tone="accent" />
+          <StatCard label={rcsaCycle.name} value={<span className="font-mono">{done}/{allRisks.length}</span>} hint={`Submitted · every ${cycleMonths} months · closes ${date(rcsaCycle.closesAt)}`} icon={<CalendarClock aria-hidden />}>
+            <ProgressBar value={done / allRisks.length} size="small" ariaLabel="RCSA cycle completion" tone="accent" />
           </StatCard>
           <StatCard label="Controls assessed" value={<span className="font-mono">{controls.length}</span>} hint={`${controls.filter((c) => c.operating === "Effective").length} operating effectively`} icon={<ClipboardCheck aria-hidden />} tone="success" />
           <StatCard label="Ineffective / partially effective" value={<span className="font-mono">{controls.filter((c) => c.operating === "Ineffective" || c.operating === "Partially effective").length}</span>} hint="Controls needing remediation" icon={<ShieldX aria-hidden />} tone="warning" />
@@ -108,7 +175,7 @@ export function RcsaPage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <CardTitle>Risk heat map — likelihood × impact</CardTitle>
-                  <CardDescription>Select a cell to filter the register. Banding is a demo default (tenant-configurable).</CardDescription>
+                  <CardDescription>Select a cell to filter the register. Scales and banding are business rules.</CardDescription>
                 </div>
                 <SegmentedControl
                   label="Heat map view"
@@ -122,14 +189,14 @@ export function RcsaPage() {
             <CardContent>
               <Matrix
                 label={`${view === "inherent" ? "Inherent" : "Residual"} risk heat map`}
-                rows={[5, 4, 3, 2, 1].map((l) => ({ id: String(l), label: `${l} · ${likelihoodLabels[l - 1]}` }))}
-                columns={[1, 2, 3, 4, 5].map((i) => ({ id: String(i), label: `${i} · ${impactLabels[i - 1]}` }))}
+                rows={scales.likelihood.map((_, i) => lMax - i).map((l) => ({ id: String(l), label: `${l} · ${scales.likelihood[l - 1]}` }))}
+                columns={scales.impact.map((label, i) => ({ id: String(i + 1), label: `${i + 1} · ${label}` }))}
                 cells={cells}
                 rowAxisLabel="Likelihood"
                 columnAxisLabel="Impact"
                 onCellClick={(c) => setCell((cur) => (cur?.row === c.row && cur.column === c.column ? null : { row: c.row, column: c.column }))}
                 selected={cell}
-                legend={[{ label: "Low (1–4)", tone: "success" }, { label: "Medium (5–9)", tone: "warning" }, { label: "High (10–14)", tone: "accent" }, { label: "Critical (15–25)", tone: "danger" }]}
+                legend={scoreLegend()}
               />
             </CardContent>
           </Card>
@@ -159,6 +226,18 @@ export function RcsaPage() {
           </Card>
         </Grid>
 
+        <div className="flex justify-end">
+          <SegmentedControl
+            label="Register scope"
+            size="small"
+            value={scopeView}
+            onChange={setScopeView}
+            options={[
+              { value: "all", label: `All risks (${allRisks.length})` },
+              { value: "mine", label: `My assessments (${mine.length})` },
+            ]}
+          />
+        </div>
         <DataTable
           label="RCSA risk & control register"
           caption={cell ? `Filtered to likelihood ${cell.row} × impact ${cell.column} (${view})` : undefined}
@@ -181,13 +260,7 @@ export function RcsaPage() {
         onOpenChange={(o) => !o && setOpenId(null)}
         title={selected?.title ?? ""}
         description={selected ? `${selected.id} · ${selected.category}` : undefined}
-        footer={
-          selected && canEdit && selected.status !== "Reviewed" ? (
-            <div className="flex justify-end">
-              <Button onClick={() => advance(selected)}>{selected.status === "Submitted" ? "Mark reviewed (2nd line)" : selected.status === "Not started" ? "Start self-assessment" : "Submit self-assessment"}</Button>
-            </div>
-          ) : undefined
-        }
+        footer={selected && canEdit && selected.status !== "Reviewed" ? <RcsaActions risk={selected} onStart={start} onSubmit={submitForSignOff} /> : undefined}
       >
         {selected && (
           <Stack gap="large">
@@ -200,6 +273,8 @@ export function RcsaPage() {
                 { label: "Residual", value: `L${selected.residual.likelihood} × I${selected.residual.impact} = ${riskScore(selected.residual)}` },
                 { label: "Assessment", status: selected.status, statusTones: statusTones },
                 { label: "Last assessed", value: selected.assessedAt ? date(selected.assessedAt) : undefined },
+                { label: "Submitted by", value: selected.submittedBy },
+                { label: "Signed off by", value: selected.reviewedBy },
                 { label: "Linked KRIs", value: selected.kriIds.map((id) => kris.find((k) => k.id === id)?.name ?? id).join("; ") || undefined, span: 2 },
               ]}
             />

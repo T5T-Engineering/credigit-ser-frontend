@@ -3,23 +3,21 @@
 /**
  * Operational Risk module store — user changes persist in this browser (prototype).
  * BACKEND SEAM: replace these actions with API calls; pages read only through `useOpRisk`.
+ * Approvals (KRI thresholds, loss-event closure, RCSA sign-off, BCM plan approval) never write here directly —
+ * they are Operations workflow requests whose `apply` (../platform.ts) calls these actions after approval.
  */
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { seedBcmPlans, seedExercises, seedLossEvents, seedRcsa, type BcmExercise, type BcmPlan, type LossEvent, type RcsaRisk } from "./data";
 
-export type KriEscalation = { kriId: string; level: 1 | 2 | 3 | 4; acknowledgedBy?: string; acknowledgedAt?: string; note?: string };
-export type ThresholdChange = {
-  id: string;
+export type KriEscalation = {
   kriId: string;
-  amber: number;
-  red: number;
-  previous: { amber: number; red: number };
-  reason: string;
-  proposedBy: string;
-  proposedAt: string;
-  status: "Pending approval" | "Approved" | "Rejected";
-  decidedBy?: string;
+  level: 1 | 2 | 3 | 4;
+  escalatedById?: string;
+  acknowledgedBy?: string;
+  acknowledgedById?: string;
+  acknowledgedAt?: string;
+  note?: string;
 };
 
 type OpRiskState = {
@@ -28,7 +26,6 @@ type OpRiskState = {
   bcmPlans: BcmPlan[];
   exercises: BcmExercise[];
   escalations: Record<string, KriEscalation>;
-  thresholdChanges: ThresholdChange[];
   commentarySignedOffBy?: string;
   addLossEvent: (e: LossEvent) => void;
   updateLossEvent: (id: string, changes: Partial<LossEvent>) => void;
@@ -36,8 +33,6 @@ type OpRiskState = {
   updatePlan: (id: string, changes: Partial<BcmPlan>) => void;
   addExercise: (e: BcmExercise) => void;
   setEscalation: (e: KriEscalation) => void;
-  proposeThreshold: (c: ThresholdChange) => void;
-  decideThreshold: (id: string, status: "Approved" | "Rejected", by: string) => void;
   signOffCommentary: (by: string) => void;
 };
 
@@ -47,7 +42,6 @@ const initial = () => ({
   bcmPlans: seedBcmPlans,
   exercises: seedExercises,
   escalations: {} as Record<string, KriEscalation>,
-  thresholdChanges: [] as ThresholdChange[],
   commentarySignedOffBy: undefined as string | undefined,
 });
 
@@ -61,22 +55,15 @@ export const useOpRisk = create<OpRiskState>()(
       updatePlan: (id, changes) => set((s) => ({ bcmPlans: s.bcmPlans.map((x) => (x.id === id ? { ...x, ...changes } : x)) })),
       addExercise: (e) => set((s) => ({ exercises: [e, ...s.exercises] })),
       setEscalation: (e) => set((s) => ({ escalations: { ...s.escalations, [e.kriId]: e } })),
-      proposeThreshold: (c) => set((s) => ({ thresholdChanges: [c, ...s.thresholdChanges] })),
-      decideThreshold: (id, status, by) => set((s) => ({ thresholdChanges: s.thresholdChanges.map((c) => (c.id === id ? { ...c, status, decidedBy: by } : c)) })),
       signOffCommentary: (by) => set({ commentarySignedOffBy: by }),
     }),
     {
       name: "credigit.ser.operational-risk",
-      version: 1,
+      // v2: KRI threshold changes moved to business rules + the Operations workflow.
+      version: 2,
       storage: createJSONStorage(() => localStorage),
-      partialize: (s) => ({ lossEvents: s.lossEvents, rcsa: s.rcsa, bcmPlans: s.bcmPlans, exercises: s.exercises, escalations: s.escalations, thresholdChanges: s.thresholdChanges, commentarySignedOffBy: s.commentarySignedOffBy }),
+      partialize: (s) => ({ lossEvents: s.lossEvents, rcsa: s.rcsa, bcmPlans: s.bcmPlans, exercises: s.exercises, escalations: s.escalations, commentarySignedOffBy: s.commentarySignedOffBy }),
       migrate: () => initial() as unknown as OpRiskState,
     },
   ),
 );
-
-/** KRI thresholds in force = defaults overridden by the latest approved change. */
-export function effectiveThresholds(kriId: string, amber: number, red: number, changes: ThresholdChange[]) {
-  const approved = changes.find((c) => c.kriId === kriId && c.status === "Approved");
-  return approved ? { amber: approved.amber, red: approved.red } : { amber, red };
-}

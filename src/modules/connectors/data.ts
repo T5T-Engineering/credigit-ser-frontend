@@ -1,6 +1,9 @@
+import { getRule } from "@/lib/platform/rules";
+
 /**
  * Connectors — simulated health telemetry for the Risk Data Spine connectors (PRD §5).
  * Prototype: every figure is simulated. Endpoints and credentials are configured by each tenant and are never shown.
+ * Freshness SLAs and thresholds are business rules (./platform.ts), read at call time.
  * BACKEND SEAM: replace with the connector/job health API (PRD §4.6: connector freshness, queue/outbox lag, projection lag).
  */
 
@@ -18,8 +21,8 @@ export type Connector = {
   statusNote?: string;
   /** Minutes since the last successful sync (relative to page load). */
   lastSyncMin: number;
-  /** Freshness SLA in minutes (tenant parameter — demo values). */
-  freshnessSlaMin: number;
+  /** Default freshness SLA in minutes — seeds business rule `connectors.<id>.freshnessSlaMinutes`; read via freshnessSla(). */
+  defaultFreshnessSlaMin: number;
   records24h: number;
   recordsLabel: string;
   latencyMs: number;
@@ -40,7 +43,7 @@ export const connectors: Connector[] = [
     schedule: "Every 15 minutes + 01:00 batch",
     status: "Healthy",
     lastSyncMin: 6,
-    freshnessSlaMin: 30,
+    defaultFreshnessSlaMin: 30,
     records24h: 184_220,
     recordsLabel: "statement lines & balances",
     latencyMs: 420,
@@ -58,7 +61,7 @@ export const connectors: Connector[] = [
     schedule: "On demand (origination & renewal)",
     status: "Healthy",
     lastSyncMin: 12,
-    freshnessSlaMin: 240,
+    defaultFreshnessSlaMin: 240,
     records24h: 146,
     recordsLabel: "enquiries",
     latencyMs: 1_850,
@@ -77,7 +80,7 @@ export const connectors: Connector[] = [
     status: "Degraded",
     statusNote: "Responses slower than usual — retrying automatically (3 of 5 retries used).",
     lastSyncMin: 47,
-    freshnessSlaMin: 240,
+    defaultFreshnessSlaMin: 240,
     records24h: 131,
     recordsLabel: "enquiries",
     latencyMs: 9_400,
@@ -95,7 +98,7 @@ export const connectors: Connector[] = [
     schedule: "On demand",
     status: "Healthy",
     lastSyncMin: 26,
-    freshnessSlaMin: 480,
+    defaultFreshnessSlaMin: 480,
     records24h: 58,
     recordsLabel: "searches",
     latencyMs: 2_300,
@@ -114,7 +117,7 @@ export const connectors: Connector[] = [
     schedule: "On upload",
     status: "Manual (Phase 1)",
     lastSyncMin: 128,
-    freshnessSlaMin: 1_440,
+    defaultFreshnessSlaMin: 1_440,
     records24h: 38,
     recordsLabel: "statements parsed",
     latencyMs: 14_500,
@@ -133,7 +136,7 @@ export const connectors: Connector[] = [
     status: "Healthy",
     statusNote: "Queue depth 4 documents.",
     lastSyncMin: 2,
-    freshnessSlaMin: 30,
+    defaultFreshnessSlaMin: 30,
     records24h: 212,
     recordsLabel: "documents processed",
     latencyMs: 38_000,
@@ -151,7 +154,7 @@ export const connectors: Connector[] = [
     schedule: "Daily 06:00",
     status: "Healthy",
     lastSyncMin: 205,
-    freshnessSlaMin: 1_560,
+    defaultFreshnessSlaMin: 1_560,
     records24h: 1_240,
     recordsLabel: "sector observations",
     latencyMs: 3_100,
@@ -170,7 +173,7 @@ export const connectors: Connector[] = [
     status: "Healthy",
     statusNote: "PMI for October not yet published by source — previous value retained.",
     lastSyncMin: 145,
-    freshnessSlaMin: 1_560,
+    defaultFreshnessSlaMin: 1_560,
     records24h: 64,
     recordsLabel: "series updated",
     latencyMs: 2_600,
@@ -188,7 +191,7 @@ export const connectors: Connector[] = [
     schedule: "Daily 08:00",
     status: "Healthy",
     lastSyncMin: 85,
-    freshnessSlaMin: 1_560,
+    defaultFreshnessSlaMin: 1_560,
     records24h: 2,
     recordsLabel: "circulars",
     latencyMs: 1_200,
@@ -206,7 +209,7 @@ export const connectors: Connector[] = [
     schedule: "Every 30 minutes + on demand before approval",
     status: "Healthy",
     lastSyncMin: 14,
-    freshnessSlaMin: 60,
+    defaultFreshnessSlaMin: 60,
     records24h: 9_680,
     recordsLabel: "facilities evaluated",
     latencyMs: 2_900,
@@ -225,7 +228,7 @@ export const connectors: Connector[] = [
     schedule: "Daily close (Phase 2) · on upload (Phase 1)",
     status: "Manual (Phase 1)",
     lastSyncMin: 1_110,
-    freshnessSlaMin: 1_560,
+    defaultFreshnessSlaMin: 1_560,
     records24h: 29,
     recordsLabel: "positions valued",
     latencyMs: 0,
@@ -243,7 +246,7 @@ export const connectors: Connector[] = [
     schedule: "Every 5 minutes (market hours)",
     status: "Healthy",
     lastSyncMin: 4,
-    freshnessSlaMin: 15,
+    defaultFreshnessSlaMin: 15,
     records24h: 6_420,
     recordsLabel: "positions & deals",
     latencyMs: 640,
@@ -262,7 +265,7 @@ export const connectors: Connector[] = [
     status: "Failed",
     statusNote: "Authentication rejected by the source system — the tenant needs to renew the service credential.",
     lastSyncMin: 1_975,
-    freshnessSlaMin: 1_560,
+    defaultFreshnessSlaMin: 1_560,
     records24h: 0,
     recordsLabel: "KRI observations",
     latencyMs: 0,
@@ -272,6 +275,14 @@ export const connectors: Connector[] = [
     dataFormat: "CSV",
   },
 ];
+
+/** Business-rule key of a connector's freshness SLA. */
+export const freshnessRuleKey = (id: string) => `connectors.${id.toLowerCase()}.freshnessSlaMinutes`;
+
+/** Freshness SLA (minutes) from business rules. */
+export function freshnessSla(c: Pick<Connector, "id">): number {
+  return getRule<number>(freshnessRuleKey(c.id));
+}
 
 export const statusTones = { Healthy: "success", Degraded: "warning", Failed: "danger", "Manual (Phase 1)": "info", Paused: "neutral" } as const;
 
@@ -292,9 +303,10 @@ export function seedRuns(now: number): Run[] {
   const out: Run[] = [];
   let k = 0;
   for (const c of connectors) {
+    const sla = freshnessSla(c);
     const n = c.status === "Manual (Phase 1)" ? 2 : 3;
     for (let i = 0; i < n; i++) {
-      const minutesAgo = c.lastSyncMin + i * (c.freshnessSlaMin > 600 ? 1440 : Math.max(15, c.freshnessSlaMin / 2));
+      const minutesAgo = c.lastSyncMin + i * (sla > 600 ? 1440 : Math.max(15, sla / 2));
       const failed = c.status === "Failed" && i === 0;
       const partial = c.status === "Degraded" && i === 0;
       out.push({
@@ -302,7 +314,7 @@ export function seedRuns(now: number): Run[] {
         connectorId: c.id,
         startedAt: new Date(now - minutesAgo * 60_000).toISOString(),
         durationMs: Math.max(800, c.latencyMs * 6 + i * 900),
-        records: failed ? 0 : Math.round(c.records24h / (c.freshnessSlaMin > 600 ? 1 : 24 * (60 / Math.max(15, c.freshnessSlaMin / 2)))) || 1,
+        records: failed ? 0 : Math.round(c.records24h / (sla > 600 ? 1 : 24 * (60 / Math.max(15, sla / 2)))) || 1,
         status: failed ? "Failed" : partial ? "Partial" : "Success",
         trigger: c.status === "Manual (Phase 1)" ? "Manual" : c.id === "CON-OCR" ? "Event" : "Schedule",
         message: failed ? "401 — authentication rejected" : partial ? "12 enquiries timed out — queued for retry" : undefined,

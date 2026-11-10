@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { KeyRound, ShieldCheck, UserCheck, UserPlus, Users, UserX } from "lucide-react";
 import {
   Alert,
@@ -23,6 +24,7 @@ import {
   Stack,
   StatCard,
   Text,
+  Textarea,
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
@@ -33,23 +35,51 @@ import { newId } from "@/lib/data/store";
 import type { User } from "@/lib/data/types";
 import { roleById, roleGroups, roles, type RoleId } from "@/lib/rbac/roles";
 import { ago, dateTime } from "@/lib/format";
+import { publish } from "@/lib/platform/events";
+import { runHooks } from "@/lib/platform/hooks";
+import { notify } from "@/lib/platform/notifications";
+import { submitOperation, usePendingFor, type SubmitResult } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
 import { useAuditLog } from "@/modules/workspace/use-audit-log";
 import { ConfigNotice } from "./config-notice";
 import { AccessRequests } from "./access-requests";
+import { PendingBadge, submitWithHooks, SubmitOutcome } from "./operation-ui";
+import { roleName } from "./rule-keys";
+import { useConfiguredRoles } from "./store";
+import type { UserInvitePayload, UserRoleChangePayload, UserStatusPayload } from "./platform";
 
 const statusTone = { Active: "success", Pending: "info", Suspended: "danger" } as const;
-const roleOptions = roleGroups.flatMap((g) => roles.filter((r) => r.group === g).map((r) => ({ value: r.id, label: `${r.name} (${g})` })));
 
-/** Admin → Users (PRD §4: named individuals, MFA-enforced; System Admin creates/deactivates users). */
+/** Role options with configured names (rule admin.roleName.*). */
+function useRoleOptions() {
+  const configured = useConfiguredRoles();
+  return useMemo(() => roleGroups.flatMap((g) => roles.filter((r) => r.group === g).map((r) => ({ value: r.id, label: `${configured.find((c) => c.id === r.id)?.name ?? r.name} (${g})` }))), [configured]);
+}
+
+type Pending = { kind: "deactivate" | "reactivate" | "role"; user: User; to?: RoleId };
+
+/** Admin → Users (PRD §4: named individuals, MFA-enforced). Invites, role changes and (de)activation route through Operations. */
 export function UsersPage() {
+  return (
+    <Suspense>
+      <UsersView />
+    </Suspense>
+  );
+}
+
+function UsersView() {
   const users = useUsers();
   const canEdit = useCan("admin", "edit");
   const me = useSession((s) => s.user);
-  const { upsert, update } = useDbActions();
+  const { update } = useDbActions();
   const log = useAuditLog();
+  const params = useSearchParams();
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [selected, setSelected] = useState<User | null>(null);
-  const [confirm, setConfirm] = useState<{ user: User; to: User["status"] } | null>(null);
+  // Deep link from notifications: /admin?user=USR-001
+  const [selectedId, setSelectedId] = useState<string | null>(() => params.get("user"));
+  const [confirm, setConfirm] = useState<Pending | null>(null);
+  const [mfaNotice, setMfaNotice] = useState<string | null>(null);
+  const selected = users.find((u) => u.id === selectedId) ?? null;
 
   const stats = useMemo(
     () => ({
@@ -61,20 +91,16 @@ export function UsersPage() {
     [users],
   );
 
-  const setStatus = (u: User, status: User["status"]) => {
-    update("users", u.id, { status });
-    log({ action: status === "Suspended" ? "Deactivated user" : "Reactivated user", entityType: "User", entityId: u.id, before: u.status, after: status });
-    setSelected((s) => (s && s.id === u.id ? { ...s, status } : s));
-  };
-  const setRole = (u: User, roleId: RoleId) => {
-    update("users", u.id, { roleId });
-    log({ action: "Changed user role", entityType: "User", entityId: u.id, before: roleById[u.roleId].name, after: roleById[roleId].name });
-    setSelected((s) => (s && s.id === u.id ? { ...s, roleId } : s));
-  };
-  const resetMfa = (u: User) => {
+  /** MFA reset is a security action on the user's own enrolment — direct, audited, notified, published. */
+  const resetMfa = async (u: User) => {
+    const before = await runHooks("admin.user.change.before", { action: "mfa-reset", userId: u.id });
+    if (!before.ok) return setMfaNotice(`Blocked by ${before.vetoedBy}: ${before.reason}`);
+    notify({ templateId: "admin.user-mfa-reset", toUserIds: [u.id], href: "/settings", data: { name: u.name, by: me?.name ?? "System Admin" } });
     update("users", u.id, { mfa: false });
     log({ action: "Reset MFA enrolment", entityType: "User", entityId: u.id, before: "Enrolled", after: "Re-enrolment required" });
-    setSelected((s) => (s && s.id === u.id ? { ...s, mfa: false } : s));
+    publish("admin.user.mfa-reset", { module: "admin", subject: { type: "User", id: u.id, title: u.name, href: `/admin?user=${u.id}` } });
+    await runHooks("admin.user.change.after", { action: "mfa-reset", userId: u.id });
+    setMfaNotice(`MFA reset for ${u.name}. They'll enrol again at the next sign-in.`);
   };
 
   const columns: DataTableColumn<User>[] = [
@@ -87,14 +113,16 @@ export function UsersPage() {
         <span className="flex items-center gap-3">
           <Avatar name={u.name} size="small" />
           <span className="flex min-w-0 flex-col">
-            <span className="font-semibold text-fg">{u.name}</span>
+            <span className="flex flex-wrap items-center gap-2 font-semibold text-fg">
+              {u.name} <PendingBadge subjectType="User" subjectId={u.id} />
+            </span>
             <span className="truncate text-sm text-fg-muted">{u.email}</span>
           </span>
         </span>
       ),
     },
     { id: "email", header: "Email", accessor: "email", hidden: true },
-    { id: "role", header: "Role", accessor: (u) => roleById[u.roleId]?.name, sortable: true },
+    { id: "role", header: "Role", accessor: (u) => roleName(u.roleId), sortable: true },
     { id: "group", header: "Group", accessor: (u) => roleById[u.roleId]?.group, hidden: true },
     { id: "branch", header: "Branch", accessor: "branch", sortable: true },
     { id: "mfa", header: "MFA", accessor: (u) => (u.mfa ? "Enrolled" : "Not enrolled"), cell: (u) => (u.mfa ? <Badge tone="success">Enrolled</Badge> : <Badge tone="warning">Not enrolled</Badge>) },
@@ -120,15 +148,15 @@ export function UsersPage() {
             triggerLabel={`Manage ${u.name}`}
             triggerClassName={buttonStyles({ variant: "tertiary", size: "small" })}
             items={[
-              { label: "View details", onSelect: () => setSelected(u) },
+              { label: "View details", onSelect: () => setSelectedId(u.id) },
               u.status === "Suspended"
-                ? { label: "Reactivate", icon: <UserCheck aria-hidden className="size-4" />, onSelect: () => setConfirm({ user: u, to: "Active" }) }
-                : { label: "Deactivate", icon: <UserX aria-hidden className="size-4" />, danger: true, onSelect: () => setConfirm({ user: u, to: "Suspended" }) },
-              { label: "Reset MFA", icon: <KeyRound aria-hidden className="size-4" />, onSelect: () => resetMfa(u) },
+                ? { label: "Request reactivation", icon: <UserCheck aria-hidden className="size-4" />, onSelect: () => setConfirm({ kind: "reactivate", user: u }) }
+                : { label: "Request deactivation", icon: <UserX aria-hidden className="size-4" />, danger: true, onSelect: () => setConfirm({ kind: "deactivate", user: u }) },
+              { label: "Reset MFA", icon: <KeyRound aria-hidden className="size-4" />, onSelect: () => void resetMfa(u) },
             ]}
           />
         ) : (
-          <Button size="small" variant="text" onClick={() => setSelected(u)}>
+          <Button size="small" variant="text" onClick={() => setSelectedId(u.id)}>
             View
           </Button>
         ),
@@ -138,7 +166,7 @@ export function UsersPage() {
   return (
     <ModulePage
       module="admin"
-      description="Named users only — no shared logins. MFA is enforced on every sign-in and every change is written to the audit log."
+      description="Named users only — no shared logins. MFA is enforced on every sign-in. Invitations, role changes and deactivations are approved by a second person in Operations."
       actions={
         canEdit ? (
           <Button iconBefore={<UserPlus aria-hidden className="size-4" />} onClick={() => setInviteOpen(true)}>
@@ -149,6 +177,7 @@ export function UsersPage() {
     >
       <Stack gap="large">
         <ConfigNotice canEdit={canEdit} />
+        {mfaNotice ? <Alert tone="info">{mfaNotice}</Alert> : null}
         <AccessRequests canEdit={canEdit} />
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
           <StatCard label="Active users" value={stats.active} icon={<Users aria-hidden className="size-5" />} tone="accent" hint={`${users.length} in directory`} />
@@ -175,10 +204,10 @@ export function UsersPage() {
               exportFilename="users.csv"
               rowProps={(u) => ({ "aria-current": u.id === me?.id ? "true" : undefined })}
               mobileCard={(u) => (
-                <button type="button" className="flex w-full flex-col items-start gap-1 text-start" onClick={() => setSelected(u)}>
+                <button type="button" className="flex w-full flex-col items-start gap-1 text-start" onClick={() => setSelectedId(u.id)}>
                   <span className="font-semibold">{u.name}</span>
                   <span className="text-sm text-fg-muted">
-                    {roleById[u.roleId].name} · {u.branch}
+                    {roleName(u.roleId)} · {u.branch}
                   </span>
                   <span className="flex gap-2">
                     <Badge tone={statusTone[u.status]}>{u.status}</Badge>
@@ -191,131 +220,221 @@ export function UsersPage() {
         </Card>
       </Stack>
 
-      <InviteModal
-        open={inviteOpen}
-        onOpenChange={setInviteOpen}
-        existingEmails={users.map((u) => u.email.toLowerCase())}
-        onInvite={(u) => {
-          upsert("users", u);
-          log({ action: "Invited user", entityType: "User", entityId: u.id, after: `${u.name} · ${roleById[u.roleId].name} · ${u.branch}` });
-        }}
-      />
+      <InviteModal open={inviteOpen} onOpenChange={setInviteOpen} existingEmails={users.map((u) => u.email.toLowerCase())} />
 
-      <Drawer open={selected !== null} onOpenChange={(o) => !o && setSelected(null)} title={selected?.name ?? "User"} description={selected?.email}>
-        {selected ? (
-          <Stack gap="large">
-            <DescriptionList
-              columns={1}
-              items={[
-                { label: "User ID", value: selected.id, mono: true, copyValue: selected.id },
-                { label: "Role", value: roleById[selected.roleId].name, hint: roleById[selected.roleId].authority },
-                { label: "Branch", value: selected.branch },
-                { label: "Status", status: selected.status, statusTones: statusTone },
-                { label: "MFA", value: selected.mfa ? "Enrolled (Microsoft Authenticator)" : "Not enrolled — sign-in blocked until enrolment" },
-                { label: "Last sign-in", value: selected.lastLogin ? dateTime(selected.lastLogin) : "Never" },
-                { label: "Sign-in method", value: "Microsoft Entra ID (SSO)" },
-              ]}
-            />
-            {canEdit ? (
-              <Stack gap="medium">
-                <Field label="Role" htmlFor="user-role" description="Role changes take effect at the user's next sign-in.">
-                  <Select id="user-role" value={selected.roleId} options={roleOptions} onChange={(e) => setRole(selected, e.target.value as RoleId)} />
-                </Field>
-                <div className="flex flex-wrap gap-2">
-                  {selected.status === "Suspended" ? (
-                    <Button variant="secondary" onClick={() => setConfirm({ user: selected, to: "Active" })}>
-                      Reactivate
-                    </Button>
-                  ) : (
-                    <Button variant="danger" onClick={() => setConfirm({ user: selected, to: "Suspended" })}>
-                      Deactivate
-                    </Button>
-                  )}
-                  <Button variant="tertiary" onClick={() => resetMfa(selected)}>
-                    Reset MFA
-                  </Button>
-                </div>
-              </Stack>
-            ) : (
-              <Alert tone="info">View only — user changes need the System Admin role.</Alert>
-            )}
-          </Stack>
-        ) : null}
+      <Drawer open={selected !== null} onOpenChange={(o) => !o && setSelectedId(null)} title={selected?.name ?? "User"} description={selected?.email}>
+        {selected ? <UserDetails user={selected} canEdit={canEdit} onAction={setConfirm} onResetMfa={() => void resetMfa(selected)} /> : null}
       </Drawer>
 
-      <Modal
-        open={confirm !== null}
-        onOpenChange={(o) => !o && setConfirm(null)}
-        size="small"
-        title={confirm?.to === "Suspended" ? "Deactivate user?" : "Reactivate user?"}
-        description={
-          confirm?.to === "Suspended"
-            ? `${confirm.user.name} will be signed out and blocked. Their history and audit trail are kept.`
-            : `${confirm?.user.name} will be able to sign in again with MFA.`
-        }
-        footer={
-          <>
-            <Button variant="tertiary" onClick={() => setConfirm(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant={confirm?.to === "Suspended" ? "danger" : "primary"}
-              onClick={() => {
-                if (confirm) setStatus(confirm.user, confirm.to);
-                setConfirm(null);
-              }}
-            >
-              {confirm?.to === "Suspended" ? "Deactivate" : "Reactivate"}
-            </Button>
-          </>
-        }
-      >
-        {confirm?.user.id === me?.id ? <Alert tone="warning">This is your own account.</Alert> : <Text tone="muted">This change is recorded in the audit log.</Text>}
-      </Modal>
+      {confirm ? <ConfirmModal key={`${confirm.kind}:${confirm.user.id}:${confirm.to ?? ""}`} pending={confirm} isSelf={confirm.user.id === me?.id} onClose={() => setConfirm(null)} /> : null}
     </ModulePage>
   );
 }
 
-function InviteModal({ open, onOpenChange, onInvite, existingEmails }: { open: boolean; onOpenChange: (o: boolean) => void; onInvite: (u: User) => void; existingEmails: string[] }) {
+function UserDetails({ user, canEdit, onAction, onResetMfa }: { user: User; canEdit: boolean; onAction: (p: Pending) => void; onResetMfa: () => void }) {
+  const roleOptions = useRoleOptions();
+  const pending = usePendingFor("User", user.id);
+  return (
+    <Stack gap="large">
+      <PendingBadge subjectType="User" subjectId={user.id} />
+      <DescriptionList
+        columns={1}
+        items={[
+          { label: "User ID", value: user.id, mono: true, copyValue: user.id },
+          { label: "Role", value: roleName(user.roleId), hint: roleById[user.roleId].authority },
+          { label: "Branch", value: user.branch },
+          { label: "Status", status: user.status, statusTones: statusTone },
+          { label: "MFA", value: user.mfa ? "Enrolled (Microsoft Authenticator)" : "Not enrolled — sign-in blocked until enrolment" },
+          { label: "Last sign-in", value: user.lastLogin ? dateTime(user.lastLogin) : "Never" },
+          { label: "Sign-in method", value: "Microsoft Entra ID (SSO)" },
+        ]}
+      />
+      {canEdit ? (
+        <Stack gap="medium">
+          <Field label="Role" htmlFor="user-role" description={pending ? "A change for this user is awaiting approval." : "Choosing a role sends a role-change request for approval. It applies at the user's next sign-in."}>
+            <Select id="user-role" value={user.roleId} options={roleOptions} disabled={Boolean(pending)} onChange={(e) => onAction({ kind: "role", user, to: e.target.value as RoleId })} />
+          </Field>
+          <div className="flex flex-wrap gap-2">
+            {user.status === "Suspended" ? (
+              <Button variant="secondary" disabled={Boolean(pending)} onClick={() => onAction({ kind: "reactivate", user })}>
+                Request reactivation
+              </Button>
+            ) : (
+              <Button variant="danger" disabled={Boolean(pending)} onClick={() => onAction({ kind: "deactivate", user })}>
+                Request deactivation
+              </Button>
+            )}
+            <Button variant="tertiary" onClick={onResetMfa}>
+              Reset MFA
+            </Button>
+          </div>
+        </Stack>
+      ) : (
+        <Alert tone="info">View only — user changes need the System Admin role.</Alert>
+      )}
+    </Stack>
+  );
+}
+
+const copy = {
+  deactivate: { title: "Request deactivation?", button: "Request deactivation", type: "user.deactivate", verb: "Deactivate" },
+  reactivate: { title: "Request reactivation?", button: "Request reactivation", type: "user.reactivate", verb: "Reactivate" },
+  role: { title: "Request role change?", button: "Request role change", type: "user.role-change", verb: "Change role of" },
+} as const;
+
+function ConfirmModal({ pending, isSelf, onClose }: { pending: Pending; isSelf: boolean; onClose: () => void }) {
+  const minReason = useRule<number>("operations.minCommentLength");
+  const [reason, setReason] = useState("");
+  const [result, setResult] = useState<SubmitResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const { user, kind, to } = pending;
+  const c = copy[kind];
+
+  const submit = async () => {
+    if (reason.trim().length < minReason) return setResult({ ok: false, reason: `Give a reason of at least ${minReason} characters.` });
+    setBusy(true);
+    const subject = { type: "User", id: user.id, title: user.name, href: `/admin?user=${user.id}` };
+    const r = await submitWithHooks("admin.user.change", { action: kind, userId: user.id, to, reason: reason.trim() }, (ctx) =>
+      kind === "role"
+        ? submitOperation<UserRoleChangePayload>(c.type, {
+            title: `${c.verb} ${user.name}: ${roleName(user.roleId)} → ${roleName(ctx.to!)}`,
+            subject,
+            payload: { userId: user.id, from: user.roleId, to: ctx.to!, reason: ctx.reason },
+            summary: [
+              { label: "User", value: `${user.name} (${user.email})` },
+              { label: "Current role", value: roleName(user.roleId) },
+              { label: "New role", value: roleName(ctx.to!) },
+              { label: "Reason", value: ctx.reason },
+            ],
+          })
+        : submitOperation<UserStatusPayload>(c.type, {
+            title: `${c.verb} ${user.name}`,
+            subject,
+            payload: { userId: user.id, reason: ctx.reason },
+            summary: [
+              { label: "User", value: `${user.name} (${user.email})` },
+              { label: "Role", value: roleName(user.roleId) },
+              { label: "Status", value: `${user.status} → ${kind === "deactivate" ? "Suspended" : "Active"}` },
+              { label: "Reason", value: ctx.reason },
+            ],
+          }),
+    );
+    setBusy(false);
+    setResult(r);
+  };
+
+  return (
+    <Modal
+      open
+      onOpenChange={(o) => !o && onClose()}
+      size="small"
+      title={c.title}
+      description={
+        kind === "deactivate"
+          ? `${user.name} will be signed out and blocked once a second person approves. Their history and audit trail are kept.`
+          : kind === "reactivate"
+            ? `${user.name} will be able to sign in again with MFA once approved.`
+            : `${user.name}: ${roleName(user.roleId)} → ${roleName(to!)}. Applies at the next sign-in once approved.`
+      }
+      footer={
+        result?.ok ? (
+          <Button onClick={onClose}>Done</Button>
+        ) : (
+          <>
+            <Button variant="tertiary" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button variant={kind === "deactivate" ? "danger" : "primary"} loading={busy} onClick={() => void submit()}>
+              {c.button}
+            </Button>
+          </>
+        )
+      }
+    >
+      <Stack gap="medium">
+        {isSelf ? <Alert tone="warning">This is your own account.</Alert> : null}
+        <Field label="Reason" htmlFor="user-change-reason" required description="Shown to the approver and the user; kept in the audit log.">
+          <Textarea id="user-change-reason" rows={3} value={reason} disabled={Boolean(result?.ok)} onChange={(e) => setReason(e.target.value)} />
+        </Field>
+        <SubmitOutcome result={result} />
+      </Stack>
+    </Modal>
+  );
+}
+
+function InviteModal({ open, onOpenChange, existingEmails }: { open: boolean; onOpenChange: (o: boolean) => void; existingEmails: string[] }) {
+  const roleOptions = useRoleOptions();
+  const minNameParts = useRule<number>("admin.user.minNameParts");
+  const defaultRole = useRule<string>("admin.user.defaultInviteRole") as RoleId;
+  const minReason = useRule<number>("operations.minCommentLength");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [roleId, setRoleId] = useState<RoleId>("account-officer");
+  const [roleId, setRoleId] = useState<RoleId>(defaultRole);
   const [branch, setBranch] = useState(branches[0]!);
+  const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<SubmitResult | null>(null);
 
-  const submit = () => {
-    if (name.trim().split(/\s+/).length < 2) return setError("Enter the person's full name — shared or generic logins aren't allowed.");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setError("Enter a valid work email address.");
-    if (existingEmails.includes(email.toLowerCase())) return setError("A user with this email already exists.");
-    onInvite({ id: newId("USR"), name: name.trim(), email: email.trim(), roleId, branch, status: "Pending", mfa: false });
+  const close = () => {
+    onOpenChange(false);
     setName("");
     setEmail("");
+    setReason("");
     setError(null);
-    onOpenChange(false);
+    setResult(null);
+  };
+
+  const submit = async () => {
+    if (name.trim().split(/\s+/).length < minNameParts) return setError("Enter the person's full name — shared or generic logins aren't allowed.");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setError("Enter a valid work email address.");
+    if (existingEmails.includes(email.toLowerCase())) return setError("A user with this email already exists.");
+    if (reason.trim().length < minReason) return setError(`Give a reason of at least ${minReason} characters.`);
+    setError(null);
+    const user: User = { id: newId("USR"), name: name.trim(), email: email.trim(), roleId, branch, status: "Pending", mfa: false };
+    const r = await submitWithHooks("admin.user.change", { action: "invite", user, reason: reason.trim() }, (ctx) =>
+      submitOperation<UserInvitePayload>("user.invite", {
+        title: `Invite ${ctx.user.name} as ${roleName(ctx.user.roleId)}`,
+        subject: { type: "User", id: ctx.user.id, title: ctx.user.name, href: `/admin?user=${ctx.user.id}` },
+        payload: { user: ctx.user, reason: ctx.reason },
+        summary: [
+          { label: "Name", value: ctx.user.name },
+          { label: "Email", value: ctx.user.email },
+          { label: "Role", value: roleName(ctx.user.roleId) },
+          { label: "Branch", value: ctx.user.branch },
+          { label: "Reason", value: ctx.reason },
+        ],
+      }),
+    );
+    setResult(r);
   };
 
   return (
     <Modal
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(o) => (o ? onOpenChange(true) : close())}
       title="Invite user"
-      description="The user signs in with their Microsoft work account and must enrol in MFA on first sign-in."
+      description="The invitation is approved by a second person in Operations. The user then signs in with their Microsoft work account and enrols in MFA."
       footer={
-        <>
-          <Button variant="tertiary" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={submit}>Send invitation</Button>
-        </>
+        result?.ok ? (
+          <Button onClick={close}>Done</Button>
+        ) : (
+          <>
+            <Button variant="tertiary" onClick={close}>
+              Cancel
+            </Button>
+            <Button onClick={() => void submit()}>Request invitation</Button>
+          </>
+        )
       }
     >
       <Form
         onSubmit={(e) => {
           e.preventDefault();
-          submit();
+          void submit();
         }}
       >
         {error ? <Alert tone="danger">{error}</Alert> : null}
+        <SubmitOutcome result={result} />
         <Field label="Full name" htmlFor="inv-name" required>
           <Input id="inv-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
         </Field>
@@ -330,6 +449,12 @@ function InviteModal({ open, onOpenChange, onInvite, existingEmails }: { open: b
             <Select id="inv-branch" value={branch} options={branches.map((b) => ({ value: b, label: b }))} onChange={(e) => setBranch(e.target.value)} />
           </Field>
         </Grid>
+        <Field label="Reason" htmlFor="inv-reason" required>
+          <Textarea id="inv-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. New hire, Credit Risk — Lagos" />
+        </Field>
+        <Text variant="caption" tone="subtle">
+          System Admins are notified when the invitation is approved.
+        </Text>
       </Form>
     </Modal>
   );

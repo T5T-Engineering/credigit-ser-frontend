@@ -43,6 +43,8 @@ export const waiverStatusTones = {
   "Pending approval": "info",
   Approved: "success",
   Declined: "danger",
+  "Returned to requester": "warning",
+  Withdrawn: "neutral",
   Lapsed: "warning",
   "Routed to Operational Risk": "danger",
   Closed: "neutral",

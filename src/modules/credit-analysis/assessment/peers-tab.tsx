@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { Alert, Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, DataTable, ProgressBar, Stack, type DataTableColumn } from "@credigit/web-ui";
 import type { Obligor } from "@/lib/data/types";
 import { CORPUS_VERSION } from "../data";
-import { bookPercentile, OUTLIER_SD, type Assessment, type RatioBenchmark } from "../logic";
+import { bookPercentile, outlierSd, type Assessment, type RatioBenchmark } from "../logic";
 import { cardinalPoints, type CardinalKey } from "../parameters";
 
 type Props = {
@@ -134,7 +134,7 @@ export function PeersTab({ a, benchmarks, peers }: Props) {
               <CardTitle>Per-ratio benchmarking — {a.ngx.name}</CardTitle>
               <CardDescription>
                 FY2025 sector distribution from the NGX Historical Sector Financials Corpus ({CORPUS_VERSION}, {a.ngx.companies} listed companies). Outliers: top/bottom decile or
-                more than {OUTLIER_SD} SD from the mean (tenant parameter).
+                more than {outlierSd()} SD from the mean (tenant parameter).
               </CardDescription>
             </div>
           </CardHeader>

@@ -26,8 +26,8 @@ import { DEMO_NOW } from "@/lib/data/seed";
 import { KpiCard } from "../components/calc-note";
 import { Panel } from "../components/panel";
 import { reconciliation, type ReconLine } from "../data";
-import { usePortfolioModel } from "../hooks";
-import { bookBy, inPipeline, portfolioParams, productGroup, sum, TENOR_BANDS, tenorBand, CBN_CLASSES } from "../selectors";
+import { useLimitMonitor, usePortfolioModel } from "../hooks";
+import { bookBy, inPipeline, usePortfolioParams, productGroup, sum, TENOR_BANDS, tenorBand, CBN_CLASSES } from "../selectors";
 
 /** Processing-stage label (§6.6.1): approval-stage applications are shown at the tier awaiting decision. */
 function processingStage(a: Application): string {
@@ -54,6 +54,8 @@ const cbnTones = { Performing: "success", Watchlist: "warning", Substandard: "wa
 export function PortfolioDashboardsPage() {
   const m = usePortfolioModel();
   const { totals, history, pipeline, warr, applications, facilities, obligors, sectors } = m;
+  const p = usePortfolioParams();
+  useLimitMonitor(m);
   const [trend, setTrend] = useState<"book" | "npl" | "stage">("book");
   const obligorById = useMemo(() => new Map(obligors.map((o) => [o.id, o])), [obligors]);
   const sectorById = useMemo(() => new Map(sectors.map((s) => [s.id, s])), [sectors]);
@@ -113,8 +115,8 @@ export function PortfolioDashboardsPage() {
             value={pct(totals.nplRatio, 2)}
             delta={`${(last.nplRatio - prev.nplRatio).toFixed(2)} pp`}
             deltaIntent={last.nplRatio <= prev.nplRatio ? "positive" : "negative"}
-            hint={`Appetite ${pct(portfolioParams.nplAppetitePct.value, 0)} (demo)`}
-            tone={totals.nplRatio > portfolioParams.nplAppetitePct.value ? "danger" : "brand"}
+            hint={`Appetite ${pct(p.nplAppetitePct.value, 0)} (demo)`}
+            tone={totals.nplRatio > p.nplAppetitePct.value ? "danger" : "brand"}
             calc={{
               metric: "NPL ratio",
               formula: "NPL / Gross loans × 100",
@@ -162,7 +164,7 @@ export function PortfolioDashboardsPage() {
           <KpiCard
             label="WARR (whole book)"
             value={warr.warr.toFixed(2)}
-            hint={`Ceiling ${portfolioParams.warrCeiling.value.toFixed(1)} (demo) · scale 1 best – 10 worst`}
+            hint={`Ceiling ${p.warrCeiling.value.toFixed(1)} (demo) · scale 1 best – 10 worst`}
             calc={{
               metric: "WARR",
               formula: "Σ (exposure × grade score) / Σ rated exposure",
@@ -214,7 +216,7 @@ export function PortfolioDashboardsPage() {
               showLegend
               series={[
                 { name: "NPL ratio", points: history.map((h) => ({ x: h.month, y: h.nplRatio })), tone: "danger" },
-                { name: "Appetite (demo)", points: history.map((h) => ({ x: h.month, y: portfolioParams.nplAppetitePct.value })), tone: "neutral" },
+                { name: "Appetite (demo)", points: history.map((h) => ({ x: h.month, y: p.nplAppetitePct.value })), tone: "neutral" },
               ]}
               yFormatter={(v) => pct(v, 1)}
               height={240}

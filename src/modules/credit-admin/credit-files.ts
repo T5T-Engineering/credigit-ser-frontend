@@ -9,6 +9,7 @@ import { useMemo } from "react";
 import type { ChecklistStatus } from "@credigit/web-ui";
 import { useCollateral, useDocuments, useObligors } from "@/lib/data/hooks";
 import type { Obligor } from "@/lib/data/types";
+import { useRule } from "@/lib/platform/rules";
 import { daysBetween, rand } from "./common";
 import type { FacilityRow } from "./logic";
 import { useCreditAdminStore } from "./store";
@@ -69,6 +70,8 @@ export function useCreditFiles(rows: FacilityRow[]): CreditFileRow[] {
   const documents = useDocuments();
   const collateral = useCollateral();
   const stored = useCreditAdminStore((s) => s.files);
+  const rarStaleDays = useRule<number>("credit-admin.rarStalenessDays");
+  const callStaleDays = useRule<number>("credit-admin.callReportStalenessDays");
   return useMemo(() => {
     return obligors
       .map((o) => {
@@ -94,11 +97,12 @@ export function useCreditFiles(rows: FacilityRow[]): CreditFileRow[] {
               return { status: "met" };
             }
             case "C3":
-              return daysBetween(o.rarUpdatedAt) <= 180 ? { status: "met" } : { status: "breached", note: "360 RAR older than 6 months" };
+              return daysBetween(o.rarUpdatedAt) <= rarStaleDays ? { status: "met" } : { status: "breached", note: `360 RAR older than ${rarStaleDays} days` };
             case "D3":
               return { status: "met", note: facs.some((f) => f.facility.dpd >= 90) ? "Interest suspended on non-performing facility" : undefined };
             case "D6":
-              return r < 0.1 ? { status: "breached", note: "Last call report older than 6 months" } : r < 0.14 ? { status: "pending" } : { status: "met" };
+              // Demo state: call-report dates aren't on the spine yet (TD-856); the staleness window is a business rule.
+              return r < 0.1 ? { status: "breached", note: `Last call report older than ${callStaleDays} days` } : r < 0.14 ? { status: "pending" } : { status: "met" };
             default:
               return r < 0.012 ? { status: "pending" } : { status: "met" };
           }
@@ -126,5 +130,5 @@ export function useCreditFiles(rows: FacilityRow[]): CreditFileRow[] {
         };
       })
       .filter((r) => r.facilities.length > 0);
-  }, [obligors, documents, collateral, rows, stored]);
+  }, [obligors, documents, collateral, rows, stored, rarStaleDays, callStaleDays]);
 }

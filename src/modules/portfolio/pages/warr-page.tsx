@@ -28,9 +28,9 @@ import { money, moneyShort, pct } from "@/lib/format";
 import type { Obligor } from "@/lib/data/types";
 import { KpiCard } from "../components/calc-note";
 import { Panel } from "../components/panel";
-import { isNewBusiness, migrationMatrix, openingExposure, OPENING_LABEL, PERIOD_LABEL, priorGrade, projectedWarr, warrDecomposition } from "../data";
+import { isNewBusiness, migrationMatrix, openingExposure, openingLabel, periodLabel, priorGrade, projectedWarr, warrDecomposition } from "../data";
 import { usePortfolioModel } from "../hooks";
-import { computeWarr, portfolioParams, productGroup, share, sum, tenorBand } from "../selectors";
+import { computeWarr, usePortfolioParams, productGroup, share, sum, tenorBand } from "../selectors";
 
 type Dimension = "sector" | "branch" | "tenor" | "product" | "size" | "posture" | "officer" | "vintage";
 const dimensions: Array<{ value: Dimension; label: string }> = [
@@ -61,7 +61,7 @@ export function WarrPage() {
   const [view, setView] = useState<"count" | "exposure">("count");
   const [dim, setDim] = useState<Dimension>("sector");
   const [segment, setSegment] = useState<string | null>(null);
-  const p = portfolioParams;
+  const p = usePortfolioParams();
 
   const sectorName = useMemo(() => new Map(sectors.map((s) => [s.id, s.name])), [sectors]);
   const obligorExposure = useMemo(() => new Map(exposures.map((e) => [e.obligor.id, e.exposure])), [exposures]);
@@ -170,7 +170,7 @@ export function WarrPage() {
             delta={`${(dec.closing - dec.opening >= 0 ? "+" : "")}${(dec.closing - dec.opening).toFixed(2)} YTD`}
             deltaIntent={dec.closing <= dec.opening ? "positive" : "negative"}
             deltaDirection={dec.closing > dec.opening ? "up" : dec.closing < dec.opening ? "down" : "flat"}
-            hint={`from ${dec.opening.toFixed(2)} at ${OPENING_LABEL}`}
+            hint={`from ${dec.opening.toFixed(2)} at ${openingLabel()}`}
             calc={{
               metric: "WARR",
               formula: "WARR = Σ (exposure × grade score) / Σ rated exposure",
@@ -192,7 +192,7 @@ export function WarrPage() {
           <KpiCard
             label="New business vs existing book"
             value={`${wNew.warr.toFixed(2)} / ${wOld.warr.toFixed(2)}`}
-            hint={`${PERIOD_LABEL} · new ${moneyShort(wNew.ratedExposure)}`}
+            hint={`${periodLabel()} · new ${moneyShort(wNew.ratedExposure)}`}
             tone={wNew.warr > wOld.warr ? "warning" : "success"}
             calc={{ metric: "new vs existing WARR", formula: "WARR of facilities originated in the reporting period vs WARR of the pre-existing book", source: "Facility start date from the CBA facility ledger.", prd: "§6.6.9" }}
           />
@@ -224,7 +224,7 @@ export function WarrPage() {
           </Panel>
           <Panel
             title="Why WARR moved"
-            description={`Drivers of the move from ${dec.opening.toFixed(2)} (${OPENING_LABEL}) to ${dec.closing.toFixed(2)} today.`}
+            description={`Drivers of the move from ${dec.opening.toFixed(2)} (${openingLabel()}) to ${dec.closing.toFixed(2)} today.`}
             calc={{ metric: "WARR decomposition", formula: "Opening → run-off (exposure change at opening grades) → migration (grade change, existing book) → new disbursements → write-offs/exits → closing", source: "Prior grades retained under §6.2.7 (prototype: opening grades synthesised deterministically).", prd: "§6.6.9" }}
           >
             <WaterfallChart
@@ -246,7 +246,7 @@ export function WarrPage() {
 
         <Panel
           title="Grade-migration matrix"
-          description={`Opening grade (${OPENING_LABEL}, rows) against current grade (columns). ${upgrades.reduce((a, c) => a + c.count, 0)} upgrades, ${downgrades.reduce((a, c) => a + c.count, 0)} downgrades.`}
+          description={`Opening grade (${openingLabel()}, rows) against current grade (columns). ${upgrades.reduce((a, c) => a + c.count, 0)} upgrades, ${downgrades.reduce((a, c) => a + c.count, 0)} downgrades.`}
           actions={
             <SegmentedControl label="Matrix values" size="small" value={view} onChange={setView} options={[{ value: "count", label: "By count" }, { value: "exposure", label: "By exposure" }]} />
           }
@@ -310,7 +310,7 @@ export function WarrPage() {
               columns={[
                 { id: "name", header: "Obligor", accessor: (r) => r.obligor.name, sortable: true, cell: (r) => <Link className="font-semibold text-link" href={`/credit-analysis?obligor=${r.obligor.id}`}>{r.obligor.name}</Link> },
                 { id: "grade", header: "Grade", accessor: "grade", numeric: true, sortable: true },
-                { id: "prior", header: `Grade at ${OPENING_LABEL}`, accessor: (r) => r.prior ?? "New", numeric: true },
+                { id: "prior", header: `Grade at ${openingLabel()}`, accessor: (r) => r.prior ?? "New", numeric: true },
                 { id: "exp", header: "Exposure", accessor: "exposure", numeric: true, sortable: true, cell: (r) => moneyShort(r.exposure) },
                 { id: "weight", header: "Weight", accessor: "weight", numeric: true, sortable: true, cell: (r) => pct(r.weight) },
                 { id: "contrib", header: "Contribution", accessor: "contribution", numeric: true, sortable: true, cell: (r) => pct(r.contribution) },
@@ -346,7 +346,7 @@ export function WarrPage() {
                 { label: "Grade-score table", value: "GST-2026.1 (demo)", mono: true },
                 { label: "Unrated treatment", value: "Separate bucket, excluded from average" },
                 { label: "Defaulted treatment", value: "Shown included and excluded" },
-                { label: "Reporting period", value: PERIOD_LABEL },
+                { label: "Reporting period", value: periodLabel() },
                 { label: "Facilities in scope", value: String(basisRows.length), mono: true },
                 { label: "Exposure in scope", value: moneyShort(sum(basisRows, (r) => r.exposure)), mono: true },
               ]}

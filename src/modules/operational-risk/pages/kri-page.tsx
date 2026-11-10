@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Activity, AlertTriangle, ArrowUpRight, Gauge as GaugeIcon, ShieldAlert, SlidersHorizontal } from "lucide-react";
 import {
   AiInsightCard,
@@ -23,6 +23,7 @@ import {
   Modal,
   RagIndicator,
   SectionHeader,
+  SegmentedControl,
   Sparkline,
   Stack,
   StackedBarChart,
@@ -33,34 +34,53 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan, useRole } from "@/lib/auth/session";
-import { dateTime } from "@/lib/format";
+import { useCan } from "@/lib/auth/session";
 import { DEMO_NOW } from "@/lib/data/seed";
+import { dateTime } from "@/lib/format";
+import { publish } from "@/lib/platform/events";
+import { runHooks } from "@/lib/platform/hooks";
+import { notify } from "@/lib/platform/notifications";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import type { SubmitResult } from "@/lib/platform/operations";
+import { aiKeys, submitAiSignOff } from "../../ai/platform";
 import { MONTHS_48, fmtKri, indicatorCategories, kris } from "../data";
-import { escalationLevels, readKris, type KriReading } from "../logic";
+import { escalationLevels, useKriReadings, type KriReading } from "../logic";
+import { OperationRow, PendingBadge, SubmitOutcome, useOperationsOfType } from "../operation-ui";
+import { OPRISK, requestKriThresholdChange } from "../platform";
 import { useOpRisk } from "../store";
-import { bestLag, pearson, ragLabel, round, useActorName, useAuditLog } from "../shared";
+import { bestLag, pearson, ragLabel, roleNames, round, useAuditLog, useRuleValues } from "../shared";
 
 const ragOrder = { red: 0, amber: 1, green: 2 } as const;
 
 export function KriPage() {
   const canEdit = useCan("operational-risk", "edit");
-  const role = useRole();
-  const canApprove = role?.id === "head-of-risk" || role?.id === "cro";
-  const escalations = useOpRisk((s) => s.escalations);
-  const changes = useOpRisk((s) => s.thresholdChanges);
+  const { actor } = useScope();
+  useRuleValues(); // re-render when any rule (thresholds, escalation roles) changes
   const signedOff = useOpRisk((s) => s.commentarySignedOffBy);
-  const { setEscalation, proposeThreshold, decideThreshold, signOffCommentary } = useOpRisk.getState();
+  const { setEscalation } = useOpRisk.getState();
   const audit = useAuditLog();
-  const actor = useActorName();
+  const trendModel = useRule<string>(aiKeys.trendModel);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [proposeFor, setProposeFor] = useState<KriReading | null>(null);
+  const [scopeView, setScopeView] = useState<"all" | "mine">("all");
+  const [outcome, setOutcome] = useState<SubmitResult | null>(null);
+  const [flash, setFlash] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
 
-  const readings = useMemo(() => readKris(kris, escalations, changes), [escalations, changes]);
+  const levels = escalationLevels();
+  const readings = useKriReadings();
+  const myLevelSet = new Set(levels.filter((l) => l.roles.includes(actor.roleId)).map((l) => l.level as number));
+  /** "My KRIs": breaches currently at a level routed to my role, or that I acknowledged/escalated. */
+  const isMine = (k: KriReading) => (k.level > 0 && myLevelSet.has(k.level)) || k.acknowledged?.acknowledgedById === actor.id || k.acknowledged?.escalatedById === actor.id;
+  const mine = readings.filter(isMine);
+  const shown = scopeView === "mine" ? mine : readings;
   const selected = readings.find((k) => k.id === selectedId) ?? null;
   const counts = { green: readings.filter((k) => k.rag === "green").length, amber: readings.filter((k) => k.rag === "amber").length, red: readings.filter((k) => k.rag === "red").length };
   const reds = readings.filter((k) => k.rag === "red");
-  const pending = changes.filter((c) => c.status === "Pending approval");
+  const changes = useOperationsOfType(["operational-risk.kri.threshold-change"]);
+  const pending = changes.filter((c) => c.status === "Pending" || c.status === "In progress");
+  /** Escalation is open to the module's editors and to every role on the escalation ladder. */
+  const canEscalate = canEdit || myLevelSet.size > 0;
 
   const byCategory = indicatorCategories.map((c) => readings.filter((k) => k.category === c.name));
   const attr = kris.find((k) => k.id === "KRI-HC-01")!.history;
@@ -71,14 +91,30 @@ export function KriPage() {
   const errors = kris.find((k) => k.id === "KRI-TPQ-01")!.history;
   const r2 = pearson(downtime.slice(-24), errors.slice(-24));
 
-  const escalate = (k: KriReading) => {
+  const escalate = async (k: KriReading) => {
     const next = Math.min(4, Math.max(1, k.level) + 1) as 1 | 2 | 3 | 4;
-    setEscalation({ kriId: k.id, level: next, acknowledgedBy: k.acknowledged?.acknowledgedBy, acknowledgedAt: k.acknowledged?.acknowledgedAt });
+    const before = await runHooks("operational-risk.kri.escalate.before", { kri: k, from: k.level, to: next, actor });
+    if (!before.ok) {
+      setFlash({ tone: "danger", text: `Escalation blocked by ${before.vetoedBy}: ${before.reason}` });
+      return;
+    }
+    setEscalation({ ...k.acknowledged, kriId: k.id, level: next, escalatedById: actor.id });
     audit("Escalated KRI breach", "KRI", k.id, `Level ${k.level}`, `Level ${next}`);
+    publish("operational-risk.kri.escalated", { module: OPRISK, subject: { type: "KRI", id: k.id, title: k.name, href: "/operational-risk" }, payload: { from: k.level, to: next, rag: k.rag, value: k.current } });
+    const lvl = levels.find((l) => l.level === next)!;
+    notify({
+      templateId: "operational-risk.kri-red-breach",
+      toRoles: lvl.roles,
+      href: "/operational-risk",
+      data: { kri: k.name, kriId: k.id, rag: ragLabel[k.rag], value: fmtKri(k, k.current), amber: fmtKri(k, k.amber), red: fmtKri(k, k.red), persistence: k.persistence, owner: `${k.owner} — ${k.ownerTitle}`, level: next, levelRoles: roleNames(lvl.roles), by: actor.name },
+    });
+    await runHooks("operational-risk.kri.escalate.after", { kri: k, from: k.level, to: next, actor });
+    setFlash({ tone: "success", text: `${k.name} escalated to Level ${next} — ${roleNames(lvl.roles)} notified.` });
   };
   const acknowledge = (k: KriReading) => {
-    setEscalation({ kriId: k.id, level: Math.max(1, k.level) as 1 | 2 | 3 | 4, acknowledgedBy: actor, acknowledgedAt: DEMO_NOW.toISOString() });
+    setEscalation({ ...k.acknowledged, kriId: k.id, level: Math.max(1, k.level) as 1 | 2 | 3 | 4, acknowledgedBy: actor.name, acknowledgedById: actor.id, acknowledgedAt: DEMO_NOW.toISOString() });
     audit("Acknowledged KRI reading", "KRI", k.id, undefined, `${ragLabel[k.rag]} ${fmtKri(k, k.current)}`);
+    publish("operational-risk.kri.acknowledged", { module: OPRISK, subject: { type: "KRI", id: k.id, title: k.name, href: "/operational-risk" }, payload: { rag: k.rag, value: k.current } });
   };
 
   const columns: DataTableColumn<KriReading>[] = [
@@ -117,7 +153,19 @@ export function KriPage() {
     { id: "thresholds", header: "Amber / Red", numeric: true, accessor: (k) => `${fmtKri(k, k.amber)} / ${fmtKri(k, k.red)}` },
     { id: "trend", header: "12-month trend", exportable: false, cell: (k) => <div className="w-28"><Sparkline values={k.history.slice(-12)} tone={k.rag === "red" ? "danger" : k.rag === "amber" ? "warning" : "success"} height={28} /></div> },
     { id: "owner", header: "Control owner", accessor: "owner", sortable: true, cell: (k) => <div><div className="text-fg">{k.owner}</div><div className="text-xs text-fg-subtle">{k.ownerTitle}</div></div> },
-    { id: "level", header: "Escalation", accessor: (k) => (k.level ? `Level ${k.level}` : "—"), sortValue: (k) => k.level, sortable: true, cell: (k) => (k.level ? <Badge tone={k.level >= 3 ? "danger" : k.level === 2 ? "warning" : "info"}>Level {k.level}</Badge> : <Text variant="small" tone="subtle">—</Text>) },
+    {
+      id: "level",
+      header: "Escalation",
+      accessor: (k) => (k.level ? `Level ${k.level}` : "—"),
+      sortValue: (k) => k.level,
+      sortable: true,
+      cell: (k) => (
+        <div className="flex flex-col items-start gap-1">
+          {k.level ? <Badge tone={k.level >= 3 ? "danger" : k.level === 2 ? "warning" : "info"}>Level {k.level}</Badge> : <Text variant="small" tone="subtle">—</Text>}
+          <PendingBadge subjectType="KRI" subjectId={k.id} />
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -126,17 +174,19 @@ export function KriPage() {
       description="Forward-looking Key Risk Indicator framework alongside the loss-event register — Green/Amber/Red banding against Board-approved tolerance, escalated on the same standard as credit exceptions."
     >
       <Stack gap="large">
+        {flash && <Alert tone={flash.tone}>{flash.text}</Alert>}
+        <SubmitOutcome result={outcome} appliedText="Applied — the workflow for this operation has no approval steps." />
         {reds.length > 0 && (
           <Alert tone="danger" title={`${reds.length} KRIs in Red — outside Board-approved tolerance`}>
-            {reds.map((k) => k.name).join(", ")}. Red readings run through the §6.4.4 escalation protocol (Operational Risk Analyst → Head of Risk → CRO, Board Risk Committee for material breaches).
+            {reds.map((k) => k.name).join(", ")}. Red readings run through the §6.4.4 escalation protocol ({levels.map((l) => roleNames(l.roles)).join(" → ")}).
           </Alert>
         )}
 
         <Grid columns={{ base: 1, sm: 2, lg: 4 }} gap="medium">
-          <StatCard label="KRIs monitored" value={<span className="font-mono">{readings.length}</span>} hint={`${readings.filter((k) => k.boardReported).length} Board-reported · 8 indicator categories`} icon={<Activity aria-hidden />} />
+          <StatCard label="KRIs monitored" value={<span className="font-mono">{readings.length}</span>} hint={`${readings.filter((k) => k.boardReported).length} Board-reported · ${indicatorCategories.length} indicator categories`} icon={<Activity aria-hidden />} />
           <StatCard label="Green · Amber · Red" value={<span className="font-mono">{counts.green} · {counts.amber} · {counts.red}</span>} hint="Current reading vs tenant thresholds" icon={<GaugeIcon aria-hidden />} tone={counts.red ? "danger" : "success"} />
-          <StatCard label="Open escalations" value={<span className="font-mono">{readings.filter((k) => k.level > 0).length}</span>} hint={`${readings.filter((k) => k.level >= 3).length} at CRO level or above`} icon={<ShieldAlert aria-hidden />} tone="warning" />
-          <StatCard label="Threshold changes pending" value={<span className="font-mono">{pending.length}</span>} hint="KRI universe approved by Head of Risk / CRO" icon={<SlidersHorizontal aria-hidden />} />
+          <StatCard label="Open escalations" value={<span className="font-mono">{readings.filter((k) => k.level > 0).length}</span>} hint={`${readings.filter((k) => k.level >= 3).length} at Level 3 or above · ${mine.length} need your attention`} icon={<ShieldAlert aria-hidden />} tone="warning" />
+          <StatCard label="Threshold changes pending" value={<span className="font-mono">{pending.length}</span>} hint="Routed through the Operations workflow" icon={<SlidersHorizontal aria-hidden />} />
         </Grid>
 
         <Grid columns={{ base: 1, lg: 3 }} gap="large">
@@ -168,7 +218,7 @@ export function KriPage() {
             <CardContent>
               <Steps
                 orientation="horizontal"
-                items={escalationLevels.map((l) => ({ title: l.title.replace(/^Level \d — /, `L${l.level} · `), description: `${readings.filter((k) => k.level === l.level).length} KRI(s) · ${l.note}` }))}
+                items={levels.map((l) => ({ title: l.title.replace(/^Level \d — /, `L${l.level} · `), description: `${readings.filter((k) => k.level === l.level).length} KRI(s) · ${l.note}` }))}
               />
             </CardContent>
           </Card>
@@ -176,7 +226,7 @@ export function KriPage() {
           <AiInsightCard
             kind="drafted"
             title="Trend & correlation commentary"
-            model="SER Trend Analyser v2.3 (simulated)"
+            model={trendModel}
             generatedAt="10 Nov 2026, 06:00"
             confidence={0.82}
             paragraphs={[
@@ -190,10 +240,10 @@ export function KriPage() {
             ]}
             signedOffBy={signedOff ? `Adopted by ${signedOff}` : undefined}
             onAccept={
-              canEdit
-                ? () => {
-                    signOffCommentary(actor);
-                    audit("Adopted AI-drafted KRI commentary", "AI output", "AI-KRI-COMMENTARY", "AI-drafted", "Adopted");
+              canEdit && !signedOff
+                ? async () => {
+                    const r = await submitAiSignOff({ activityId: "AIA-KRI-COMMENTARY", item: "KRI trend & correlation commentary", module: "Operational risk", href: "/operational-risk", decision: "Signed off", accountable: "operational-risk-analyst" });
+                    setOutcome(r);
                   }
                 : undefined
             }
@@ -202,11 +252,26 @@ export function KriPage() {
         </Grid>
 
         <Stack gap="medium">
-          <SectionHeader title="KRI register" description="Every designated KRI with owner, formula, source system, frequency and RAG thresholds. Select a row for its trend, mapped control and escalation history." />
+          <SectionHeader
+            title="KRI register"
+            description="Every designated KRI with owner, formula, source system, frequency and RAG thresholds. Select a row for its trend, mapped control and escalation history."
+            action={
+              <SegmentedControl
+                label="KRI scope"
+                size="small"
+                value={scopeView}
+                onChange={setScopeView}
+                options={[
+                  { value: "all", label: `All KRIs (${readings.length})` },
+                  { value: "mine", label: `My KRIs (${mine.length})` },
+                ]}
+              />
+            }
+          />
           <DataTable
             label="Key Risk Indicators"
             columns={columns}
-            data={readings}
+            data={shown}
             getRowId={(k) => k.id}
             searchable
             searchPlaceholder="Search KRIs"
@@ -222,36 +287,17 @@ export function KriPage() {
           />
         </Stack>
 
-        {(pending.length > 0 || changes.length > 0) && (
+        {changes.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle>KRI threshold governance</CardTitle>
-              <CardDescription>Changes to KRI definitions or thresholds need Head of Risk / CRO approval and are captured in the audit trail (§6.9.1, §10.1).</CardDescription>
+              <CardDescription>Threshold changes are business-rule changes routed through the Operations workflow (Head of Risk / CRO approval), versioned and audited (§6.9.1, §10.1).</CardDescription>
             </CardHeader>
             <CardContent>
               <Stack gap="small">
-                {changes.map((c) => {
-                  const k = kris.find((x) => x.id === c.kriId)!;
-                  return (
-                    <div key={c.id} className="flex flex-wrap items-center justify-between gap-3 rounded-3xl bg-surface-sunken p-4">
-                      <div className="min-w-0">
-                        <div className="font-medium text-fg">{k.name}</div>
-                        <Text variant="small" tone="muted">
-                          Amber {fmtKri(k, c.previous.amber)} → {fmtKri(k, c.amber)} · Red {fmtKri(k, c.previous.red)} → {fmtKri(k, c.red)} · proposed by {c.proposedBy}, {dateTime(c.proposedAt)} — “{c.reason}”
-                        </Text>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge tone={c.status === "Approved" ? "success" : c.status === "Rejected" ? "danger" : "warning"}>{c.status}{c.decidedBy ? ` · ${c.decidedBy}` : ""}</Badge>
-                        {c.status === "Pending approval" && canApprove && (
-                          <>
-                            <Button size="small" onClick={() => { decideThreshold(c.id, "Approved", actor); audit("Approved KRI threshold change", "KRI", c.kriId, `${c.previous.amber}/${c.previous.red}`, `${c.amber}/${c.red}`); }}>Approve</Button>
-                            <Button size="small" variant="tertiary" onClick={() => { decideThreshold(c.id, "Rejected", actor); audit("Rejected KRI threshold change", "KRI", c.kriId, `${c.previous.amber}/${c.previous.red}`, `${c.amber}/${c.red}`); }}>Reject</Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                {changes.map((c) => (
+                  <OperationRow key={c.id} op={c} />
+                ))}
               </Stack>
             </CardContent>
           </Card>
@@ -268,7 +314,7 @@ export function KriPage() {
             <div className="flex flex-wrap justify-end gap-2">
               {canEdit && <Button variant="tertiary" iconBefore={<SlidersHorizontal aria-hidden />} onClick={() => setProposeFor(selected)}>Propose threshold change</Button>}
               {canEdit && selected.rag !== "green" && !selected.acknowledged?.acknowledgedBy && <Button variant="secondary" onClick={() => acknowledge(selected)}>Acknowledge</Button>}
-              {(canEdit || canApprove) && selected.rag === "red" && selected.level < 4 && <Button iconBefore={<ArrowUpRight aria-hidden />} onClick={() => escalate(selected)}>Escalate to Level {selected.level + 1}</Button>}
+              {canEscalate && selected.rag === "red" && selected.level < 4 && <Button iconBefore={<ArrowUpRight aria-hidden />} onClick={() => void escalate(selected)}>Escalate to Level {selected.level + 1}</Button>}
             </div>
           )
         }
@@ -278,6 +324,7 @@ export function KriPage() {
             <div className="flex flex-wrap items-center gap-3">
               <RagIndicator status={selected.rag} label={`${ragLabel[selected.rag]} — ${fmtKri(selected, selected.current)}`} />
               {selected.persistence > 0 && <Badge tone="warning" variant="outline">Outside green for {selected.persistence} month{selected.persistence > 1 ? "s" : ""}</Badge>}
+              <PendingBadge subjectType="KRI" subjectId={selected.id} />
             </div>
             <LineChart
               label={`${selected.name} — 24 months`}
@@ -299,7 +346,7 @@ export function KriPage() {
                 { label: "Business line", value: selected.businessLine },
                 { label: "Control owner", value: `${selected.owner} — ${selected.ownerTitle}` },
                 { label: "Mapped RCSA control", value: selected.controlId, mono: true },
-                { label: "Thresholds", value: `Amber ≥ ${fmtKri(selected, selected.amber)} · Red ≥ ${fmtKri(selected, selected.red)}`, hint: "Tenant-configurable in Rules & Parameters (demo defaults)" },
+                { label: "Thresholds", value: `Amber ≥ ${fmtKri(selected, selected.amber)} · Red ≥ ${fmtKri(selected, selected.red)}`, hint: "Business rules — changes route through Operations" },
                 { label: "Acknowledged", value: selected.acknowledged?.acknowledgedBy ? `${selected.acknowledged.acknowledgedBy}, ${dateTime(selected.acknowledged.acknowledgedAt!)}` : undefined },
               ]}
             />
@@ -308,7 +355,7 @@ export function KriPage() {
                 <Text variant="eyebrow" tone="muted">Escalation</Text>
                 <Steps
                   className="mt-3"
-                  items={escalationLevels
+                  items={levels
                     .filter((l) => selected.rag === "red" || l.level === 1)
                     .map((l) => ({ title: l.title, description: l.note, status: l.level < selected.level ? "complete" : l.level === selected.level ? "current" : "upcoming" }))}
                 />
@@ -323,10 +370,11 @@ export function KriPage() {
       <ThresholdModal
         kri={proposeFor}
         onClose={() => setProposeFor(null)}
-        onSubmit={(amber, red, reason) => {
+        onSubmit={async (amber, red, reason) => {
           const k = proposeFor!;
-          proposeThreshold({ id: `THR-${Date.now().toString(36).toUpperCase()}`, kriId: k.id, amber, red, previous: { amber: k.amber, red: k.red }, reason, proposedBy: actor, proposedAt: DEMO_NOW.toISOString(), status: "Pending approval" });
-          audit("Proposed KRI threshold change", "KRI", k.id, `${k.amber}/${k.red}`, `${amber}/${red}`);
+          const r = await requestKriThresholdChange({ kriId: k.id, amber, red, before: { amber: k.amber, red: k.red }, reason }, k.name);
+          if (r.ok) audit("Requested KRI threshold change", "KRI", k.id, `${k.amber}/${k.red}`, `${amber}/${red} · ${r.instance.id}`);
+          setOutcome(r);
           setProposeFor(null);
         }}
       />
@@ -341,8 +389,9 @@ function ThresholdModal({ kri, onClose, onSubmit }: { kri: KriReading | null; on
   const [touched, setTouched] = useState(false);
   const a = Number(amber || kri?.amber);
   const r = Number(red || kri?.red);
-  const error = !Number.isFinite(a) || !Number.isFinite(r) ? "Enter numbers" : kri?.higherIsWorse && a >= r ? "Amber must be below Red" : undefined;
-  const reasonError = reason.trim().length < 10 ? "Give a reason (at least 10 characters)" : undefined;
+  const minComment = useRule<number>("operations.minCommentLength");
+  const error = !Number.isFinite(a) || !Number.isFinite(r) || a < 0 || r < 0 ? "Enter non-negative numbers" : kri?.higherIsWorse ? (a >= r ? "Amber must be below Red" : undefined) : a <= r ? "Amber must be above Red" : undefined;
+  const reasonError = reason.trim().length < minComment ? `Give a reason (at least ${minComment} characters)` : undefined;
   return (
     <Modal
       open={!!kri}
@@ -356,7 +405,7 @@ function ThresholdModal({ kri, onClose, onSubmit }: { kri: KriReading | null; on
         }
       }}
       title="Propose threshold change"
-      description={kri ? `${kri.name} — the change takes effect once the Head of Risk or CRO approves it.` : undefined}
+      description={kri ? `${kri.name} — routed through the Operations workflow; the change takes effect once approved.` : undefined}
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="tertiary" onClick={onClose}>Cancel</Button>

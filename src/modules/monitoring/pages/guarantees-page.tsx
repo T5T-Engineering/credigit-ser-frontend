@@ -29,16 +29,20 @@ import { DEMO_NOW } from "@/lib/data/seed";
 import { date, money, moneyShort, number } from "@/lib/format";
 import { buildCollateralAlerts } from "@/modules/collateral/logic";
 import { useCollateralView } from "@/modules/collateral/store";
-import { useActor, useAuditLog } from "../audit";
-import { buildApgs, buildTods, TOD_WINDOW_DAYS, type Apg, type Tod } from "../data";
+import { usePendingFor } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { buildApgs, buildTods, type Apg, type Tod } from "../data";
+import { useRuleValues } from "../hooks";
 import { daysBetween } from "../logic";
+import { PendingApproval } from "../pending-approval";
+import { requestApgRelease, setApgStatus, setTodStatus } from "../service";
 import { RaiseExceptionModal, type RaiseExceptionTarget } from "../raise-exception";
 import { openExceptionFor, useMonitoring } from "../store";
 
 const apgTones: Record<string, Tone> = {
   "Awaiting advance": "info",
   Crystallised: "success",
-  "Expiring ≤ 30 days": "warning",
+  "Expiring soon": "warning",
   Expired: "neutral",
   Called: "danger",
   Released: "neutral",
@@ -46,7 +50,7 @@ const apgTones: Record<string, Tone> = {
 const todTones: Record<string, Tone> = {
   "Within regularisation window": "info",
   "Regularisation overdue": "warning",
-  "Classified non-performing (90+ days)": "danger",
+  "Classified non-performing": "danger",
   Regularised: "success",
   "Converted to facility": "success",
 };
@@ -64,19 +68,27 @@ export function GuaranteesPage() {
   const collateralView = useCollateralView();
   const [raiseTarget, setRaiseTarget] = useState<RaiseExceptionTarget | null>(null);
   const [action, setAction] = useState<ActionTarget | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const ruleValues = useRuleValues();
+  const apgWarnDays = useRule<number>("monitoring.apg.expiryWarningDays");
+  const todWindow = useRule<number>("monitoring.tod.regularisationDays");
+  const todNpl = useRule<number>("monitoring.tod.nonPerformingDays");
 
   const apgs = useMemo(
     () => buildApgs(facilities).map((a) => ({ ...a, name: obligor.get(a.obligorId)?.name ?? a.obligorId, ...(apgActions[a.id] ? { status: apgActions[a.id]!.status as Apg["status"] } : {}) })),
-    [facilities, obligor, apgActions],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [facilities, obligor, apgActions, ruleValues],
   );
   const tods = useMemo(
     () => buildTods(facilities, obligors).map((t) => ({ ...t, name: obligor.get(t.obligorId)?.name ?? t.obligorId, ...(todActions[t.id] ? { status: todActions[t.id]!.status as Tod["status"] } : {}) })),
-    [facilities, obligors, obligor, todActions],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [facilities, obligors, obligor, todActions, ruleValues],
   );
   const alerts = useMemo(() => {
     const mtm = new Map(collateralView.map((c) => [c.id, c.mtm]));
     return buildCollateralAlerts(collateralView, facilities, (c) => mtm.get(c.id)).map((a) => ({ ...a, name: obligor.get(a.obligorId)?.name ?? "", type: collateralView.find((c) => c.id === a.collateralId)?.type ?? "" }));
-  }, [collateralView, facilities, obligor]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collateralView, facilities, obligor, ruleValues]);
 
   type ApgRow = (typeof apgs)[number];
   type TodRow = (typeof tods)[number];
@@ -90,7 +102,7 @@ export function GuaranteesPage() {
     { id: "issued", header: "Issued", accessor: "issuedAt", sortable: true, cell: (a) => date(a.issuedAt) },
     { id: "advance", header: "Advance received", accessor: (a) => a.advanceReceivedAt ?? "", cell: (a) => (a.advanceReceivedAt ? date(a.advanceReceivedAt) : <Text variant="small" tone="subtle">Awaiting</Text>) },
     { id: "expiry", header: "Expiry", accessor: "expiryAt", sortable: true, cell: (a) => <Stack gap="none"><span>{date(a.expiryAt)}</span><Text variant="caption" tone="subtle">{daysBetween(DEMO_NOW, a.expiryAt) >= 0 ? `${daysBetween(DEMO_NOW, a.expiryAt)} days left` : "Expired"}</Text></Stack> },
-    { id: "status", header: "Status", accessor: "status", sortable: true, cell: (a) => <StatusBadge status={a.status} tones={apgTones} /> },
+    { id: "status", header: "Status", accessor: "status", sortable: true, cell: (a) => <Stack gap="none"><StatusBadge status={a.status} tones={apgTones} /><PendingApproval subjectType="APG" subjectId={a.id} compact /></Stack> },
     {
       id: "actions",
       header: <span className="sr-only">Actions</span>,
@@ -104,7 +116,7 @@ export function GuaranteesPage() {
             items={[
               { label: "Confirm advance received (crystallise)", disabled: a.status !== "Awaiting advance", onSelect: () => setAction({ kind: "apg", row: a, status: "Crystallised", label: "Confirm advance payment received" }) },
               { label: "Record call / claim", onSelect: () => setAction({ kind: "apg", row: a, status: "Called", label: "Record call on guarantee" }) },
-              { label: "Release on expiry", disabled: a.status === "Released", onSelect: () => setAction({ kind: "apg", row: a, status: "Released", label: "Release guarantee" }) },
+              { label: "Request release (approval)", disabled: a.status === "Released", onSelect: () => setAction({ kind: "apg", row: a, status: "Released", label: "Request guarantee release" }) },
               {
                 label: "Raise exception",
                 onSelect: () => setRaiseTarget({ obligorId: a.obligorId, obligorName: a.name, facilityId: a.facilityId, amount: a.amount, type: "APG expiry", title: `APG ${a.id} — ${a.status}`, detail: `${a.name}: APG ${a.id} in favour of ${a.beneficiary} (${money(a.amount)}) expires ${date(a.expiryAt)}.` }),
@@ -186,9 +198,21 @@ export function GuaranteesPage() {
   return (
     <ModulePage module="monitoring" description="Advance payment guarantees, temporary overdrafts and collateral monitoring (PRD §6.4.2).">
       <Stack gap="large">
+        {notice && (
+          <Alert
+            tone="success"
+            action={
+              <Button size="small" variant="text" onClick={() => setNotice(null)}>
+                Dismiss
+              </Button>
+            }
+          >
+            {notice}
+          </Alert>
+        )}
         <Grid columns={{ base: 2, lg: 4 }} gap="medium">
           <StatCard label="Live APG exposure" value={moneyShort(apgExposure)} hint={`${apgs.length} guarantees tracked`} />
-          <StatCard label="APGs expiring ≤ 30 days" value={number(apgs.filter((a) => a.status === "Expiring ≤ 30 days").length)} tone="warning" />
+          <StatCard label={`APGs expiring ≤ ${apgWarnDays} days`} value={number(apgs.filter((a) => a.status === "Expiring soon").length)} tone="warning" />
           <StatCard label="TODs past regularisation" value={number(todOverdue.length)} hint={`${tods.filter((t) => t.status.startsWith("Classified")).length} classified non-performing`} tone="danger" />
           <StatCard label="Collateral alerts" value={number(alerts.length)} hint={`${alerts.filter((a) => a.tone === "danger").length} critical`} tone="info" />
         </Grid>
@@ -215,8 +239,8 @@ export function GuaranteesPage() {
               content: (
                 <Stack gap="medium">
                   <Alert tone="warning" title="CBN 12.10">
-                    Excess-over-limit, matured-loan-without-renewal and undocumented facilities not regularised within 90 days are classified and provisioned as non-performing. Regularisation window for
-                    TODs: {TOD_WINDOW_DAYS} days (tenant parameter — demo value).
+                    Excess-over-limit, matured-loan-without-renewal and undocumented facilities not regularised within {todNpl} days are classified and provisioned as non-performing. Regularisation window for
+                    TODs: {todWindow} days (business rule — tenant parameter).
                   </Alert>
                   <DataTable label="Temporary overdrafts" data={tods} columns={todCols} getRowId={(t) => t.id} searchable density="compact" defaultSort={{ id: "age", direction: "desc" }} filters={[{ id: "type", label: "Type", columnId: "type" }, { id: "status", label: "Status", columnId: "status" }]} exportFilename="tod-register.csv" />
                 </Stack>
@@ -240,7 +264,7 @@ export function GuaranteesPage() {
         />
       </Stack>
       <RaiseExceptionModal target={raiseTarget} onClose={() => setRaiseTarget(null)} />
-      {action && <StatusActionModal target={action} onClose={() => setAction(null)} />}
+      {action && <StatusActionModal target={action} onClose={() => setAction(null)} onDone={setNotice} />}
     </ModulePage>
   );
 
@@ -257,16 +281,18 @@ export function GuaranteesPage() {
   }
 }
 
-function StatusActionModal({ target, onClose }: { target: ActionTarget; onClose: () => void }) {
-  const setApg = useMonitoring((s) => s.setApg);
-  const setTod = useMonitoring((s) => s.setTod);
-  const audit = useAuditLog();
-  const actor = useActor();
+function StatusActionModal({ target, onClose, onDone }: { target: ActionTarget; onClose: () => void; onDone: (text: string) => void }) {
   const [note, setNote] = useState("");
-  const save = () => {
-    if (target.kind === "apg") setApg(target.row.id, { status: target.status, by: actor.name, note });
-    else setTod(target.row.id, { status: target.status, by: actor.name, note });
-    audit({ action: target.label, entityType: target.kind === "apg" ? "APG" : "Temporary overdraft", entityId: target.row.id, before: target.row.status, after: target.status });
+  const [error, setError] = useState<string | null>(null);
+  const minNote = useRule<number>(target.status === "Released" ? "monitoring.exceptions.minReasonLength" : "monitoring.exceptions.minEvidenceLength");
+  const pending = usePendingFor(target.kind === "apg" ? "APG" : "Temporary overdraft", target.row.id);
+  const save = async () => {
+    if (target.kind === "apg" && target.status === "Released") {
+      const r = await requestApgRelease(target.row, note);
+      if (!r.ok) return setError(r.reason);
+      onDone(`Release of ${target.row.id} sent for approval (${r.operationId}).`);
+    } else if (target.kind === "apg") setApgStatus(target.row, target.status as "Crystallised" | "Called", note);
+    else setTodStatus(target.row, target.status as "Regularised" | "Converted to facility", note);
     onClose();
   };
   return (
@@ -281,12 +307,14 @@ function StatusActionModal({ target, onClose }: { target: ActionTarget; onClose:
           <Button variant="tertiary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={note.trim().length < 3}>
-            Confirm
+          <Button onClick={save} disabled={note.trim().length < minNote || !!pending}>
+            {target.status === "Released" ? "Submit for approval" : "Confirm"}
           </Button>
         </>
       }
     >
+      {error && <Alert tone="danger">{error}</Alert>}
+      {pending && <PendingApproval subjectType="APG" subjectId={target.row.id} />}
       <Field label="Evidence / note" htmlFor="status-note" description="e.g. CBA credit reference, beneficiary letter, approval reference." required>
         <Textarea id="status-note" rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
       </Field>

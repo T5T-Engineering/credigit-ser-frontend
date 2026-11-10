@@ -42,14 +42,17 @@ import { useCan } from "@/lib/auth/session";
 import { useFacilities, useLookups, useUsers } from "@/lib/data/hooks";
 import type { Facility } from "@/lib/data/types";
 import { date, dateTime, money, moneyShort, number, pct } from "@/lib/format";
-import { useActor, useAuditLog } from "../audit";
-import { cbnClassFromDpd, cbnClassTones, dpdBucket, dpdBuckets, exposureOf, pastDueSince, stageTones } from "../logic";
+import { DEMO_NOW } from "@/lib/data/seed";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import { roleById, type RoleId } from "@/lib/rbac/roles";
+import { useDpdLadder } from "../hooks";
+import { cbnClassFromDpd, cbnClassTones, dpdBucket, dpdBucketDef, exposureOf, pastDueSince, provisionLabel, stageTones } from "../logic";
+import { addFacilityNote, assignFacility, exceptionHref } from "../service";
 import { RaiseExceptionModal, type RaiseExceptionTarget } from "../raise-exception";
 import { openExceptionFor, useMonitoring } from "../store";
 
-type Row = Facility & { obligorName: string; sectorName: string; obligorType: string; exposure: number; bucket: string; assignee?: string; exceptionId?: string; noteCount: number };
-/** CBN specific provisioning for comparison (PRD §6.7.1). Watchlist: not yet specifically provisioned. */
-const provisionRate: Record<string, string> = { Performing: "0%", Watchlist: "Enhanced monitoring", Substandard: "10%", Doubtful: "50%", Lost: "100%" };
+type Row = Facility & { obligorName: string; sectorName: string; obligorType: string; exposure: number; bucket: string; assignee?: string; assigneeId?: string; exceptionId?: string; noteCount: number };
 
 type Dimension = "sector" | "product" | "obligorType" | "branch";
 
@@ -66,6 +69,10 @@ export function PastDuePage() {
   const [assignFor, setAssignFor] = useState<Row | null>(null);
   const [noteFor, setNoteFor] = useState<Row | null>(null);
   const [detail, setDetail] = useState<Row | null>(null);
+  const [scope, setScope] = useState<"all" | "mine">("all");
+  const { actor } = useScope();
+  const { buckets, t } = useDpdLadder();
+  const assignableRoles = useRule<RoleId[]>("monitoring.assignment.roles");
 
   const active = useMemo(() => facilities.filter((f) => f.status === "Active" || f.status === "Restructured"), [facilities]);
   const rows: Row[] = useMemo(
@@ -80,22 +87,26 @@ export function PastDuePage() {
           exposure: exposureOf(f),
           bucket: dpdBucket(f.dpd),
           assignee: assignments[f.id] ? user.get(assignments[f.id]!)?.name : undefined,
+          assigneeId: assignments[f.id],
           exceptionId: openExceptionFor(exceptions, { facilityId: f.id })?.id,
           noteCount: notes[f.id]?.length ?? 0,
         };
       }),
-    [active, obligor, sector, user, assignments, exceptions, notes],
+    // `t` (rule thresholds) changes the bucket labels.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [active, obligor, sector, user, assignments, exceptions, notes, t],
   );
 
   const pastDue = useMemo(() => rows.filter((r) => r.dpd > 0), [rows]);
   const book = rows.reduce((a, r) => a + r.exposure, 0);
   const pdValue = pastDue.reduce((a, r) => a + r.exposure, 0);
-  const npl = rows.filter((r) => r.dpd >= 90);
+  const npl = rows.filter((r) => r.dpd >= t.substandard);
   const nplValue = npl.reduce((a, r) => a + r.exposure, 0);
-  const watch = rows.filter((r) => r.dpd >= 30 && r.dpd < 90);
+  const watch = rows.filter((r) => r.dpd >= t.watchlist && r.dpd < t.substandard);
+  const tableRows = scope === "mine" ? rows.filter((r) => r.assigneeId === actor.id) : rows;
   const openPd = exceptions.filter((e) => e.type === "Past-due obligation" && e.status !== "Resolved").length;
 
-  const ladder = dpdBuckets.filter((b) => b.id !== "Current");
+  const ladder = buckets.filter((b) => b.id !== "Current");
   const ladderSeries = ladder.map((b) => ({
     name: `${b.cbnClass === "Performing" ? "Performing (arrears)" : b.cbnClass}`,
     tone: b.tone,
@@ -149,7 +160,7 @@ export function PastDuePage() {
       numeric: true,
       sortable: true,
       cell: (r) => (
-        <Tooltip content={`Past due since ${date(pastDueSince(r.dpd))} (ageing from ${date(new Date("2026-11-10"))})`}>
+        <Tooltip content={`Past due since ${date(pastDueSince(r.dpd))} (ageing from ${date(DEMO_NOW)})`}>
           <span className="font-mono">{r.dpd}</span>
         </Tooltip>
       ),
@@ -179,7 +190,7 @@ export function PastDuePage() {
       accessor: (r) => r.exceptionId ?? "",
       cell: (r) =>
         r.exceptionId ? (
-          <TextLink as={Link} href="/monitoring/exceptions">
+          <TextLink as={Link} href={exceptionHref(r.exceptionId)}>
             {r.exceptionId}
           </TextLink>
         ) : (
@@ -219,8 +230,8 @@ export function PastDuePage() {
       <Stack gap="large">
         <Grid columns={{ base: 2, lg: 4 }} gap="medium">
           <StatCard label="Past-due facilities" value={number(pastDue.length)} hint={`${moneyShort(pdValue)} · ${pct((pdValue / book) * 100)} of the active book`} tone="warning" />
-          <StatCard label="Non-performing (90+ DPD)" value={moneyShort(nplValue)} hint={`${npl.length} facilities · NPL ratio ${pct((nplValue / book) * 100)}`} tone="danger" />
-          <StatCard label="Watchlist (30–89 DPD)" value={moneyShort(watch.reduce((a, r) => a + r.exposure, 0))} hint={`${watch.length} facilities · IFRS 9 Stage 2`} tone="info" />
+          <StatCard label={`Non-performing (${t.substandard}+ DPD)`} value={moneyShort(nplValue)} hint={`${npl.length} facilities · NPL ratio ${pct((nplValue / book) * 100)}`} tone="danger" />
+          <StatCard label={`Watchlist (${t.watchlist}–${t.substandard - 1} DPD)`} value={moneyShort(watch.reduce((a, r) => a + r.exposure, 0))} hint={`${watch.length} facilities · IFRS 9 Stage 2`} tone="info" />
           <StatCard label="Open past-due exceptions" value={number(openPd)} hint="In the escalation protocol" />
         </Grid>
 
@@ -229,7 +240,7 @@ export function PastDuePage() {
             <CardHeader>
               <div>
                 <CardTitle>CBN days-past-due ladder</CardTitle>
-                <CardDescription>Outstanding exposure by ageing bucket. Performing → Non-Performing at 90+ days (PRD §6.4.1, §6.7.1).</CardDescription>
+                <CardDescription>Outstanding exposure by ageing bucket. Performing → Non-Performing at {t.substandard}+ days (PRD §6.4.1, §6.7.1 — business rules).</CardDescription>
               </div>
             </CardHeader>
             <StackedBarChart categories={ladder.map((b) => b.id)} series={ladderSeries} orientation="horizontal" valueFormatter={(v) => moneyShort(v)} label="Past-due exposure by DPD bucket" />
@@ -250,13 +261,13 @@ export function PastDuePage() {
                       <StatusBadge status={b.cbnClass} tones={cbnClassTones} />
                     </TableCell>
                     <TableCell numeric>{pastDue.filter((r) => r.bucket === b.id).length}</TableCell>
-                    <TableCell numeric>{provisionRate[b.cbnClass] ?? "—"}</TableCell>
+                    <TableCell numeric>{provisionLabel(b.cbnClass)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
             <Text variant="caption" tone="subtle" className="mt-3 block">
-              Ladder: 1–29 Performing · 30–89 Watchlist (Stage 2) · 90–179 Sub-Standard · 180–359 Doubtful · 360+ Lost (Stage 3). Source: CBA facility book, {dateTime(new Date("2026-11-10T06:00:00+01:00"))} daily refresh.
+              Ladder: {ladder.map((b) => `${b.id} ${b.cbnClass}`).join(" · ")}. Source: CBA facility book, {date(DEMO_NOW)} daily refresh.
             </Text>
           </Card>
           <Card>
@@ -284,9 +295,19 @@ export function PastDuePage() {
           </Card>
         </Grid>
 
+        <SegmentedControl
+          label="Show"
+          size="small"
+          value={scope}
+          onChange={setScope}
+          options={[
+            { value: "all", label: "All facilities" },
+            { value: "mine", label: `Assigned to me (${rows.filter((r) => r.assigneeId === actor.id && r.dpd > 0).length} past due)` },
+          ]}
+        />
         <DataTable
           label="Past-due obligations"
-          data={rows}
+          data={tableRows}
           columns={columns}
           getRowId={(r) => r.id}
           searchable
@@ -298,13 +319,13 @@ export function PastDuePage() {
               label: "Scope",
               options: [
                 { value: "past-due", label: "Past due (DPD > 0)" },
-                { value: "npl", label: "Non-performing (90+)" },
+                { value: "npl", label: `Non-performing (${t.substandard}+)` },
                 { value: "all", label: "All active facilities" },
               ],
               defaultValue: "past-due",
-              filterFn: (r, v) => (v === "npl" ? r.dpd >= 90 : v === "all" ? true : r.dpd > 0),
+              filterFn: (r, v) => (v === "npl" ? r.dpd >= t.substandard : v === "all" ? true : r.dpd > 0),
             },
-            { id: "bucket", label: "Bucket", options: dpdBuckets.map((b) => ({ value: b.id, label: b.id })), filterFn: (r, v) => r.bucket === v },
+            { id: "bucket", label: "Bucket", options: buckets.map((b) => ({ value: b.id, label: b.id })), filterFn: (r, v) => r.bucket === v },
             { id: "cbn", label: "CBN class", columnId: "cbn" },
             { id: "product", label: "Product", columnId: "product" },
             { id: "branch", label: "Branch", filterFn: (r, v) => r.branch === v, options: [...new Set(rows.map((r) => r.branch))].sort().map((b) => ({ value: b, label: b })) },
@@ -330,7 +351,7 @@ export function PastDuePage() {
       </Stack>
 
       <RaiseExceptionModal target={raiseTarget} onClose={() => setRaiseTarget(null)} />
-      {assignFor && <AssignModal row={assignFor} users={users.filter((u) => u.roleId === "loan-review-officer" || u.roleId === "account-officer")} onClose={() => setAssignFor(null)} />}
+      {assignFor && <AssignModal row={assignFor} users={users.filter((u) => u.status === "Active" && assignableRoles.includes(u.roleId))} onClose={() => setAssignFor(null)} />}
       {noteFor && <NoteModal row={noteFor} onClose={() => setNoteFor(null)} />}
       <FacilityDrawer row={detail} onClose={() => setDetail(null)} canEdit={canEdit} onRaise={(r) => (setDetail(null), raiseFor(r))} />
     </ModulePage>
@@ -338,14 +359,10 @@ export function PastDuePage() {
 }
 
 function AssignModal({ row, users, onClose }: { row: Row; users: { id: string; name: string; roleId: string }[]; onClose: () => void }) {
-  const assign = useMonitoring((s) => s.assign);
   const current = useMonitoring((s) => s.assignments[row.id]);
-  const audit = useAuditLog();
   const [value, setValue] = useState(current ?? users[0]?.id ?? "");
-  const { user } = useLookups();
   const save = () => {
-    assign(row.id, value);
-    audit({ action: "Assigned monitoring officer", entityType: "Facility", entityId: row.id, before: current ? user.get(current)?.name : "Unassigned", after: user.get(value)?.name });
+    assignFacility(row.id, value);
     onClose();
   };
   return (
@@ -365,20 +382,17 @@ function AssignModal({ row, users, onClose }: { row: Row; users: { id: string; n
       }
     >
       <Field label="Officer" htmlFor="assignee">
-        <Select id="assignee" value={value} onChange={(e) => setValue(e.target.value)} options={users.map((u) => ({ value: u.id, label: `${u.name} — ${u.roleId === "loan-review-officer" ? "Loan Review Officer" : "Account Officer"}` }))} />
+        <Select id="assignee" value={value} onChange={(e) => setValue(e.target.value)} options={users.map((u) => ({ value: u.id, label: `${u.name} — ${roleById[u.roleId as RoleId]?.name ?? u.roleId}` }))} />
       </Field>
     </Modal>
   );
 }
 
 function NoteModal({ row, onClose }: { row: Row; onClose: () => void }) {
-  const addNote = useMonitoring((s) => s.addNote);
-  const audit = useAuditLog();
-  const actor = useActor();
   const [body, setBody] = useState("");
+  const minLength = useRule<number>("monitoring.exceptions.minDetailLength");
   const save = () => {
-    addNote(row.id, { by: actor.name, body: body.trim() });
-    audit({ action: "Added monitoring note", entityType: "Facility", entityId: row.id, after: body.trim().slice(0, 120) });
+    addFacilityNote(row.id, body.trim());
     onClose();
   };
   return (
@@ -392,7 +406,7 @@ function NoteModal({ row, onClose }: { row: Row; onClose: () => void }) {
           <Button variant="tertiary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={body.trim().length < 3}>
+          <Button onClick={save} disabled={body.trim().length < minLength}>
             Save note
           </Button>
         </>
@@ -408,7 +422,7 @@ function NoteModal({ row, onClose }: { row: Row; onClose: () => void }) {
 function FacilityDrawer({ row, onClose, canEdit, onRaise }: { row: Row | null; onClose: () => void; canEdit: boolean; onRaise: (r: Row) => void }) {
   const notes = useMonitoring((s) => (row ? s.notes[row.id] : undefined));
   if (!row) return null;
-  const bucket = dpdBuckets.find((b) => b.id === row.bucket)!;
+  const bucket = dpdBucketDef(row.dpd);
   return (
     <Drawer
       open
@@ -436,7 +450,14 @@ function FacilityDrawer({ row, onClose, canEdit, onRaise }: { row: Row | null; o
             { label: "IFRS 9 stage", status: `Stage ${row.stage}`, statusTones: stageTones },
             { label: "Maturity", value: date(row.maturityDate) },
             { label: "Assigned officer", value: row.assignee },
-            { label: "Open exception", value: row.exceptionId },
+            {
+              label: "Open exception",
+              value: row.exceptionId ? (
+                <TextLink as={Link} href={exceptionHref(row.exceptionId)}>
+                  {row.exceptionId}
+                </TextLink>
+              ) : undefined,
+            },
             { label: "Branch", value: row.branch },
           ]}
         />

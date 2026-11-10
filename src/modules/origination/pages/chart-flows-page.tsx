@@ -33,22 +33,25 @@ import { ModulePage } from "@/components/module-page";
 import { useUsers } from "@/lib/data/hooks";
 import type { Application } from "@/lib/data/types";
 import { roleById, roles, type RoleId } from "@/lib/rbac/roles";
-import { chartFlow } from "@/lib/workflow";
+import { FAST_TRACK_PAIR, getChartFlow, getFastTrackTier, signOnLimit, type Tier } from "@/lib/workflow";
 import { money, moneyShort } from "@/lib/format";
-import { buildChainFor, fastTrackAdjudicators, finalAuthority } from "../logic";
-import { fastTrackVariants, originationParams as P, PARAMS_HREF, TENANT_PARAM_NOTE } from "../params";
+import { buildChainFor, finalAuthority } from "../logic";
+import { fastTrackVariants, PARAMS_HREF, slaDays, TENANT_PARAM_NOTE } from "../params";
 import { toApprovalTiers } from "../view-models";
-import { useStepUpThreshold } from "../use-params";
+import { useRulesVersion, useStepUpThreshold } from "../use-params";
 
-type Row = { tier: string; roles: RoleId[]; adjudicator?: RoleId; limit: number };
+type Row = { tier: string; roles: RoleId[]; adjudicator?: RoleId; limit: number; slaHours: number };
 
 const limitText = (n: number) => (n === Number.POSITIVE_INFINITY ? "Apex — no limit" : `Up to ${moneyShort(n)}`);
 
-const standardRows: Row[] = chartFlow.map((t, i) => ({ tier: `Tier ${i + 1}`, roles: t.roles, adjudicator: t.adjudicator, limit: t.limit }));
-const fastTrackRows: Row[] = [
-  { tier: "FT 1", roles: ["bdm", "credit-analyst"], adjudicator: fastTrackAdjudicators.FT1, limit: roleById.bdm.limitNgn! },
-  ...chartFlow.slice(1).map((t, i) => ({ tier: `FT ${i + 2}`, roles: t.roles, adjudicator: t.adjudicator, limit: t.limit })),
-];
+const toRow = (label: string) => (t: Tier): Row => ({ tier: label, roles: t.roles, adjudicator: t.adjudicator, limit: t.limit, slaHours: t.slaHours });
+/** Matrices from the chart-flow business rules (read at call time). */
+function standardRows(): Row[] {
+  return getChartFlow().map((t, i) => toRow(`Tier ${i + 1}`)(t));
+}
+function fastTrackRows(): Row[] {
+  return [toRow(FAST_TRACK_PAIR)(getFastTrackTier()), ...getChartFlow().slice(1).map((t, i) => toRow(`FT ${i + 2}`)(t))];
+}
 
 /** PRD §6.1.1 — Standard Credit chart-flow steps (default configuration). */
 const standardSteps: { role: string; action: string }[] = [
@@ -82,6 +85,7 @@ function MatrixTable({ rows, label }: { rows: Row[]; label: string }) {
             <TableHeaderCell>Co-signer 2</TableHeaderCell>
             <TableHeaderCell>Adjudicator (on dissent)</TableHeaderCell>
             <TableHeaderCell numeric>Limit</TableHeaderCell>
+            <TableHeaderCell numeric>SLA</TableHeaderCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -91,9 +95,10 @@ function MatrixTable({ rows, label }: { rows: Row[]; label: string }) {
                 <span className="font-mono">{r.tier}</span>
               </TableCell>
               <TableCell>{roleById[r.roles[0]!].name}</TableCell>
-              <TableCell>{r.roles[1] ? roleById[r.roles[1]].name : <Text as="span" variant="small" tone="muted">{r.roles[0] === "bdm" ? "— recommends alone" : "— sole approver"}</Text>}</TableCell>
+              <TableCell>{r.roles[1] ? r.roles.slice(1).map((x) => roleById[x].name).join(", ") : <Text as="span" variant="small" tone="muted">{r.roles[0] === "bdm" ? "— recommends alone" : "— sole approver"}</Text>}</TableCell>
               <TableCell>{r.adjudicator ? roleById[r.adjudicator].name : <Text as="span" variant="small" tone="muted">—</Text>}</TableCell>
               <TableCell numeric>{limitText(r.limit)}</TableCell>
+              <TableCell numeric>{r.slaHours}h</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -105,6 +110,7 @@ function MatrixTable({ rows, label }: { rows: Row[]; label: string }) {
 export function ChartFlowsPage() {
   const users = useUsers();
   const threshold = useStepUpThreshold();
+  useRulesVersion();
   const [flow, setFlow] = useState<Application["flow"]>("Standard");
   const [amount, setAmount] = useState("750000000");
   const amountN = Number(amount.replace(/[^\d]/g, "")) || 0;
@@ -117,21 +123,21 @@ export function ChartFlowsPage() {
       description="The tenant's configured credit approval chart-flows: tiers, co-signer pairs, adjudicators, limits and SLA targets."
       actions={
         <Button as={Link} href={PARAMS_HREF} variant="tertiary" iconBefore={<Settings2 aria-hidden />}>
-          Rules & parameters
+          Business rules
         </Button>
       }
     >
       <Stack gap="large">
         <Alert tone="info" title="Read-only view of tenant configuration">
-          Tiers, roles, limits, co-signer pairs and adjudicators are configured in Admin → Rules & parameters (PRD §4.0, §6.1.2). Changes re-derive the matrices below automatically; only configured tiers are rendered.
+          Tiers, signers, limit roles, adjudicators and SLAs are business rules (Operations → Business rules → Credit chart-flow); limits are the roles&apos; sign-on limits. Changes are approved in Operations and re-derive the matrices, the route simulator and the credit-approval workflows (Operations → Workflows, “Credit facility approval”) automatically.
         </Alert>
 
         <KeyValueGrid
           columns={4}
           items={[
-            { label: "Approval tiers", value: String(chartFlow.length), hint: "Standard credit ladder" },
-            { label: "SLA — Standard", value: `${P.slaDays.Standard} days`, hint: TENANT_PARAM_NOTE },
-            { label: "SLA — Fast-Track", value: `${P.slaDays["Fast-Track"]} days`, hint: TENANT_PARAM_NOTE },
+            { label: "Approval tiers", value: String(getChartFlow().length), hint: "Standard credit ladder" },
+            { label: "SLA — Standard", value: `${slaDays("Standard")} days`, hint: TENANT_PARAM_NOTE },
+            { label: "SLA — Fast-Track", value: `${slaDays("Fast-Track")} days`, hint: TENANT_PARAM_NOTE },
             { label: "Step-up authentication", value: `Above ${moneyShort(threshold)}`, hint: "Every approval step re-authenticates (PRD §4.2)" },
           ]}
         />
@@ -145,7 +151,7 @@ export function ChartFlowsPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <MatrixTable rows={standardRows} label="Standard credit matrix" />
+              <MatrixTable rows={standardRows()} label="Standard credit matrix" />
             </CardContent>
           </Card>
           <Card>
@@ -157,11 +163,11 @@ export function ChartFlowsPage() {
             </CardHeader>
             <CardContent>
               <Stack gap="medium">
-                <MatrixTable rows={fastTrackRows} label="Fast-Track credit matrix" />
+                <MatrixTable rows={fastTrackRows()} label="Fast-Track credit matrix" />
                 <Stack gap="small">
                   <Text variant="eyebrow">Eligible products</Text>
                   <ChipList>
-                    {fastTrackVariants.map((v) => (
+                    {fastTrackVariants().map((v) => (
                       <Chip key={v.id} tone="accent">
                         {v.label}
                       </Chip>
@@ -221,7 +227,7 @@ export function ChartFlowsPage() {
             <CardHeader>
               <div>
                 <CardTitle>Approval roles and lending limits</CardTitle>
-                <CardDescription>PRD §4.1 — illustrative demo-tenant limits ({TENANT_PARAM_NOTE.toLowerCase()}).</CardDescription>
+                <CardDescription>PRD §4.1 — sign-on limits from business rules ({TENANT_PARAM_NOTE.toLowerCase()}).</CardDescription>
               </div>
             </CardHeader>
             <CardContent>
@@ -242,7 +248,7 @@ export function ChartFlowsPage() {
                           {r.name} <Text as="span" variant="caption" tone="muted">({r.short})</Text>
                         </TableCell>
                         <TableCell numeric>{r.tier}</TableCell>
-                        <TableCell numeric>{r.limitNgn === null ? "—" : r.limitNgn === Number.POSITIVE_INFINITY ? "Apex" : moneyShort(r.limitNgn)}</TableCell>
+                        <TableCell numeric>{r.limitNgn === null ? "—" : signOnLimit(r.id) === Number.POSITIVE_INFINITY ? "Apex" : moneyShort(signOnLimit(r.id))}</TableCell>
                         <TableCell>
                           <Text variant="small">{r.authority}</Text>
                         </TableCell>

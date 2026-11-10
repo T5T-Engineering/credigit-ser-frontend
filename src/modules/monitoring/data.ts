@@ -6,7 +6,8 @@
 import { addDays, format, subDays, subMonths } from "date-fns";
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { Facility, Obligor } from "@/lib/data/types";
-import { natureBySector, type NatureOfBusiness } from "./logic";
+import { getRule } from "@/lib/platform/rules";
+import { natureOfSector, type NatureOfBusiness } from "./logic";
 
 /* ---------------- deterministic helpers ---------------- */
 
@@ -115,8 +116,8 @@ const shapes: Record<NatureOfBusiness, number[]> = {
 export const inflowMonths = Array.from({ length: 12 }, (_, i) => subMonths(new Date(DEMO_NOW.getFullYear(), DEMO_NOW.getMonth(), 1), 12 - i));
 export const inflowMonthLabels = inflowMonths.map((d) => format(d, "MMM yy"));
 
-/** AI envelope half-width (demo value; PRD: AI-built from obligor history + sector seasonality). */
-export const ENVELOPE_BAND = 0.25;
+/** AI envelope half-width as a fraction — business rule `monitoring.inflow.envelopeBandPct` (PRD: AI-built from obligor history + sector seasonality). */
+export const envelopeBand = () => getRule<number>("monitoring.inflow.envelopeBandPct") / 100;
 
 export type InflowStatus = "Within envelope" | "Below envelope" | "Above envelope" | "Off-season — within envelope";
 
@@ -140,12 +141,12 @@ export type InflowProfile = {
 export function buildInflowProfiles(obligors: Obligor[]): InflowProfile[] {
   // Three steady/cyclical obligors with the weakest COP ratio get a sharp recent shortfall (AI-flagged).
   const candidates = obligors
-    .filter((o) => (natureBySector[o.sectorId] ?? "Steady / Regular") !== "Seasonal" && natureBySector[o.sectorId] !== "Project / Milestone-based" && o.type !== "Retail")
+    .filter((o) => natureOfSector(o.sectorId) !== "Seasonal" && natureOfSector(o.sectorId) !== "Project / Milestone-based" && o.type !== "Retail")
     .sort((a, b) => a.verifiedTurnover / a.declaredTurnover - b.verifiedTurnover / b.declaredTurnover)
     .slice(0, 3)
     .map((o) => o.id);
   return obligors.map((o) => {
-    const nature = natureBySector[o.sectorId] ?? "Steady / Regular";
+    const nature = natureOfSector(o.sectorId);
     const shape = shapes[nature];
     const monthlyDeclared = o.declaredTurnover / 12;
     const cop = o.verifiedTurnover / o.declaredTurnover;
@@ -156,8 +157,9 @@ export function buildInflowProfiles(obligors: Obligor[]): InflowProfile[] {
       const base = monthlyDeclared * s * Math.max(cop, 0.9) * noise;
       return Math.round(flagged && m >= 9 ? monthlyDeclared * s * between(`${o.id}-f${m}`, 0.42, 0.58) : base);
     });
-    const floor = expected.map((v) => Math.round(v * (1 - ENVELOPE_BAND)));
-    const ceiling = expected.map((v) => Math.round(v * (1 + ENVELOPE_BAND)));
+    const band = envelopeBand();
+    const floor = expected.map((v) => Math.round(v * (1 - band)));
+    const ceiling = expected.map((v) => Math.round(v * (1 + band)));
     const net3m = actual.slice(9).reduce((a, b) => a + b, 0);
     const expected3m = expected.slice(9).reduce((a, b) => a + b, 0);
     const floor3m = floor.slice(9).reduce((a, b) => a + b, 0);
@@ -174,7 +176,7 @@ export function buildInflowProfiles(obligors: Obligor[]): InflowProfile[] {
       reversals: 0,
     };
     exclusions.reversals = excl - exclusions.interBranch - exclusions.suspense - exclusions.inAndOut;
-    const offSeason = nature === "Seasonal" && shape.slice(9).reduce((a, b) => a + b, 0) / 3 < 0.9;
+    const offSeason = nature === "Seasonal" && shape.slice(9).reduce((a, b) => a + b, 0) / 3 < getRule<number>("monitoring.inflow.offSeasonIndexBelow");
     const status: InflowStatus = net3m < floor3m ? "Below envelope" : net3m > ceil3m ? "Above envelope" : offSeason ? "Off-season — within envelope" : "Within envelope";
     return {
       obligorId: o.id,
@@ -272,7 +274,7 @@ export function buildAgentFees(obligors: Obligor[]): AgentFee[] {
 
 /* ---------------- APGs & temporary overdrafts (PRD §6.4.2) ---------------- */
 
-export type ApgStatus = "Awaiting advance" | "Crystallised" | "Expiring ≤ 30 days" | "Expired" | "Called" | "Released";
+export type ApgStatus = "Awaiting advance" | "Crystallised" | "Expiring soon" | "Expired" | "Called" | "Released";
 
 export type Apg = {
   id: string;
@@ -306,8 +308,9 @@ export function buildApgs(facilities: Facility[]): Apg[] {
       const expiry = new Date(f.maturityDate);
       const daysToExpiry = Math.round((expiry.getTime() - DEMO_NOW.getTime()) / 864e5);
       const received = rnd(id) > 0.3;
+      const warnDays = getRule<number>("monitoring.apg.expiryWarningDays");
       const status: ApgStatus =
-        i === 3 ? "Called" : daysToExpiry < 0 ? "Expired" : daysToExpiry <= 30 ? "Expiring ≤ 30 days" : received ? "Crystallised" : "Awaiting advance";
+        i === 3 ? "Called" : daysToExpiry < 0 ? "Expired" : daysToExpiry <= warnDays ? "Expiring soon" : received ? "Crystallised" : "Awaiting advance";
       return {
         id,
         facilityId: f.id,
@@ -318,13 +321,13 @@ export function buildApgs(facilities: Facility[]): Apg[] {
         issuedAt: f.startDate,
         expiryAt: daysToExpiry > 400 && i % 4 === 1 ? iso(addDays(DEMO_NOW, 12 + i)) : f.maturityDate,
         advanceReceivedAt: received ? iso(addDays(issued, 5 + (hash(id) % 20))) : undefined,
-        status: daysToExpiry > 400 && i % 4 === 1 ? "Expiring ≤ 30 days" : status,
+        status: daysToExpiry > 400 && i % 4 === 1 ? "Expiring soon" : status,
       };
     });
 }
 
 export type TodType = "Temporary overdraft" | "Excess over limit" | "Matured loan without renewal" | "Undocumented facility";
-export type TodStatus = "Within regularisation window" | "Regularisation overdue" | "Classified non-performing (90+ days)" | "Regularised" | "Converted to facility";
+export type TodStatus = "Within regularisation window" | "Regularisation overdue" | "Classified non-performing" | "Regularised" | "Converted to facility";
 
 export type Tod = {
   id: string;
@@ -338,13 +341,13 @@ export type Tod = {
   status: TodStatus;
 };
 
-/** Demo regularisation window (tenant parameter). CBN 12.10: not regularised within 90 days → non-performing. */
-export const TOD_WINDOW_DAYS = 30;
 
 export function buildTods(facilities: Facility[], obligors: Obligor[]): Tod[] {
   const ods = facilities.filter((f) => f.product === "Overdraft" || f.product === "Revolving credit" || f.product === "Term loan").slice(0, 60);
   const ages = [6, 12, 21, 28, 34, 41, 57, 73, 96, 118, 9, 16];
   const types: TodType[] = ["Temporary overdraft", "Excess over limit", "Temporary overdraft", "Matured loan without renewal", "Temporary overdraft", "Undocumented facility"];
+  const window = getRule<number>("monitoring.tod.regularisationDays");
+  const npl = getRule<number>("monitoring.tod.nonPerformingDays");
   return ages.map((age, i) => {
     const f = ods[(i * 5) % ods.length]!;
     const o = obligors.find((x) => x.id === f.obligorId)!;
@@ -357,9 +360,9 @@ export function buildTods(facilities: Facility[], obligors: Obligor[]): Tod[] {
       type: types[i % types.length]!,
       amount: Math.round((f.approvedAmount * between(id, 0.05, 0.25)) / 1e5) * 1e5,
       grantedAt: iso(granted),
-      regulariseBy: iso(addDays(granted, TOD_WINDOW_DAYS)),
+      regulariseBy: iso(addDays(granted, window)),
       grantedBy: pickBy(id, ["Group Head", "Chief Credit Officer", "Business Development Manager"]),
-      status: age >= 90 ? "Classified non-performing (90+ days)" : age > TOD_WINDOW_DAYS ? "Regularisation overdue" : "Within regularisation window",
+      status: age >= npl ? "Classified non-performing" : age > window ? "Regularisation overdue" : "Within regularisation window",
     };
   });
 }

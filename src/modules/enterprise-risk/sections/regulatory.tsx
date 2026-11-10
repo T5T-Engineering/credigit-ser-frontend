@@ -5,12 +5,15 @@ import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitl
 import { useCan } from "@/lib/auth/session";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { date, money } from "@/lib/format";
-import { useAuditLog } from "../../operational-risk/shared";
+import { publish } from "@/lib/platform/events";
+import { useRule } from "@/lib/platform/rules";
+import { useAuditLog, useRuleValues } from "../../operational-risk/shared";
 import { policyStatus, type Circular, type Policy, type RegBreach } from "../data";
+import { ERM, ermKeys } from "../platform";
 import { useErm } from "../store";
 
 const circTones = { New: "accent", "Under assessment": "warning", "Linked to policy": "success", "No action required": "neutral" } as const;
-const polTones = { Current: "success", "Due within 6 months": "warning", Overdue: "danger" } as const;
+const polTones = { Current: "success", "Due soon": "warning", Overdue: "danger" } as const;
 const breachTones = { Open: "danger", Remediating: "warning", Closed: "success" } as const;
 const sevTones = { High: "danger", Medium: "warning", Low: "neutral" } as const;
 
@@ -21,6 +24,8 @@ export function RegulatorySection() {
   const breaches = useErm((s) => s.breaches);
   const { updateCircular, updatePolicy } = useErm.getState();
   const audit = useAuditLog();
+  useRuleValues();
+  const cycleYears = useRule<number>(ermKeys.policyCycleYears);
   const [linking, setLinking] = useState<Circular | null>(null);
   const [policyId, setPolicyId] = useState("");
 
@@ -39,7 +44,7 @@ export function RegulatorySection() {
       cell: (c) =>
         canEdit && (c.status === "New" || c.status === "Under assessment") ? (
           <div className="flex justify-end gap-2">
-            {c.status === "New" && <Button size="small" variant="tertiary" onClick={() => { updateCircular(c.id, { status: "Under assessment" }); audit("Started circular impact assessment", "CBN circular", c.ref, "New", "Under assessment"); }}>Assess</Button>}
+            {c.status === "New" && <Button size="small" variant="tertiary" onClick={() => { updateCircular(c.id, { status: "Under assessment" }); audit("Started circular impact assessment", "CBN circular", c.ref, "New", "Under assessment"); publish("enterprise-risk.circular.assessed", { module: ERM, subject: { type: "Circular", id: c.id, title: c.title, href: "/enterprise-risk/regulatory" } }); }}>Assess</Button>}
             <Button size="small" variant="secondary" onClick={() => { setLinking(c); setPolicyId(""); }}>Link to policy</Button>
           </div>
         ) : null,
@@ -47,7 +52,7 @@ export function RegulatorySection() {
   ];
 
   const polCols: DataTableColumn<Policy>[] = [
-    { id: "name", header: "Policy", accessor: "name", cell: (p) => <div><div className="font-medium text-fg">{p.name}</div><div className="text-xs text-fg-subtle">{p.owner}{p.required ? " · 3-year review mandated" : ""}</div></div> },
+    { id: "name", header: "Policy", accessor: "name", cell: (p) => <div><div className="font-medium text-fg">{p.name}</div><div className="text-xs text-fg-subtle">{p.owner}{p.required ? ` · ${cycleYears}-year review mandated` : ""}</div></div> },
     { id: "last", header: "Last reviewed", accessor: (p) => date(p.lastReviewed), sortValue: (p) => p.lastReviewed, sortable: true },
     { id: "due", header: "Review due", accessor: (p) => date(policyStatus(p).dueAt), sortValue: (p) => policyStatus(p).dueAt, sortable: true },
     { id: "status", header: "Currency", accessor: (p) => policyStatus(p).label, sortable: true, cell: (p) => <StatusBadge status={policyStatus(p).label} tones={polTones} /> },
@@ -57,7 +62,7 @@ export function RegulatorySection() {
       exportable: false,
       cell: (p) =>
         canEdit && policyStatus(p).label !== "Current" ? (
-          <Button size="small" variant="tertiary" onClick={() => { updatePolicy(p.id, { lastReviewed: DEMO_NOW.toISOString() }); audit("Recorded policy review", "Policy", p.id, `Reviewed ${date(p.lastReviewed)}`, `Reviewed ${date(DEMO_NOW)}`); }}>Record review</Button>
+          <Button size="small" variant="tertiary" onClick={() => { updatePolicy(p.id, { lastReviewed: DEMO_NOW.toISOString() }); audit("Recorded policy review", "Policy", p.id, `Reviewed ${date(p.lastReviewed)}`, `Reviewed ${date(DEMO_NOW)}`); publish("enterprise-risk.policy.reviewed", { module: ERM, subject: { type: "Policy", id: p.id, title: p.name, href: "/enterprise-risk/regulatory" } }); }}>Record review</Button>
         ) : null,
     },
   ];
@@ -75,7 +80,7 @@ export function RegulatorySection() {
     <Stack gap="large">
       <Grid columns={{ base: 1, sm: 3 }} gap="medium">
         <StatCard label="Circulars awaiting action" value={<span className="font-mono">{circulars.filter((c) => c.status === "New" || c.status === "Under assessment").length}</span>} hint="CBN circulars feed (§5.5) — simulated" tone="accent" />
-        <StatCard label="Mandated policies current" value={<span className="font-mono">{required.filter((p) => policyStatus(p).label !== "Overdue").length}/{required.length}</span>} hint="Credit, project-finance, real-estate, SME, agriculture, retail — 3-year cycle" tone={overdue.some((p) => p.required) ? "danger" : "success"} />
+        <StatCard label="Mandated policies current" value={<span className="font-mono">{required.filter((p) => policyStatus(p).label !== "Overdue").length}/{required.length}</span>} hint={`Credit, project-finance, real-estate, SME, agriculture, retail — ${cycleYears}-year cycle`} tone={overdue.some((p) => p.required) ? "danger" : "success"} />
         <StatCard label="Open regulatory breaches" value={<span className="font-mono">{breaches.filter((b) => b.status !== "Closed").length}</span>} hint="Feeds Operational Risk KRI-REG-01 and the loss-event register" tone="warning" />
       </Grid>
       <Card padding="none">
@@ -84,7 +89,7 @@ export function RegulatorySection() {
       </Card>
       <Grid columns={{ base: 1, xl: 2 }} gap="large">
         <Card padding="none">
-          <CardHeader className="px-6 pt-6"><CardTitle>Policy-currency tracker</CardTitle><CardDescription>Evidence that policies are reviewed at least every 3 years (§6.10)</CardDescription></CardHeader>
+          <CardHeader className="px-6 pt-6"><CardTitle>Policy-currency tracker</CardTitle><CardDescription>Evidence that policies are reviewed at least every {cycleYears} years (§6.10)</CardDescription></CardHeader>
           <CardContent className="p-2 sm:p-4"><DataTable label="Policy currency" columns={polCols} data={policies} getRowId={(p) => p.id} paginate={false} defaultSort={{ id: "due", direction: "asc" }} /></CardContent>
         </Card>
         <Card padding="none">
@@ -106,6 +111,7 @@ export function RegulatorySection() {
               onClick={() => {
                 updateCircular(linking!.id, { status: policyId === "none" ? "No action required" : "Linked to policy", policyId: policyId === "none" ? undefined : policyId });
                 audit(policyId === "none" ? "Closed circular — no action required" : "Linked circular to policy", "CBN circular", linking!.ref, linking!.status, policyId === "none" ? "No action required" : policyId);
+                publish("enterprise-risk.circular.linked", { module: ERM, subject: { type: "Circular", id: linking!.id, title: linking!.title, href: "/enterprise-risk/regulatory" }, payload: { policyId: policyId === "none" ? null : policyId } });
                 setLinking(null);
               }}
             >

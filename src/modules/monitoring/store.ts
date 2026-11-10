@@ -10,7 +10,10 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { subDays, subHours } from "date-fns";
 import { createSeed, DEMO_NOW } from "@/lib/data/seed";
 import type { Facility } from "@/lib/data/types";
-import { addBusinessDays, DEMO_SLA_BUSINESS_DAYS, exposureOf, type EscalationLevel, type ExceptionType } from "./logic";
+// Rules must be registered before the seed reads them (the seed runs when the store is created).
+import "./platform";
+import { getRule } from "@/lib/platform/rules";
+import { addBusinessDays, dpdThresholds, exposureOf, slaBusinessDays, type EscalationLevel, type ExceptionType } from "./logic";
 import { buildCovenants, buildInflowProfiles, buildTods } from "./data";
 
 export type ExceptionStatus = "Raised" | "Under review" | "Escalated" | "Resolved";
@@ -61,6 +64,7 @@ type State = {
   reset: () => void;
 };
 
+// TD-603: the seed below is mock data (demo shape constants).
 let counter = 0;
 const uid = (p: string) => `${p}-${Date.now().toString(36).toUpperCase()}${(counter++).toString(36).toUpperCase()}`;
 
@@ -86,7 +90,7 @@ function seedExceptions(): MonitoringException[] {
     const history: ExceptionEvent[] = [{ id: `EV-${list.length}-0`, at: raisedAt.toISOString(), by: source === "Manual" ? lro.name : "Rules engine", action: "Exception raised — Level 1 notified (dashboard + email)", level: 1, status: "Raised" }];
     let at = raisedAt;
     for (let l = 2 as EscalationLevel; l <= level; l = (l + 1) as EscalationLevel) {
-      at = addBusinessDays(at, DEMO_SLA_BUSINESS_DAYS);
+      at = addBusinessDays(at, slaBusinessDays((l - 1) as EscalationLevel));
       history.push({ id: `EV-${list.length}-${l}`, at: at.toISOString(), by: "Escalation protocol", action: `Level ${l - 1} SLA lapsed uncured — escalated to Level ${l}`, level: l, status: "Escalated" });
     }
     if (status === "Under review") history.push({ id: `EV-${list.length}-r`, at: subHours(DEMO_NOW, 20 + ageDays).toISOString(), by: lro.name, action: "Picked up for review", status: "Under review" });
@@ -106,7 +110,7 @@ function seedExceptions(): MonitoringException[] {
       level,
       status,
       // A few seeded exceptions have lapsed SLAs (to demo the sweep); the rest are inside their cure window.
-      slaDueAt: (list.length % 4 === 1 || status === "Resolved" ? addBusinessDays(at, DEMO_SLA_BUSINESS_DAYS) : addBusinessDays(DEMO_NOW, 1 + (list.length % 4))).toISOString(),
+      slaDueAt: (list.length % 4 === 1 || status === "Resolved" ? addBusinessDays(at, slaBusinessDays(level)) : addBusinessDays(DEMO_NOW, 1 + (list.length % 4))).toISOString(),
       assigneeId: lro.id,
       evidence: status === "Resolved" ? { name: "Repayment confirmation — CBA credit ref.pdf", at: subDays(DEMO_NOW, 1).toISOString(), by: lro.name } : undefined,
       history,
@@ -117,10 +121,11 @@ function seedExceptions(): MonitoringException[] {
     });
   };
 
-  const pastDue = spine.facilities.filter((f) => f.dpd >= 30).sort((a, b) => b.dpd - a.dpd);
+  const t = dpdThresholds();
+  const pastDue = spine.facilities.filter((f) => f.dpd >= t.watchlist).sort((a, b) => b.dpd - a.dpd);
   pastDue.slice(0, 7).forEach((f, i) => {
     const o = obligors.get(f.obligorId)!;
-    const level = (f.dpd >= 180 ? 4 : f.dpd >= 90 ? 3 : f.dpd >= 60 ? 2 : 1) as EscalationLevel;
+    const level = (f.dpd >= t.doubtful ? 4 : f.dpd >= t.substandard ? 3 : f.dpd >= (t.watchlist + t.substandard) / 2 ? 2 : 1) as EscalationLevel;
     mk(
       "Past-due obligation",
       f,
@@ -147,10 +152,10 @@ function seedExceptions(): MonitoringException[] {
     mk("Inflow-envelope deviation", { obligorId: o.id, id: f?.id }, "Inflow below AI envelope", `${o.name}: net verified inflow over the last 3 months is ${Math.round(p.ratio3m * 100)}% of the expected ${p.nature.toLowerCase()} pattern.`, 1, 1, "Raised", "AI-flagged");
   });
 
-  const tods = buildTods(spine.facilities, spine.obligors).filter((t) => t.status === "Classified non-performing (90+ days)");
+  const tods = buildTods(spine.facilities, spine.obligors).filter((t) => t.status === "Classified non-performing");
   tods.slice(0, 1).forEach((t) => {
     const o = obligors.get(t.obligorId)!;
-    mk("Temporary overdraft not regularised", { obligorId: o.id, id: t.facilityId }, `${t.type} not regularised`, `${o.name}: ${t.id} granted ${Math.round((DEMO_NOW.getTime() - new Date(t.grantedAt).getTime()) / 864e5)} days ago — classified and provisioned as non-performing per CBN 12.10.`, 6, 2, "Escalated", "Rule", t.amount);
+    mk("Temporary overdraft not regularised", { obligorId: o.id, id: t.facilityId }, `${t.type} not regularised`, `${o.name}: ${t.id} granted ${Math.round((DEMO_NOW.getTime() - new Date(t.grantedAt).getTime()) / 864e5)} days ago — classified and provisioned as non-performing per CBN 12.10 (${getRule<number>("monitoring.tod.nonPerformingDays")}-day rule).`, 6, 2, "Escalated", "Rule", t.amount);
   });
 
   const insExpired = spine.collateral.filter((c) => c.insuranceExpiry && new Date(c.insuranceExpiry) < DEMO_NOW).slice(0, 2);
@@ -161,7 +166,7 @@ function seedExceptions(): MonitoringException[] {
 
   const someone = spine.obligors[11]!;
   mk("Unreconciled inter-branch / suspense item", { obligorId: someone.id }, "Suspense entry ageing past clearance window", `${someone.name}: suspense-account credit of ₦18.4m unreconciled for 97 days (CBN: clear within 3 months).`, 9, 2, "Escalated", "AI-flagged");
-  const resolved = spine.facilities.filter((f) => f.dpd > 0 && f.dpd < 30).slice(0, 2);
+  const resolved = spine.facilities.filter((f) => f.dpd > 0 && f.dpd < t.watchlist).slice(0, 2);
   resolved.forEach((f) => {
     const o = obligors.get(f.obligorId)!;
     mk("Past-due obligation", f, `${f.dpd} days past due — ${f.product}`, `${o.name}: instalment arrears cleared after follow-up.`, 12, 1, "Resolved", "Rule", exposureOf(f));
@@ -192,7 +197,7 @@ export const useMonitoring = create<State>()(
           raisedAt: now.toISOString(),
           level: 1,
           status: "Raised",
-          slaDueAt: addBusinessDays(now, DEMO_SLA_BUSINESS_DAYS).toISOString(),
+          slaDueAt: addBusinessDays(now, slaBusinessDays(1)).toISOString(),
           history: [{ id: uid("EV"), at: now.toISOString(), by, action: "Exception raised — Level 1 notified (dashboard + email)", level: 1, status: "Raised" }],
           comments: [],
         };

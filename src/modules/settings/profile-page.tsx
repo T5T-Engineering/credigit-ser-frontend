@@ -26,8 +26,10 @@ import { useRole, useSession } from "@/lib/auth/session";
 import { msalEnabled } from "@/lib/auth/msal";
 import { useDbActions, useTenant, useUsers } from "@/lib/data/hooks";
 import { ago, dateTime, moneyShort } from "@/lib/format";
-import { useAdminStore, useRoleLimit, useRoleSecurity } from "@/modules/admin/store";
-import { useWorkspaceStore } from "@/modules/workspace/data";
+import { useRoleLimit, useRoleSecurity } from "@/modules/admin/store";
+import { roleName } from "@/modules/admin/rule-keys";
+import { publish } from "@/lib/platform/events";
+import { useRule } from "@/lib/platform/rules";
 import { useAuditLog } from "@/modules/workspace/use-audit-log";
 
 /** Settings → Profile & security (PRD §4, §4.2, §10.1). */
@@ -42,7 +44,9 @@ export function ProfilePage() {
   const security = useRoleSecurity(role.id);
   const limit = useRoleLimit(role.id);
   const { resetDemo } = useDbActions();
-  const resetAdmin = useAdminStore((s) => s.resetAdmin);
+  const warningSeconds = useRule<number>("session.warningSeconds");
+  const shellTimeout = useRule<number>("session.idleTimeoutMinutes");
+  const stepUp = useRule<number>("approvals.stepUpThresholdNgn");
   const log = useAuditLog();
   const router = useRouter();
   const [confirmReset, setConfirmReset] = useState(false);
@@ -57,7 +61,7 @@ export function ProfilePage() {
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
           <StatCard label="Sign-in method" value={sso ? "Microsoft SSO" : "Demo access"} hint={sso ? "Entra ID work account" : "Prototype role picker"} icon={<KeyRound aria-hidden className="size-5" />} tone="accent" />
           <StatCard label="MFA" value={sso ? "Enforced" : record?.mfa ? "Enrolled" : "Not enrolled"} hint={sso ? "By your Microsoft tenant policy" : "Simulated in demo access"} icon={<ShieldCheck aria-hidden className="size-5" />} tone="success" />
-          <StatCard label="Idle timeout" value={`${security.sessionTimeoutMin} min`} hint={`Set for ${role.short} in Roles & limits`} icon={<Timer aria-hidden className="size-5" />} tone="info" />
+          <StatCard label="Idle timeout" value={`${security.sessionTimeoutMin} min`} hint={`Rule session.idleTimeoutMinutes.${role.id}`} icon={<Timer aria-hidden className="size-5" />} tone="info" />
           <StatCard label="Device binding" value={security.deviceBinding ? "On" : "Off"} hint={security.ipAllowList ? `IP allow-list: ${security.ipAllowList}` : "Any network"} icon={<MonitorSmartphone aria-hidden className="size-5" />} tone={security.deviceBinding ? "warning" : "neutral"} />
         </Grid>
 
@@ -78,7 +82,7 @@ export function ProfilePage() {
               <DescriptionList
                 columns={1}
                 items={[
-                  { label: "Role", value: role.name, hint: role.description },
+                  { label: "Role", value: roleName(role.id), hint: role.description },
                   { label: "Authority", value: role.authority },
                   { label: "Sign-on limit", value: limit === null ? "None" : Number.isFinite(limit) ? moneyShort(limit) : "Apex", mono: true },
                   { label: "Branch", value: record?.branch },
@@ -110,12 +114,12 @@ export function ProfilePage() {
                     },
                     { label: "Signed in", value: signedInAt ? `${dateTime(signedInAt)} (${ago(signedInAt)})` : "—" },
                     { label: "This device", value: device },
-                    { label: "Session rules", value: `Signs out after ${security.sessionTimeoutMin} minutes idle, with a 60-second warning. Closing the tab ends the session.` },
-                    { label: "Step-up authentication", value: "Required to approve amounts above the high-value threshold (PRD §4.2)." },
+                    { label: "Session rules", value: `Signs out after ${security.sessionTimeoutMin} minutes idle, with a ${warningSeconds}-second warning. Closing the tab ends the session.` },
+                    { label: "Step-up authentication", value: `Required to approve amounts above ${moneyShort(stepUp)} (PRD §4.2).` },
                   ]}
                 />
                 <Text variant="caption" tone="subtle">
-                  The prototype&apos;s idle timer uses a 15-minute default; per-role values above are the configured policy the backend will enforce.
+                  The prototype&apos;s idle timer currently applies the platform default ({shellTimeout} minutes); per-role values above are the configured policy the backend will enforce.
                 </Text>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -160,7 +164,7 @@ export function ProfilePage() {
         onOpenChange={setConfirmReset}
         size="small"
         title="Reset demo data?"
-        description="All changes made in this browser — new applications, decisions, tasks, users and parameter edits — will be discarded."
+        description="All changes made in this browser — applications, decisions, tasks, users, business-rule values, Operations requests, notifications and events — will be discarded."
         footer={
           <>
             <Button variant="tertiary" onClick={() => setConfirmReset(false)}>
@@ -169,10 +173,10 @@ export function ProfilePage() {
             <Button
               variant="danger"
               onClick={() => {
+                // Clears the spine and every credigit.ser.* store (Operations, rules, events, notifications, admin, workspace) and reloads.
                 resetAllDemoData(resetDemo);
-                resetAdmin();
-                useWorkspaceStore.setState({ signedOff: {}, dismissed: [] });
                 log({ action: "Reset demo data", entityType: "Tenant", entityId: tenant.id });
+                publish("settings.demo-data.reset", { module: "settings", subject: { type: "Tenant", id: tenant.id, title: tenant.name } });
                 setConfirmReset(false);
                 setResetDone(true);
               }}

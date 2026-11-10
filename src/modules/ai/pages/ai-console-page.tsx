@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Bot, CalendarClock, Lock, MessageSquarePlus, Search, SendHorizontal, Sparkles } from "lucide-react";
+import { Bot, CalendarClock, Lock, MessageSquarePlus, Search, SendHorizontal } from "lucide-react";
 import {
   AiInsightCard,
   Alert,
@@ -26,59 +26,68 @@ import {
   List,
   Modal,
   PermissionGate,
+  SegmentedControl,
   Select,
   Stack,
   StackedBarChart,
   StatusBadge,
-  Tabs,
   Text,
   Textarea,
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useRole, useSession } from "@/lib/auth/session";
+import { useSession } from "@/lib/auth/session";
 import { useAudit, useCollateral, useFacilities, useObligors, useSectors, useUsers } from "@/lib/data/hooks";
+import { newId } from "@/lib/data/store";
 import { DEMO_NOW } from "@/lib/data/seed";
+import { publish } from "@/lib/platform/events";
+import { runHooks } from "@/lib/platform/hooks";
+import { submitOperation, type SubmitResult } from "@/lib/platform/operations";
+import { getRule, useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
 import { roleById, type RoleId } from "@/lib/rbac/roles";
 import { dateTime, moneyShort, pct } from "@/lib/format";
 import { useOpRisk } from "../../operational-risk/store";
-import { useAuditLog } from "../../operational-risk/shared";
+import { PendingBadge, SubmitOutcome } from "../../operational-risk/operation-ui";
+import { roleNames, useAuditLog, useRuleValues } from "../../operational-risk/shared";
 import { useAppetite } from "../../enterprise-risk/logic";
 import { useAiActivity, type AiActivity } from "../activity";
-import { MODEL_VERSION, answerQuery, dataDictionary, suggestedQuestions, type Answer, type ChartSpec, type QueryData, type QueryResult, type QueryScope, type ValueFormat } from "../intents";
+import { answerQuery, dataDictionary, detectIntent, suggestedQuestions, type Answer, type ChartSpec, type QueryData, type QueryResult, type QueryScope, type ValueFormat } from "../intents";
+import { AI, aiKeys, consoleScopeFor, submitAiSignOff, type AiQueryHookCtx } from "../platform";
 import { useAi, type QueryRecord, type SavedQuery } from "../store";
 
-/** PRD §6.13: restricted to System Admin/Support Team, CRO and Head of Risk. */
-const consoleScope: Partial<Record<RoleId, QueryScope>> = { cro: "full", "head-of-risk": "full", "system-admin": "platform", "it-support": "platform" };
-
-export function AiConsolePage() {
-  const role = useRole();
-  const scope = role ? consoleScope[role.id] : undefined;
-  // Initial tab from ?tab= (client-only page, rendered after sign-in).
-  const [tab, setTab] = useState(() => (typeof window === "undefined" ? "console" : (new URLSearchParams(window.location.search).get("tab") ?? "console")));
+/** Module frame for every AI sub-page: header + access gate (PRD §6.13 roles from business rules). */
+function AiFrame({ description, children }: { description: string; children: (scope: QueryScope) => React.ReactNode }) {
+  const { actor } = useScope();
+  useRuleValues();
+  const scope = consoleScopeFor(actor.roleId);
+  const allowed = [...getRule<RoleId[]>(aiKeys.fullScopeRoles), ...getRule<RoleId[]>(aiKeys.platformScopeRoles)];
   return (
-    <ModulePage module="ai-console" description="Ask the Risk Data Spine a question in plain language and get a chart and a short narrative — every query and answer is written to the audit trail.">
+    <ModulePage module="ai-console" description={description}>
       <PermissionGate
         allowed={!!scope}
         title="Restricted to designated power users"
-        description="The natural-language query console is open only to the System Admin/Support Team, the Chief Risk Officer and the Head of Risk (PRD §6.13). AI-drafted and AI-flagged items for your role appear in the module you work in."
+        description={`The natural-language query console is open only to ${roleNames(allowed)} (PRD §6.13). AI-drafted and AI-flagged items for your role appear in the module you work in.`}
       >
-        {scope && (
-          <Tabs
-            label="AI analytics"
-            value={tab}
-            onValueChange={setTab}
-            variant="underline"
-            items={[
-              { id: "console", label: "Query console", icon: <Bot aria-hidden className="size-4" />, content: <Console scope={scope} /> },
-              { id: "activity", label: "AI activity", icon: <Sparkles aria-hidden className="size-4" />, content: <ActivityTab /> },
-              { id: "log", label: "Query log & schedules", icon: <CalendarClock aria-hidden className="size-4" />, content: <QueryLogTab /> },
-            ]}
-          />
-        )}
+        {scope && children(scope)}
       </PermissionGate>
     </ModulePage>
   );
+}
+
+/** /ai — natural-language query console. */
+export function AiConsolePage() {
+  return <AiFrame description="Ask the Risk Data Spine a question in plain language and get a chart and a short narrative — every query and answer is written to the audit trail.">{(scope) => <Console scope={scope} />}</AiFrame>;
+}
+
+/** /ai/activity — AI drafts and flags awaiting the accountable role's sign-off. */
+export function AiActivityPage() {
+  return <AiFrame description="AI-drafted and AI-flagged outputs across modules — each needs the accountable role's sign-off, recorded through the Operations workflow.">{() => <ActivityTab />}</AiFrame>;
+}
+
+/** /ai/log — query log and scheduled reports. */
+export function AiLogPage() {
+  return <AiFrame description="Every console query, and the reports scheduled from it.">{() => <QueryLogTab />}</AiFrame>;
 }
 
 function useQueryData(): QueryData {
@@ -96,17 +105,21 @@ function useQueryData(): QueryData {
 function Console({ scope }: { scope: QueryScope }) {
   const user = useSession((s) => s.user);
   const roleId = useSession((s) => s.roleId);
+  const { actor } = useScope();
   const history = useAi((s) => s.history);
   const after = useAi((s) => s.conversationAfter);
   const { addQuery, newConversation } = useAi.getState();
   const data = useQueryData();
   const audit = useAuditLog();
+  const model = useRule<string>(aiKeys.modelVersion);
+  const maxExchanges = useRule<number>(aiKeys.conversationMax);
   const [text, setText] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
+  const [saveOutcome, setSaveOutcome] = useState<SubmitResult | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
   const start = after ? history.findIndex((h) => h.id === after) + 1 : 0;
-  const conversation = history.slice(start).filter((h) => h.askedBy === user?.name).slice(-8);
+  const conversation = history.slice(start).filter((h) => (h.askedById ? h.askedById === actor.id : h.askedBy === user?.name)).slice(-maxExchanges);
   const audit7 = data.audit;
   const suggestions = suggestedQuestions.filter((s) => scope === "full" || s.scope === "platform");
 
@@ -117,22 +130,28 @@ function Console({ scope }: { scope: QueryScope }) {
     seen.current = conversation.length;
   }, [conversation.length]);
 
-  const runQuery = (question: string) => {
+  /** Resolve a question: ai.query.before hooks (data-scope guard; may veto/rewrite) → answer → log, audit, event → .after hooks. */
+  const runQuery = async (question: string) => {
     const qText = question.trim();
     if (!qText || !user || !roleId) return;
-    const result = answerQuery(qText, scope, data);
-    const rec: QueryRecord = { id: `NLQ-${Date.now().toString(36).toUpperCase()}`, question: qText, askedAt: new Date().toISOString(), askedBy: user.name, roleId, intent: result.status === "unknown" ? "unmatched" : result.intent, status: result.status };
+    const ctx: AiQueryHookCtx = { question: qText, intent: detectIntent(qText.toLowerCase()), scope, actor: { id: actor.id, name: actor.name, roleId: actor.roleId } };
+    const before = await runHooks("ai.query.before", ctx);
+    const q = before.ok ? before.ctx.question : qText;
+    const result: QueryResult = before.ok ? answerQuery(q, scope, data) : { status: "refused", intent: ctx.intent ?? "unmatched", reason: `${before.reason} (${before.vetoedBy})` };
+    const rec: QueryRecord = { id: newId("NLQ"), question: q, askedAt: new Date().toISOString(), askedBy: user.name, askedById: user.id, roleId, intent: result.status === "unknown" ? "unmatched" : result.intent, status: result.status, reason: result.status === "answered" ? undefined : result.reason };
     addQuery(rec);
     audit(
       result.status === "answered" ? "AI query answered" : result.status === "refused" ? "AI query refused (out of scope)" : "AI query not understood",
       "AI query",
       rec.id,
-      qText,
-      result.status === "answered" ? `${result.title} · data touched: ${result.touched} · ${MODEL_VERSION}` : result.reason,
+      q,
+      result.status === "answered" ? `${result.title} · data touched: ${result.touched} · ${model}` : result.reason,
     );
+    publish(result.status === "answered" ? "ai.query.answered" : result.status === "refused" ? "ai.query.refused" : "ai.query.unmatched", { module: AI, subject: { type: "AiQuery", id: rec.id, title: q, href: "/ai/log" }, payload: { intent: rec.intent, scope, touched: result.status === "answered" ? result.touched : undefined } });
+    await runHooks("ai.query.after", { ...ctx, question: q, record: rec, status: result.status });
   };
   const ask = (question: string) => {
-    runQuery(question);
+    void runQuery(question);
     setText("");
   };
 
@@ -144,7 +163,7 @@ function Console({ scope }: { scope: QueryScope }) {
     const q = new URLSearchParams(window.location.search).get("ask");
     if (q) {
       seen.current = Number.MAX_SAFE_INTEGER; // don't scroll for deep links
-      runQuery(q);
+      void runQuery(q);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -153,6 +172,7 @@ function Console({ scope }: { scope: QueryScope }) {
   return (
     <Grid columns={{ base: 1, lg: 12 }} gap="large" className="pt-2">
       <Stack gap="large" className="min-w-0 lg:col-span-8">
+        <SubmitOutcome result={saveOutcome} />
         {scope === "platform" && (
           <Alert tone="info" title="Platform scope">Your queries are limited to platform-health and configuration data — never customer-identifiable financial detail — unless separately entitled (§6.13).</Alert>
         )}
@@ -169,7 +189,7 @@ function Console({ scope }: { scope: QueryScope }) {
             />
           </Stack>
         ) : (
-          conversation.map((h) => <Exchange key={h.id} record={h} result={answerQuery(h.question, scope, data)} onSave={() => setSaving(h.question)} />)
+          conversation.map((h) => <Exchange key={h.id} record={h} result={h.status === "answered" ? answerQuery(h.question, scope, data) : h.status === "refused" ? { status: "refused", intent: h.intent, reason: h.reason ?? "Outside your query scope." } : { status: "unknown", reason: h.reason ?? "Not understood." }} onSave={() => setSaving(h.question)} />)
         )}
         <div ref={endRef} />
 
@@ -243,13 +263,13 @@ function Console({ scope }: { scope: QueryScope }) {
                   <List variant="unordered" spacing="xsmall" items={d.items.map((i) => <Text key={i} as="span" variant="small" tone="muted">{i}</Text>)} />
                 </div>
               ))}
-              <Text variant="caption" tone="subtle">Model: {MODEL_VERSION}. Queries logged to the audit trail: {audit7.filter((a) => a.entityType === "AI query").length}.</Text>
+              <Text variant="caption" tone="subtle">Model: {model}. Queries logged to the audit trail: {audit7.filter((a) => a.entityType === "AI query").length}.</Text>
             </Stack>
           </CardContent>
         </Card>
       </Stack>
 
-      <SaveQueryModal question={saving} onClose={() => setSaving(null)} />
+      <SaveQueryModal question={saving} onClose={() => setSaving(null)} onDone={setSaveOutcome} />
     </Grid>
   );
 }
@@ -295,6 +315,7 @@ function ChartView({ chart }: { chart: ChartSpec }) {
 }
 
 function AnswerCard({ answer, record, onSave }: { answer: Answer; record: QueryRecord; onSave: () => void }) {
+  const model = useRule<string>(aiKeys.modelVersion);
   const columns: DataTableColumn<(string | number)[]>[] = answer.table
     ? answer.table.columns.map((c, i) => ({ id: `c${i}`, header: c, accessor: (r) => r[i], numeric: answer.table!.numeric?.[i], sortable: answer.table!.rows.length > 5 }))
     : [];
@@ -302,7 +323,7 @@ function AnswerCard({ answer, record, onSave }: { answer: Answer; record: QueryR
     <AiInsightCard
       kind="insight"
       title={answer.title}
-      model={MODEL_VERSION}
+      model={model}
       generatedAt={dateTime(record.askedAt)}
       confidence={answer.confidence}
       paragraphs={answer.narrative.filter(Boolean)}
@@ -334,11 +355,11 @@ function AnswerCard({ answer, record, onSave }: { answer: Answer; record: QueryR
   );
 }
 
-function SaveQueryModal({ question, onClose }: { question: string | null; onClose: () => void }) {
+function SaveQueryModal({ question, onClose, onDone }: { question: string | null; onClose: () => void; onDone: (r: SubmitResult) => void }) {
   const user = useSession((s) => s.user);
-  const saveQuery = useAi((s) => s.saveQuery);
   const audit = useAuditLog();
-  const [cadence, setCadence] = useState<SavedQuery["cadence"]>("Weekly");
+  const cadences = useRule<string[]>(aiKeys.cadences);
+  const [cadence, setCadence] = useState<SavedQuery["cadence"]>(cadences[0] ?? "");
   const [recipients, setRecipients] = useState("");
   return (
     <Modal
@@ -350,22 +371,32 @@ function SaveQueryModal({ question, onClose }: { question: string | null; onClos
         <div className="flex justify-end gap-2">
           <Button variant="tertiary" onClick={onClose}>Cancel</Button>
           <Button
-            onClick={() => {
-              const q: SavedQuery = { id: `SQ-${Date.now().toString(36).toUpperCase()}`, question: question!, cadence, createdBy: user?.name ?? "", createdAt: DEMO_NOW.toISOString(), recipients: recipients.trim() || (user?.email ?? "") };
-              saveQuery(q);
-              audit("Saved AI query as scheduled report", "AI query schedule", q.id, undefined, `${q.cadence} · ${q.question}`);
+            onClick={async () => {
+              const q: SavedQuery = { id: newId("SQ"), question: question!, cadence, createdBy: user?.name ?? "", createdAt: DEMO_NOW.toISOString(), recipients: recipients.trim() || (user?.email ?? "") };
+              const r = await submitOperation<SavedQuery>("ai.schedule.create", {
+                title: `Scheduled AI report (${q.cadence}): ${q.question}`,
+                subject: { type: "AiSchedule", id: q.id, title: q.question, href: "/ai/log" },
+                payload: q,
+                summary: [
+                  { label: "Question", value: q.question },
+                  { label: "Cadence", value: q.cadence },
+                  { label: "Recipients", value: q.recipients },
+                ],
+              });
+              if (r.ok) audit("Requested scheduled AI report", "AI query schedule", q.id, undefined, `${q.cadence} · ${q.question} · ${r.instance.id}`);
+              onDone(r);
               setRecipients("");
               onClose();
             }}
           >
-            Save schedule
+            Submit for approval
           </Button>
         </div>
       }
     >
       <Stack gap="medium">
         <Field label="Cadence" htmlFor="sq-cadence">
-          <Select id="sq-cadence" value={cadence} onChange={(e) => setCadence(e.target.value as SavedQuery["cadence"])} options={["Daily", "Weekly", "Monthly"].map((v) => ({ value: v, label: v }))} />
+          <Select id="sq-cadence" value={cadence} onChange={(e) => setCadence(e.target.value as SavedQuery["cadence"])} options={cadences.map((v) => ({ value: v, label: v }))} />
         </Field>
         <Field label="Recipients" htmlFor="sq-rec" optional description="Named officers only — never a generic distribution list. Defaults to you.">
           <Input id="sq-rec" value={recipients} onChange={(e) => setRecipients(e.target.value)} placeholder={user?.email} />
@@ -378,14 +409,16 @@ function SaveQueryModal({ question, onClose }: { question: string | null; onClos
 const statusTones = { "Pending sign-off": "warning", "Signed off": "success", Rejected: "danger" } as const;
 
 function ActivityTab() {
-  const items = useAiActivity();
-  const role = useRole();
-  const user = useSession((s) => s.user);
-  const signOff = useAi((s) => s.signOff);
-  const audit = useAuditLog();
-  const decide = (a: AiActivity, status: "Signed off" | "Rejected") => {
-    signOff(a.id, { status, by: user?.name ?? "", at: DEMO_NOW.toISOString() });
-    audit(status === "Signed off" ? "Signed off AI output" : "Rejected AI output", "AI output", a.id, "Pending sign-off", status);
+  const all = useAiActivity();
+  const { actor } = useScope();
+  const [scopeView, setScopeView] = useState<"all" | "mine">("all");
+  const [outcome, setOutcome] = useState<SubmitResult | null>(null);
+  /** "Mine": outputs my role is accountable for. */
+  const mine = all.filter((a) => a.accountable === actor.roleId);
+  const items = scopeView === "mine" ? mine : all;
+  const decide = async (a: AiActivity, decision: "Signed off" | "Rejected") => {
+    const r = await submitAiSignOff({ activityId: a.id, item: a.item, module: a.module, href: a.href, decision, accountable: a.accountable });
+    setOutcome(r);
   };
   const columns: DataTableColumn<AiActivity>[] = [
     { id: "item", header: "AI output", accessor: "item", searchable: true, cell: (a) => <div><div className="font-medium text-fg">{a.item}</div><div className="font-mono text-xs text-fg-subtle">{a.id} · {a.entity}</div></div> },
@@ -394,17 +427,17 @@ function ActivityTab() {
     { id: "module", header: "Module", accessor: "module", sortable: true },
     { id: "confidence", header: "Confidence", numeric: true, accessor: (a) => Math.round(a.confidence * 100), cell: (a) => `${Math.round(a.confidence * 100)}%` },
     { id: "accountable", header: "Sign-off by", accessor: (a) => roleById[a.accountable].name, sortable: true },
-    { id: "status", header: "Status", accessor: "status", sortable: true, cell: (a) => <div><StatusBadge status={a.status} tones={statusTones} />{a.decidedBy && <div className="mt-1 text-xs text-fg-subtle">{a.decidedBy}</div>}</div> },
+    { id: "status", header: "Status", accessor: "status", sortable: true, cell: (a) => <div className="flex flex-col items-start gap-1"><StatusBadge status={a.status} tones={statusTones} />{a.decidedBy && <div className="text-xs text-fg-subtle">{a.decidedBy}</div>}<PendingBadge subjectType="AiOutput" subjectId={a.id} /></div> },
     {
       id: "act",
       header: "",
       exportable: false,
       cell: (a) => (
         <div className="flex justify-end gap-2">
-          {a.status === "Pending sign-off" && role?.id === a.accountable ? (
+          {a.status === "Pending sign-off" && actor.roleId === a.accountable ? (
             <>
-              <Button size="small" onClick={() => decide(a, "Signed off")}>Sign off</Button>
-              <Button size="small" variant="tertiary" onClick={() => decide(a, "Rejected")}>Reject</Button>
+              <Button size="small" onClick={() => void decide(a, "Signed off")}>Sign off</Button>
+              <Button size="small" variant="tertiary" onClick={() => void decide(a, "Rejected")}>Reject</Button>
             </>
           ) : (
             <Button size="small" variant="text" as={Link} href={a.href}>Open</Button>
@@ -418,6 +451,7 @@ function ActivityTab() {
       <Alert tone="info" title="Human sign-off before any workflow effect">
         AI output is always labelled AI-drafted or AI-flagged, is fully editable, and needs the accountable role’s sign-off — the AI never auto-approves a credit decision or auto-books a provisioning entry (§6.12).
       </Alert>
+      <SubmitOutcome result={outcome} appliedText="Recorded through the Operations workflow (no extra approval steps configured)." />
       <Grid columns={{ base: 1, sm: 3 }} gap="medium">
         {(["Pending sign-off", "Signed off", "Rejected"] as const).map((s) => (
           <Card key={s} variant="filled" padding="small">
@@ -426,16 +460,32 @@ function ActivityTab() {
           </Card>
         ))}
       </Grid>
+      <div className="flex justify-end">
+        <SegmentedControl
+          label="Activity scope"
+          size="small"
+          value={scopeView}
+          onChange={setScopeView}
+          options={[
+            { value: "all", label: `All outputs (${all.length})` },
+            { value: "mine", label: `Mine to sign off (${mine.length})` },
+          ]}
+        />
+      </div>
       <DataTable label="AI drafts and flags across modules" columns={columns} data={items} getRowId={(a) => a.id} searchable searchPlaceholder="Search AI outputs" filters={[{ id: "kind", label: "Label" }, { id: "module", label: "Module" }, { id: "status", label: "Status" }]} exportFilename="ai-activity.csv" />
     </Stack>
   );
 }
 
 function QueryLogTab() {
-  const history = useAi((s) => s.history);
+  const all = useAi((s) => s.history);
   const saved = useAi((s) => s.saved);
   const removeSaved = useAi((s) => s.removeSaved);
   const audit = useAuditLog();
+  const { actor } = useScope();
+  const [scopeView, setScopeView] = useState<"all" | "mine">("all");
+  const mine = all.filter((h) => h.askedById === actor.id);
+  const history = scopeView === "mine" ? mine : all;
   const logCols: DataTableColumn<QueryRecord>[] = [
     { id: "askedAt", header: "When", accessor: (h) => dateTime(h.askedAt), sortValue: (h) => h.askedAt, sortable: true },
     { id: "askedBy", header: "Who", accessor: "askedBy", sortable: true, cell: (h) => <div><div>{h.askedBy}</div><div className="text-xs text-fg-subtle">{roleById[h.roleId as RoleId]?.name ?? h.roleId}</div></div> },
@@ -446,6 +496,18 @@ function QueryLogTab() {
   return (
     <Grid columns={{ base: 1, lg: 3 }} gap="large" className="pt-2">
       <div className="min-w-0 lg:col-span-2">
+        <div className="mb-3 flex justify-end">
+          <SegmentedControl
+            label="Query log scope"
+            size="small"
+            value={scopeView}
+            onChange={setScopeView}
+            options={[
+              { value: "all", label: `All queries (${all.length})` },
+              { value: "mine", label: `My queries (${mine.length})` },
+            ]}
+          />
+        </div>
         <DataTable label="Query log" caption="Every query is also written to the immutable audit trail (§10.1)." columns={logCols} data={[...history].reverse()} getRowId={(h) => h.id} searchable searchPlaceholder="Search questions" filters={[{ id: "status", label: "Outcome" }]} exportFilename="nlq-query-log.csv" emptyState={<EmptyState icon={<Bot aria-hidden />} title="No queries yet" description="Ask a question in the console." />} />
       </div>
       <Card>
@@ -463,7 +525,7 @@ function QueryLogTab() {
                   <div className="text-sm font-medium text-fg">{s.question}</div>
                   <Text variant="caption" tone="subtle">{s.cadence} · to {s.recipients} · by {s.createdBy}</Text>
                   <div className="mt-2 flex justify-end">
-                    <Button size="small" variant="text" onClick={() => { removeSaved(s.id); audit("Removed scheduled AI query", "AI query schedule", s.id, s.cadence, undefined); }}>Remove</Button>
+                    <Button size="small" variant="text" onClick={() => { removeSaved(s.id); audit("Removed scheduled AI query", "AI query schedule", s.id, s.cadence, undefined); publish("ai.schedule.removed", { module: AI, subject: { type: "AiSchedule", id: s.id, title: s.question, href: "/ai/log" } }); }}>Remove</Button>
                   </div>
                 </div>
               ))}

@@ -6,6 +6,7 @@ import { dateTime } from "@/lib/format";
 import { roleById } from "@/lib/rbac/roles";
 import { toActivityItem } from "../view-models";
 import type { AppCtx } from "./context";
+import { addComment } from "../actions";
 
 export function CommentsTab({ c }: { c: AppCtx }) {
   return (
@@ -21,8 +22,9 @@ export function CommentsTab({ c }: { c: AppCtx }) {
             c.roleId
               ? (body) => {
                   const comment = { id: `${c.app.id}-c${Date.now().toString(36)}`, authorId: c.me.id, authorName: c.me.name, roleId: c.roleId!, body, at: new Date().toISOString() };
-                  c.patchExtra({ comments: [...c.comments, comment] });
-                  c.log("Added comment", undefined, body.slice(0, 80));
+                  void addComment(c.app.id, body, c.users).then((r) => {
+                    if (r.ok) c.patchExtra({ comments: [...c.comments, comment] });
+                  });
                 }
               : undefined
           }

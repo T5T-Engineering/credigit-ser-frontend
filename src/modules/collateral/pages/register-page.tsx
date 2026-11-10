@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
-import { addYears } from "date-fns";
+import { BellRing, Plus } from "lucide-react";
 import {
+  Alert,
   Button,
   Card,
   CardDescription,
@@ -19,6 +19,7 @@ import {
   Input,
   MiniBarList,
   Modal,
+  SegmentedControl,
   Select,
   Stack,
   StatCard,
@@ -29,15 +30,18 @@ import {
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { useRole } from "@/lib/auth/session";
-import { useDbActions, useFacilities, useLookups } from "@/lib/data/hooks";
-import { newId } from "@/lib/data/store";
+import { useFacilities, useLookups } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
-import type { Collateral, CollateralType } from "@/lib/data/types";
+import { useDb } from "@/lib/data/store";
+import type { CollateralType } from "@/lib/data/types";
 import { date, moneyShort, number, pct } from "@/lib/format";
-import { useAuditLog } from "@/modules/monitoring/audit";
+import { useMyApprovalQueue } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
 import { daysBetween } from "@/modules/monitoring/logic";
 import { moTones } from "../data";
-import { collateralAbilities, haircutFor, perfectionTones } from "../logic";
+import { buildCollateralAlerts, collateralAbilities, haircutFor, perfectionTones } from "../logic";
+import { registerCollateral, requestVerification, sendReminders } from "../service";
 import { useCollateralView, type CollateralView } from "../store";
 
 type Row = CollateralView & { obligorName: string; alert: string };
@@ -62,6 +66,13 @@ export function CollateralRegisterPage() {
   const role = useRole();
   const can = collateralAbilities(role?.id);
   const [adding, setAdding] = useState(false);
+  const facilities = useFacilities();
+  const { actor } = useScope();
+  const queue = useMyApprovalQueue(actor);
+  const insWarn = useRule<number>("collateral.insurance.warningDays");
+  const minCoverPct = useRule<number>("collateral.margin.minCoverPct");
+  const [scope, setScope] = useState<"all" | "mine">("all");
+  const [message, setMessage] = useState<string | null>(null);
 
   const rows: Row[] = useMemo(
     () =>
@@ -73,17 +84,32 @@ export function CollateralRegisterPage() {
             ? "Perfection defective"
             : ins !== undefined && ins < 0
               ? "Insurance expired"
-              : ins !== undefined && ins <= 30
+              : ins !== undefined && ins <= insWarn
                 ? "Insurance expiring"
                 : c.type !== "Quoted shares" && c.type !== "Cash / lien on deposit" && reval < 0
                   ? "Revaluation overdue"
-                  : c.type === "Quoted shares" && c.exposure > 0 && c.cover < 1
+                  : c.type === "Quoted shares" && c.exposure > 0 && c.cover * 100 < minCoverPct
                     ? "Margin shortfall"
                     : "None";
         return { ...c, obligorName: obligor.get(c.obligorId)?.name ?? c.obligorId, alert };
       }),
-    [view, obligor],
+    [view, obligor, insWarn, minCoverPct],
   );
+
+  /** "Needs my action": records whose next step belongs to the signed-in role, or with an operation awaiting me. */
+  const awaitingMe = useMemo(() => new Set(queue.filter((i) => i.operationType.startsWith("collateral.")).map((i) => i.subject.id)), [queue]);
+  const needsMe = (r: Row) => {
+    if (awaitingMe.has(r.id)) return true;
+    if (can.manage) return r.verification.status !== "Verified" || r.perfection === "Documentation" || r.perfection === "Registration" || r.alert.startsWith("Insurance") || r.alert === "Revaluation overdue" || r.alert === "Margin shortfall";
+    if (can.legal) return r.perfection === "Not started" || r.perfection === "Search in progress" || r.perfection === "Defective" || (!r.legalRecord.signOff && (r.perfection === "Registration" || r.perfection === "Perfected"));
+    return false;
+  };
+  const shown = scope === "mine" ? rows.filter(needsMe) : rows;
+
+  const remind = () => {
+    const n = sendReminders(buildCollateralAlerts(view, facilities, (c) => (c as (typeof view)[number]).mtm), view);
+    setMessage(n ? `${n} reminder${n === 1 ? "" : "s"} sent to the collateral and credit administration officers.` : "No new insurance or revaluation reminders to send — every open alert has already been notified.");
+  };
 
   const secured = rows.filter((r) => r.exposure > 0);
   const totalMv = rows.reduce((a, r) => a + (r.mtm ?? r.marketValue), 0);
@@ -151,13 +177,19 @@ export function CollateralRegisterPage() {
       description="Collateral register — type, valuation, valuer, perfection status and haircut weighting (PRD §6.5, §6.7.3). Quoted shares are valued from the SEC/CSCS connector."
       actions={
         can.manage ? (
-          <Button iconBefore={<Plus aria-hidden className="size-4" />} onClick={() => setAdding(true)}>
-            Register collateral
-          </Button>
+          <Stack direction="horizontal" gap="small">
+            <Button variant="secondary" iconBefore={<BellRing aria-hidden className="size-4" />} onClick={remind}>
+              Send reminders
+            </Button>
+            <Button iconBefore={<Plus aria-hidden className="size-4" />} onClick={() => setAdding(true)}>
+              Register collateral
+            </Button>
+          </Stack>
         ) : undefined
       }
     >
       <Stack gap="large">
+        {message && <Alert tone="info">{message}</Alert>}
         <Grid columns={{ base: 2, lg: 4 }} gap="medium">
           <StatCard label="Market value" value={moneyShort(totalMv)} hint={`${number(rows.length)} items · shares at MTM`} />
           <StatCard label="Forced-sale value" value={moneyShort(totalFsv)} hint="Independent valuers" />
@@ -196,9 +228,19 @@ export function CollateralRegisterPage() {
           </Card>
         </Grid>
 
+        <SegmentedControl
+          label="Show"
+          size="small"
+          value={scope}
+          onChange={setScope}
+          options={[
+            { value: "all", label: `All collateral (${rows.length})` },
+            { value: "mine", label: `Needs my action (${rows.filter(needsMe).length})` },
+          ]}
+        />
         <DataTable
           label="Collateral register"
-          data={rows}
+          data={shown}
           columns={columns}
           getRowId={(r) => r.id}
           getRowHref={(r) => `/collateral/item?id=${r.id}`}
@@ -236,8 +278,7 @@ export function CollateralRegisterPage() {
 function RegisterModal({ onClose }: { onClose: () => void }) {
   const facilities = useFacilities();
   const { obligor } = useLookups();
-  const { upsert, update } = useDbActions();
-  const audit = useAuditLog();
+  const [error, setError] = useState<string | null>(null);
   const live = facilities.filter((f) => f.status === "Active" || f.status === "Pending disbursement");
   const [facilityId, setFacilityId] = useState(live[0]?.id ?? "");
   const [type, setType] = useState<CollateralType>("Legal mortgage");
@@ -247,27 +288,17 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
   const [valuer, setValuer] = useState("");
   const fac = facilities.find((f) => f.id === facilityId);
   const valid = fac && description.trim() && Number(mv) > 0 && Number(fsv) > 0 && valuer.trim();
-  const save = () => {
+  const haircut = haircutFor({ type, description });
+  const save = async () => {
     if (!fac) return;
-    const id = newId("COL");
-    const c: Collateral = {
-      id,
-      obligorId: fac.obligorId,
-      type,
-      description: description.trim(),
-      marketValue: Number(mv),
-      forcedSaleValue: Number(fsv),
-      haircutPct: haircutFor({ type, haircutPct: 50, description }).pct,
-      valuedAt: DEMO_NOW.toISOString(),
-      valuer: valuer.trim(),
-      nextRevaluation: addYears(DEMO_NOW, 3).toISOString(),
-      perfection: "Not started",
-      facilityIds: [fac.id],
-      location: obligor.get(fac.obligorId)?.state,
-    };
-    upsert("collateral", c);
-    update("facilities", fac.id, { collateralIds: [...fac.collateralIds, id] });
-    audit({ action: "Registered collateral", entityType: "Collateral", entityId: id, after: `${type} · ${moneyShort(c.marketValue)} · linked to ${fac.id}` });
+    const r = registerCollateral({ facilityId: fac.id, type, description, marketValue: Number(mv), forcedSaleValue: Number(fsv), valuer });
+    if (!r.ok) return setError(r.reason);
+    // The opening valuation goes to Middle Office for independent verification (Operations workflow).
+    const created = useDb.getState().collateral.find((c) => c.id === r.id);
+    if (created) {
+      const v = await requestVerification(created);
+      if (!v.ok) return setError(v.reason);
+    }
     onClose();
   };
   return (
@@ -289,11 +320,16 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
       }
     >
       <Form onSubmit={(e) => (e.preventDefault(), valid && save())}>
+        {error && (
+          <Alert tone="danger" title="Not registered">
+            {error}
+          </Alert>
+        )}
         <Grid columns={{ base: 1, md: 2 }} gap="medium">
           <Field label="Secures facility" htmlFor="col-fac" required>
             <Select id="col-fac" value={facilityId} onChange={(e) => setFacilityId(e.target.value)} options={live.slice(0, 200).map((f) => ({ value: f.id, label: `${f.id} — ${obligor.get(f.obligorId)?.name} (${f.product})` }))} />
           </Field>
-          <Field label="Collateral type" htmlFor="col-type" required description={`Haircut: ${haircutFor({ type, haircutPct: 50, description }).source === "PRD §6.7.3" ? `${haircutFor({ type, haircutPct: 50, description }).pct}% (PRD §6.7.3)` : "tenant parameter"}`}>
+          <Field label="Collateral type" htmlFor="col-type" required description={`Haircut: ${haircut.pct}% (${haircut.prdCategory ? `${haircut.source} — ${haircut.prdCategory}` : "tenant parameter"})`}>
             <Select id="col-type" value={type} onChange={(e) => setType(e.target.value as CollateralType)} options={collateralTypes.map((t) => ({ value: t, label: t }))} />
           </Field>
           <Field label="Description" htmlFor="col-desc" required>

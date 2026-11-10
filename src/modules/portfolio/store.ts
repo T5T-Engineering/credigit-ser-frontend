@@ -1,14 +1,22 @@
 "use client";
 
 /**
- * Portfolio & MIS module store (prototype). Persists report runs, uploaded plan versions and sign-offs in this
- * browser. BACKEND SEAM: replace actions with API mutations (report-generation jobs, plan ingestion endpoint).
+ * Portfolio & MIS module store (prototype). Persists report runs, uploaded plan versions, plan approval state,
+ * AI-output adoptions and the last-evaluated limit status in this browser.
+ *
+ * Approval outcomes (release, plan approval, adoption, sign-off) are written ONLY by the Operations workflow
+ * `apply` / `onReject` handlers in ./platform.ts and ../executive/platform.ts — never directly by pages.
+ * BACKEND SEAM: replace actions with API mutations (report-generation jobs, plan ingestion endpoint).
  */
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { PlanVersion } from "./data";
+import type { LimitStatus } from "./selectors";
 
-export type ReportRunStatus = "Generating" | "AI-drafted — awaiting validation" | "Validated" | "Released";
+export type ReportRunStatus = "Generating" | "AI-drafted — awaiting validation" | "Validated" | "Submitted for release" | "Returned for correction" | "Released";
+
+/** Approval state of a plan version (seeded versions start from their seed status). */
+export type PlanStatus = "Board-approved" | "Approved" | "Draft" | "Uploaded — validating" | "Submitted for approval" | "Rejected" | "Superseded";
 
 export type ReportRun = {
   id: string;
@@ -17,13 +25,18 @@ export type ReportRun = {
   status: ReportRunStatus;
   generatedAt: string;
   generatedBy: string;
+  generatedById?: string;
   validatedBy?: string;
+  validatedById?: string;
   releasedBy?: string;
   releasedAt?: string;
   reconciled: boolean;
+  /** Operations instance that released (or is releasing) this run. */
+  operationId?: string;
+  returnReason?: string;
 };
 
-export type SignOff = { by: string; role: string; at: string };
+export type SignOff = { by: string; role: string; at: string; operationId?: string };
 
 type PortfolioState = {
   runs: ReportRun[];
@@ -31,12 +44,21 @@ type PortfolioState = {
   activePlanId: string;
   /** Sign-offs keyed by AI output id (e.g. "exec-summary", "projection-commentary"). */
   signOffs: Record<string, SignOff>;
+  /** Plan approval state by plan id (overrides the seed status). */
+  planStatus: Record<string, PlanStatus>;
+  /** Plan version approved through Operations and in force (variance baseline). */
+  operativePlanId: string;
+  /** Last evaluated status per monitored limit (to raise alerts on transitions only). */
+  limitStates: Record<string, LimitStatus>;
   addRun: (run: ReportRun) => void;
   updateRun: (id: string, changes: Partial<ReportRun>) => void;
   addPlan: (plan: PlanVersion) => void;
   setActivePlan: (id: string) => void;
   signOff: (key: string, s: SignOff) => void;
   clearSignOff: (key: string) => void;
+  setPlanStatus: (id: string, status: PlanStatus) => void;
+  setOperativePlan: (id: string) => void;
+  setLimitState: (id: string, status: LimitStatus) => void;
 };
 
 /** Seed report runs so the catalogue shows history on first load. */
@@ -59,6 +81,9 @@ export const usePortfolioStore = create<PortfolioState>()(
       uploadedPlans: [],
       activePlanId: "PLAN-2026-V1",
       signOffs: {},
+      planStatus: {},
+      operativePlanId: "PLAN-2026-V1",
+      limitStates: {},
       addRun: (run) => set((s) => ({ runs: [run, ...s.runs] })),
       updateRun: (id, changes) => set((s) => ({ runs: s.runs.map((r) => (r.id === id ? { ...r, ...changes } : r)) })),
       addPlan: (plan) => set((s) => ({ uploadedPlans: [plan, ...s.uploadedPlans], activePlanId: plan.id })),
@@ -70,12 +95,15 @@ export const usePortfolioStore = create<PortfolioState>()(
           delete next[key];
           return { signOffs: next };
         }),
+      setPlanStatus: (id, status) => set((s) => ({ planStatus: { ...s.planStatus, [id]: status } })),
+      setOperativePlan: (id) => set({ operativePlanId: id }),
+      setLimitState: (id, status) => set((s) => ({ limitStates: { ...s.limitStates, [id]: status } })),
     }),
     {
       name: "credigit.ser.portfolio",
       version: 1,
       storage: createJSONStorage(() => localStorage),
-      partialize: ({ runs, uploadedPlans, activePlanId, signOffs }) => ({ runs, uploadedPlans, activePlanId, signOffs }),
+      partialize: ({ runs, uploadedPlans, activePlanId, signOffs, planStatus, operativePlanId, limitStates }) => ({ runs, uploadedPlans, activePlanId, signOffs, planStatus, operativePlanId, limitStates }),
     },
   ),
 );

@@ -1,71 +1,77 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
 import { UserCheck } from "lucide-react";
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, DataTable, Select, Stack, Text } from "@credigit/web-ui";
-import { decideAccessRequest, usePendingAccessRequests } from "@/lib/auth/accounts";
-import { roleById, roles, type RoleId } from "@/lib/rbac/roles";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, DataTable, Stack, Text, TextLink } from "@credigit/web-ui";
+import { useOperationsStore, type OperationInstance } from "@/lib/platform/operations";
 import { ago } from "@/lib/format";
+import { useMemo } from "react";
+import { operationHref } from "./operation-ui";
+import { roleName } from "./rule-keys";
 
-/** Self-registered users waiting for a System Admin to approve them and confirm their role (PRD §4: admin-controlled users). */
+type AccessPayload = { email: string; name: string; roleId: string };
+
+/**
+ * Self-registered people waiting for access (PRD §4: admin-controlled named users). Access requests are
+ * "access.request" operations: they're approved or rejected — and the role confirmed — in Operations, not here.
+ */
 export function AccessRequests({ canEdit }: { canEdit: boolean }) {
-  const pending = usePendingAccessRequests();
-  const [roleFor, setRoleFor] = useState<Record<string, RoleId>>({});
+  const instances = useOperationsStore((s) => s.instances);
+  const pending = useMemo(() => instances.filter((i) => i.operationType === "access.request" && (i.status === "Pending" || i.status === "In progress")), [instances]);
   if (pending.length === 0) return null;
+
+  const payload = (i: OperationInstance) => i.payload as AccessPayload;
+  const fact = (i: OperationInstance, label: string) => i.summary.find((s) => s.label === label)?.value ?? "—";
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
         <div>
           <CardTitle>
             <span className="inline-flex items-center gap-2">
               <UserCheck aria-hidden className="size-5" /> Access requests <Badge tone="warning">{pending.length}</Badge>
             </span>
           </CardTitle>
-          <CardDescription>People who registered and verified their email. Approving creates a named user with the role you confirm.</CardDescription>
+          <CardDescription>People who registered and verified their email. A System Admin approves each request — and confirms the role — in Operations.</CardDescription>
         </div>
+        <TextLink href="/operations" as={Link}>
+          Operations → Approvals
+        </TextLink>
       </CardHeader>
       <CardContent>
         <DataTable
           label="Access requests"
           data={pending}
-          getRowId={(a) => a.email}
+          getRowId={(i) => i.id}
+          paginate={false}
           columns={[
-            { id: "name", header: "Name", accessor: (a) => a.name, cell: (a) => <Stack gap="none"><Text variant="small" className="font-semibold">{a.name}</Text><Text variant="caption" tone="muted">{a.email}</Text></Stack> },
-            { id: "institution", header: "Institution / branch", accessor: (a) => `${a.institution ?? ""} · ${a.branch ?? ""}` },
-            { id: "requested", header: "Requested role", accessor: (a) => (a.requestedRoleId ? roleById[a.requestedRoleId].name : "—") },
             {
-              id: "role",
-              header: "Approve as",
-              cell: (a) => (
-                <Select
-                  size="small"
-                  aria-label={`Role for ${a.name}`}
-                  disabled={!canEdit}
-                  value={roleFor[a.email] ?? a.requestedRoleId ?? "account-officer"}
-                  onChange={(e) => setRoleFor((m) => ({ ...m, [a.email]: e.target.value as RoleId }))}
-                  options={roles.map((r) => ({ value: r.id, label: r.name }))}
-                />
+              id: "name",
+              header: "Name",
+              accessor: (i) => payload(i).name,
+              cell: (i) => (
+                <Stack gap="none">
+                  <Text variant="small" className="font-semibold">
+                    {payload(i).name}
+                  </Text>
+                  <Text variant="caption" tone="muted">
+                    {payload(i).email}
+                  </Text>
+                </Stack>
               ),
             },
-            { id: "when", header: "Requested", accessor: (a) => ago(a.createdAt) },
+            { id: "institution", header: "Institution / branch", accessor: (i) => fact(i, "Institution / branch") },
+            { id: "requested", header: "Requested role", accessor: (i) => roleName(payload(i).roleId) },
+            { id: "when", header: "Requested", accessor: (i) => i.requestedAt, cell: (i) => ago(i.requestedAt) },
             {
               id: "actions",
-              header: "",
+              header: <span className="sr-only">Actions</span>,
               align: "end",
-              cell: (a) =>
-                canEdit ? (
-                  <div className="flex justify-end gap-2">
-                    <Button size="small" onClick={() => decideAccessRequest(a.email, "approve", roleFor[a.email] ?? a.requestedRoleId)}>
-                      Approve
-                    </Button>
-                    <Button size="small" variant="tertiary" onClick={() => decideAccessRequest(a.email, "reject")}>
-                      Reject
-                    </Button>
-                  </div>
-                ) : (
-                  <Text variant="caption" tone="muted">System Admin only</Text>
-                ),
+              cell: (i) => (
+                <Button size="small" variant={canEdit ? "primary" : "tertiary"} as={Link} href={operationHref(i.id)}>
+                  {canEdit ? "Review in Operations" : "View request"}
+                </Button>
+              ),
             },
           ]}
         />

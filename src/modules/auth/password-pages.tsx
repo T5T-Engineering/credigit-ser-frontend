@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { KeyRound, LockKeyhole, MailQuestion } from "lucide-react";
 import { Alert, AuthCard, Button, Card, CardContent, Field, Input, Logo, PasswordInput, PasswordStrength, Stack, Text, evaluatePassword } from "@credigit/web-ui";
-import { changePassword, requestPasswordReset, resetPassword } from "@/lib/auth/accounts";
+import { changePassword, passwordPolicy, requestPasswordReset, resetPassword } from "@/lib/auth/accounts";
 import { useSession } from "@/lib/auth/session";
+import { getRule } from "@/lib/platform/rules";
 import { ModulePage } from "@/components/module-page";
 import { date } from "@/lib/format";
 import { useAccounts } from "@/lib/auth/accounts";
@@ -73,7 +74,7 @@ function NewPasswordFields({ value, confirm, onValue, onConfirm, errors }: { val
       <Field label="New password" required error={errors.password}>
         <PasswordInput autoComplete="new-password" value={value} onChange={(e) => onValue(e.target.value)} />
       </Field>
-      <PasswordStrength value={value} />
+      <PasswordStrength value={value} rules={passwordPolicy()} />
       <Field label="Confirm new password" required error={errors.confirm}>
         <PasswordInput autoComplete="new-password" value={confirm} onChange={(e) => onConfirm(e.target.value)} />
       </Field>
@@ -83,7 +84,7 @@ function NewPasswordFields({ value, confirm, onValue, onConfirm, errors }: { val
 
 function validateNew(password: string, confirm: string) {
   const errors: { password?: string; confirm?: string } = {};
-  if (!evaluatePassword(password).valid) errors.password = "Your password doesn't meet all the requirements.";
+  if (!evaluatePassword(password, passwordPolicy()).valid) errors.password = "Your password doesn't meet all the requirements.";
   if (confirm !== password) errors.confirm = "Passwords don't match.";
   return errors;
 }
@@ -202,7 +203,7 @@ export function ChangePasswordPage() {
               <LockKeyhole aria-hidden className="size-6 text-accent-text" />
               <Text variant="subtitle">Password security</Text>
               <Text tone="muted">
-                Passwords must meet your institution&apos;s policy. After 5 wrong attempts the account locks until the password is reset. Every sign-in also needs a one-time code.
+                Passwords must meet your institution&apos;s policy. After {getRule<number>("auth.passwordMaxAttempts")} wrong attempts the account locks until the password is reset. Every sign-in also needs a one-time code.
               </Text>
               {account?.passwordChangedAt ? (
                 <Text variant="small" tone="muted">

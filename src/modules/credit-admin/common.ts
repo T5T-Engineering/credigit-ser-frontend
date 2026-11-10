@@ -8,6 +8,8 @@ import type { Tone } from "@credigit/web-ui";
 import { useSession } from "@/lib/auth/session";
 import { useDbActions } from "@/lib/data/hooks";
 import { DEMO_NOW, createSeed, type SeedData } from "@/lib/data/seed";
+import { useDb } from "@/lib/data/store";
+import type { Actor as PlatformActor } from "@/lib/platform/scope";
 import type { RoleId } from "@/lib/rbac/roles";
 
 /** Deterministic 32-bit hash of a string (stable mock variation per record). */
@@ -74,6 +76,11 @@ export function useAuditLog() {
       log({ ...actor, action, entityType, entityId, before, after }),
     [log, actor],
   );
+}
+
+/** Audit outside React (Operations `apply` handlers, event subscribers): who, what, before/after. */
+export function auditAs(actor: PlatformActor, action: string, entityType: string, entityId: string, before?: string, after?: string) {
+  useDb.getState().log({ actorId: actor.id, actorName: actor.name, roleId: actor.roleId, action, entityType, entityId, before, after });
 }
 
 export const facilityStatusTones: Record<string, Tone> = {

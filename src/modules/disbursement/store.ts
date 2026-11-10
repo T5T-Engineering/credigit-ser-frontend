@@ -10,9 +10,12 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { Application, Facility, Obligor, User } from "@/lib/data/types";
+import { getDefinition } from "@/lib/platform/operations";
+import { getRule } from "@/lib/platform/rules";
+import type { RoleId } from "@/lib/rbac/roles";
 import { addDaysIso, hash, pristineSeed, rand } from "../credit-admin/common";
 
-export type DisbursementStatus = "Awaiting authorisation" | "Authorised" | "Returned to maker" | "Rejected";
+export type DisbursementStatus = "Awaiting authorisation" | "Authorised" | "Returned to maker" | "Rejected" | "Withdrawn";
 
 export type Disbursement = {
   id: string;
@@ -34,16 +37,16 @@ export type Disbursement = {
   comment?: string;
   stepUpVerified?: boolean;
   cbaReference?: string;
+  /** Operations workflow request for the Checker step. */
+  operationId?: string;
 };
 
-/** High-value threshold above which authorisation needs step-up re-authentication (PRD §4.2). Parameter — set by tenant. */
-export const STEP_UP_THRESHOLD = 100_000_000;
+export const disbursementTones = { "Awaiting authorisation": "info", Authorised: "success", "Returned to maker": "warning", Rejected: "danger", Withdrawn: "neutral" } as const;
 
-export const disbursementTones = { "Awaiting authorisation": "info", Authorised: "success", "Returned to maker": "warning", Rejected: "danger" } as const;
-
-/** Demo NUBAN for an obligor's operating account (10 digits, deterministic). */
+/** Demo NUBAN for an obligor's operating account (deterministic; length from business rules). */
 export function accountFor(obligor: Obligor | undefined): string {
-  return obligor ? String(1_000_000_000 + (hash(obligor.id) % 8_999_999_999)).slice(0, 10) : "";
+  const len = getRule<number>("disbursement.accountNumberLength");
+  return obligor ? String(10 ** (len - 1) + (hash(obligor.id) % (9 * 10 ** (len - 1) - 1))).slice(0, len) : "";
 }
 
 function seedRequests(facilities: Facility[], apps: Application[], obligors: Obligor[], users: User[]): Disbursement[] {
@@ -71,7 +74,7 @@ function seedRequests(facilities: Facility[], apps: Application[], obligors: Obl
       checkerId: checker?.id ?? "USR-DOC",
       checkerName: checker?.name ?? "Disbursement Checker",
       decidedAt: at,
-      stepUpVerified: amount > STEP_UP_THRESHOLD,
+      stepUpVerified: amount > getRule<number>("approvals.stepUpThresholdNgn"),
       cbaReference: `CBA/DSB/${String(hash(f.id + n) % 1_000_000).padStart(6, "0")}`,
     };
   };
@@ -146,10 +149,11 @@ export function conflictedPeople(app: Application | undefined): Map<string, stri
   return m;
 }
 
-export function makerChecks(userId: string, roleId: string, app: Application | undefined): SodCheck[] {
+export function makerChecks(userId: string, roleId: RoleId, app: Application | undefined): SodCheck[] {
   const conflicts = conflictedPeople(app);
+  const isMaker = getRule<RoleId[]>("disbursement.makerRoles").includes(roleId);
   return [
-    { id: "role", label: "Role is Disbursement Maker", ok: roleId === "disbursement-maker", detail: roleId === "disbursement-maker" ? "Execution authority within the approved amount" : "Only a Disbursement Maker can prepare a disbursement" },
+    { id: "role", label: "Role is Disbursement Maker", ok: isMaker, detail: isMaker ? "Execution authority within the approved amount" : "Only a Disbursement Maker can prepare a disbursement" },
     {
       id: "initiator",
       label: "Not the initiator or recommender",
@@ -159,10 +163,16 @@ export function makerChecks(userId: string, roleId: string, app: Application | u
   ];
 }
 
-export function checkerChecks(userId: string, roleId: string, app: Application | undefined, request: Disbursement | undefined): SodCheck[] {
+/** Roles on the Checker step of the Operations workflow (tenant-configurable). */
+export function checkerRoles(): RoleId[] {
+  return getDefinition("disbursement.authorise").steps.flatMap((s) => s.approverRoles);
+}
+
+export function checkerChecks(userId: string, roleId: RoleId, app: Application | undefined, request: Disbursement | undefined): SodCheck[] {
   const conflicts = conflictedPeople(app);
+  const isChecker = checkerRoles().includes(roleId);
   return [
-    { id: "role", label: "Role is Disbursement Checker", ok: roleId === "disbursement-checker", detail: roleId === "disbursement-checker" ? "Authorisation authority" : "Only a Disbursement Checker can authorise" },
+    { id: "role", label: "Role is Disbursement Checker", ok: isChecker, detail: isChecker ? "Authorisation authority (Operations workflow Checker step)" : "Only a Disbursement Checker can authorise" },
     {
       id: "maker",
       label: "Different person from the Maker",

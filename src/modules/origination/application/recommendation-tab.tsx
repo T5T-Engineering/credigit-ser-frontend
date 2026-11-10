@@ -13,7 +13,6 @@ import {
   CardHeader,
   CardTitle,
   Checkbox,
-  DecisionPanel,
   DescriptionList,
   Field,
   Grid,
@@ -29,7 +28,11 @@ import {
 } from "@credigit/web-ui";
 import { dateTime, moneyShort, pct } from "@/lib/format";
 import { isBreach, limitGate, recommendationLabel, recommendationLabelTones, recommendationTones } from "../logic";
-import { originationParams as P, PARAMS_HREF, TENANT_PARAM_NOTE } from "../params";
+import { inGroup, PARAMS_HREF, TENANT_PARAM_NOTE } from "../params";
+import { getRule } from "@/lib/platform/rules";
+import { usePendingFor } from "@/lib/platform/operations";
+import { adoptRecommendation, recordChange, recordLimitGate, requestLimitException, SUBJECT } from "../actions";
+import { PendingOperation } from "./operation-status";
 import type { Application } from "@/lib/data/types";
 import { useObligors, useSectors } from "@/lib/data/hooks";
 import type { AppCtx } from "./context";
@@ -52,21 +55,17 @@ export function RecommendationTab({ c }: { c: AppCtx }) {
 function EngineCard({ c }: { c: AppCtx }) {
   const { app, engine } = c;
   const { toast } = useToast();
-  const canAdopt = c.canEdit && (c.roleId === "credit-analyst" || c.roleId === "cco") && ["Analysis", "Recommendation", "Approval"].includes(app.stage);
+  const pendingOverride = usePendingFor(SUBJECT.override, app.id);
+  const minReason = getRule<number>("origination.override.minReasonLength");
+  const canAdopt = c.canEdit && inGroup("recommenders", c.roleId) && ["Analysis", "Recommendation", "Approval"].includes(app.stage) && !pendingOverride;
   const [choice, setChoice] = useState<Rec>(c.extra.override ? (c.extra.override.to as Rec) : engine.recommendation);
   const [reason, setReason] = useState("");
   const override = choice !== engine.recommendation;
-  const adopt = () => {
-    const before = app.recommendation ? recommendationLabel[app.recommendation] : undefined;
-    if (override) {
-      c.patchExtra({ override: { from: engine.recommendation, to: choice, reason: reason.trim(), by: c.me.name, at: new Date().toISOString() } });
-      c.change({ recommendation: choice }, `Overrode system recommendation — reason: ${reason.trim()}`, recommendationLabel[engine.recommendation], recommendationLabel[choice]);
-    } else {
-      c.patchExtra({ override: undefined });
-      c.change({ recommendation: choice }, "Adopted system recommendation", before, recommendationLabel[choice]);
-    }
+  const adopt = async () => {
+    const res = await adoptRecommendation(app.id, engine.recommendation, choice, reason);
+    if (!res.ok) { toast({ title: "Not recorded", description: res.reason, tone: "danger" }); return; }
     setReason("");
-    toast({ title: "Recommendation recorded", description: recommendationLabel[choice], tone: "success" });
+    toast({ title: override ? "Override requested" : "Recommendation recorded", description: res.message ?? recommendationLabel[choice], tone: "success" });
   };
   return (
     <Card>
@@ -91,19 +90,20 @@ function EngineCard({ c }: { c: AppCtx }) {
               { label: "Override", value: c.extra.override ? `${recommendationLabel[c.extra.override.from as Rec]} → ${recommendationLabel[c.extra.override.to as Rec]} by ${c.extra.override.by}` : "None", hint: c.extra.override ? `Reason: ${c.extra.override.reason} · ${dateTime(c.extra.override.at)}` : undefined },
             ]}
           />
+          {pendingOverride ? <PendingOperation instance={pendingOverride} title="Override awaiting review" actionLabels={{ approve: "Approve override", decline: "Reject override" }} /> : null}
           {canAdopt ? (
             <Stack gap="small">
               <Field label="Recommendation to adopt" htmlFor="rec-choice">
                 <Select id="rec-choice" value={choice} onChange={(e) => setChoice(e.target.value as Rec)} options={recs.map((r) => ({ value: r, label: `${recommendationLabel[r]}${r === engine.recommendation ? " (system)" : ""}` }))} />
               </Field>
               {override ? (
-                <Field label="Override reason" htmlFor="rec-reason" required description="Mandatory — captured in the audit trail.">
+                <Field label="Override reason" htmlFor="rec-reason" required description="Mandatory — captured in the audit trail. The override is reviewed in Operations before it takes effect.">
                   <Textarea id="rec-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
                 </Field>
               ) : null}
               <div>
-                <Button disabled={override && reason.trim().length < 10} onClick={adopt}>
-                  {override ? "Override and record" : "Adopt recommendation"}
+                <Button disabled={override && reason.trim().length < minReason} onClick={adopt}>
+                  {override ? "Request override" : "Adopt recommendation"}
                 </Button>
               </div>
             </Stack>
@@ -118,9 +118,14 @@ function LimitGateCard({ c }: { c: AppCtx }) {
   const { app, gate } = c;
   const obligors = useObligors();
   const sectors = useSectors();
-  const canRun = c.canEdit && c.roleId === "credit-analyst" && ["Draft", "Documents", "Analysis", "Recommendation"].includes(app.stage);
-  const canException = c.canEdit && (c.roleId === "cro" || c.roleId === "board") && isBreach(app.limitGate) && !c.extra.exception && ["Recommendation", "Approval", "Analysis"].includes(app.stage);
-  const tone = (u: number) => (u > 1 ? "danger" : u > 0.85 ? "warning" : "success");
+  const { toast } = useToast();
+  const pendingException = usePendingFor(SUBJECT.exception, app.id);
+  const [justification, setJustification] = useState("");
+  const canRun = c.canEdit && inGroup("analysts", c.roleId) && ["Draft", "Documents", "Analysis", "Recommendation"].includes(app.stage);
+  const canRequestException = c.canEdit && (inGroup("analysts", c.roleId) || inGroup("initiators", c.roleId)) && isBreach(app.limitGate) && !c.extra.exception && !pendingException && ["Recommendation", "Approval", "Analysis"].includes(app.stage);
+  const warn = getRule<number>("origination.limitGate.warnUtilisationPct") / 100;
+  const tone = (u: number) => (u > 1 ? "danger" : u > warn ? "warning" : "success");
+  const minComment = getRule<number>("operations.minCommentLength");
   return (
     <Card>
       <CardHeader>
@@ -133,9 +138,10 @@ function LimitGateCard({ c }: { c: AppCtx }) {
             <Button
               variant="tertiary"
               iconBefore={<RefreshCw aria-hidden />}
-              onClick={() => {
+              onClick={async () => {
                 const g = limitGate({ id: app.id, product: app.product, amount: app.amount, obligorId: app.obligorId }, c.obligor, c.facilities, obligors, sectors);
-                c.change({ limitGate: g.result }, "Ran portfolio-limit gate", app.limitGate, g.result);
+                const res = await recordLimitGate(app.id, g.result);
+                if (!res.ok) toast({ title: "Check not recorded", description: res.reason, tone: "danger" });
               }}
             >
               Run check
@@ -153,10 +159,10 @@ function LimitGateCard({ c }: { c: AppCtx }) {
           <DescriptionList
             columns={2}
             items={[
-              { label: "Existing obligor exposure", value: moneyShort(gate.obligorExposure), mono: true, hint: "Off-balance-sheet lines weighted 33⅓% (CBN 3.2(b))" },
+              { label: "Existing obligor exposure", value: moneyShort(gate.obligorExposure), mono: true, hint: `Off-balance-sheet lines weighted ${getRule<number>("origination.offBalanceWeightPct")}% (CBN 3.2(b))` },
               { label: "This request (weighted)", value: moneyShort(gate.weightedRequest), mono: true },
-              { label: "Single-obligor limit", value: moneyShort(gate.solLimit), mono: true, hint: `${P.singleObligorPct}% of shareholders' funds ${moneyShort(P.shareholdersFunds)} (${TENANT_PARAM_NOTE.toLowerCase()})` },
-              { label: "Large exposure", value: gate.largeExposure ? "Yes — ≥ 10% of shareholders' funds" : "No", hint: "CBN 3.2(d)" },
+              { label: "Single-obligor limit", value: moneyShort(gate.solLimit), mono: true, hint: `${getRule<number>("origination.singleObligorPct")}% of shareholders' funds ${moneyShort(getRule<number>("platform.shareholdersFundsNgn"))} (${TENANT_PARAM_NOTE.toLowerCase()})` },
+              { label: "Large exposure", value: gate.largeExposure ? `Yes — ≥ ${getRule<number>("origination.largeExposurePct")}% of shareholders' funds` : "No", hint: "CBN 3.2(d)" },
               { label: "Sector limit", value: `${gate.sector?.limitPct ?? "—"}% of loan book`, hint: `Book ${moneyShort(gate.bookSize)} · tenant sectoral policy (CBN 3.3)` },
               { label: "Sector utilisation", value: pct(gate.sectorUtilisation * 100), mono: true },
             ]}
@@ -173,27 +179,35 @@ function LimitGateCard({ c }: { c: AppCtx }) {
               </Alert>
             ) : (
               <Alert tone="danger" title="Breach — progression blocked">
-                Routed to the CRO / Board for an informed exception decision rather than silently failing.
+                Needs an informed exception decision from the CRO / Board (Operations → Approvals) rather than silently failing.
               </Alert>
             )
           ) : null}
-          {canException ? (
-            <DecisionPanel
-              title="Limit exception decision"
-              actions={["approve", "decline"]}
-              actionLabels={{ approve: "Grant exception", decline: "Refuse — decline request" }}
-              onDecide={({ decision, comment }) => {
-                const granted = decision === "approve";
-                c.patchExtra({ exception: { decision: granted ? "granted" : "refused", by: c.me.name, at: new Date().toISOString(), comment } });
-                if (granted) c.log(`Granted limit exception (${app.limitGate})`, app.limitGate, "Exception granted");
-                else c.change({ stage: "Declined" }, `Refused limit exception (${app.limitGate})`, app.stage, "Declined");
-              }}
-            />
+          {pendingException ? <PendingOperation instance={pendingException} title="Limit exception awaiting decision" actionLabels={{ approve: "Grant exception", decline: "Refuse — decline request" }} /> : null}
+          {canRequestException ? (
+            <Stack gap="small">
+              <Field label="Exception justification" htmlFor="exc-justification" required description={`Sent to the exception approvers through Operations. At least ${minComment} characters.`}>
+                <Textarea id="exc-justification" rows={2} value={justification} onChange={(e) => setJustification(e.target.value)} />
+              </Field>
+              <div>
+                <Button
+                  variant="secondary"
+                  disabled={justification.trim().length < minComment}
+                  onClick={async () => {
+                    const res = await requestLimitException(app.id, justification.trim());
+                    if (res.ok) setJustification("");
+                    toast(res.ok ? { title: "Exception requested", description: "Routed to the CRO / Board in Operations.", tone: "success" } : { title: "Not requested", description: res.reason, tone: "danger" });
+                  }}
+                >
+                  Request limit exception
+                </Button>
+              </div>
+            </Stack>
           ) : null}
           <Text variant="caption" tone="muted">
             Limits are maintained in{" "}
             <TextLink as={Link} href={PARAMS_HREF}>
-              Admin → Rules & parameters
+              Operations → Business rules
             </TextLink>
             .
           </Text>
@@ -205,7 +219,7 @@ function LimitGateCard({ c }: { c: AppCtx }) {
 
 function CovenantCard({ c }: { c: AppCtx }) {
   const { app, clauses } = c;
-  const canTag = c.canEdit && (c.roleId === "credit-analyst" || c.roleId === "cco") && ["Analysis", "Recommendation", "Approval"].includes(app.stage);
+  const canTag = c.canEdit && inGroup("recommenders", c.roleId) && ["Analysis", "Recommendation", "Approval"].includes(app.stage);
   const [selected, setSelected] = useState<Set<string>>(() => {
     const saved = clauses.filter((k) => app.covenants.includes(k.text));
     // Nothing from the library saved yet → start from the auto-tagged suggestion.
@@ -228,10 +242,10 @@ function CovenantCard({ c }: { c: AppCtx }) {
                 Select all suggested
               </Button>
               <Button
-                onClick={() => {
+                onClick={async () => {
                   const texts = [...custom, ...clauses.filter((k) => selected.has(k.id)).map((k) => k.text)];
-                  c.change({ covenants: texts }, "Tagged covenants and conditions for offer letter", `${app.covenants.length} clauses`, `${texts.length} clauses`);
-                  toast({ title: "Covenants saved", description: `${texts.length} clauses will flow to the offer letter.`, tone: "success" });
+                  const res = await recordChange(app.id, { point: "covenants.tag", event: "origination.covenants.tagged", action: "Tagged covenants and conditions for offer letter", changes: { covenants: texts }, before: `${app.covenants.length} clauses`, after: `${texts.length} clauses`, payload: { count: texts.length } });
+                  toast(res.ok ? { title: "Covenants saved", description: `${texts.length} clauses will flow to the offer letter.`, tone: "success" } : { title: "Not saved", description: res.reason, tone: "danger" });
                 }}
               >
                 Save to application

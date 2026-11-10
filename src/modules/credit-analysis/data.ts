@@ -9,6 +9,7 @@
  * All figures are fictional demo data. BACKEND SEAM: replace these generators with API reads
  * (External Data Feeds layer §5.5, Other-bank statements connector §5.3, Bureau/CRMS connector §5.2).
  */
+import { getRule } from "@/lib/platform/rules";
 import type { CorpusMetricKey } from "./parameters";
 
 // ---------------- Deterministic random ----------------
@@ -318,7 +319,10 @@ const ngxProfiles: SectorProfile[] = [
   },
 ];
 
-/** Tenant sector → nearest NGX sector classification(s) (§6.2.8). `null` = no listed proxy. */
+/**
+ * Tenant sector → nearest NGX sector classification(s) (§6.2.8). `null` = no listed proxy.
+ * `primary` is the DEFAULT of business rule `credit-analysis.ngxMapping.<sectorId>` — read it with `ngxPrimaryFor()`.
+ */
 export const sectorMapping: Record<string, { primary: string | null; secondary?: string; note?: string }> = {
   "SEC-AGR": { primary: "NGX-AGR" },
   "SEC-MIN": { primary: "NGX-NAT" },
@@ -391,17 +395,22 @@ function slope(values: number[]): number {
  * by the PRD.
  */
 export function classifyLifeCycle(companies: number, cagr: number, marginTrend: number): { stage: LifeCycleStage; reason: string } {
-  if (companies <= 5 && cagr >= 8)
+  const introMaxCompanies = getRule<number>("credit-analysis.lifeCycle.introMaxCompanies");
+  const introMinCagr = getRule<number>("credit-analysis.lifeCycle.introMinCagrPct");
+  const growthMinCagr = getRule<number>("credit-analysis.lifeCycle.growthMinCagrPct");
+  const declineBelowCagr = getRule<number>("credit-analysis.lifeCycle.declineBelowCagrPct");
+  const declineBelowMargin = getRule<number>("credit-analysis.lifeCycle.declineBelowMarginTrendPp");
+  if (companies <= introMaxCompanies && cagr >= introMinCagr)
     return {
       stage: "Introduction",
       reason: `Few listed companies (${companies}) and fast real growth (${cagr.toFixed(1)}% p.a.)`,
     };
-  if (cagr >= 4)
+  if (cagr >= growthMinCagr)
     return {
       stage: "Growth",
       reason: `Sustained real revenue growth of ${cagr.toFixed(1)}% p.a. over five years`,
     };
-  if (cagr < 0 && marginTrend < 0)
+  if (cagr < declineBelowCagr && marginTrend < declineBelowMargin)
     return {
       stage: "Decline",
       reason: `Real revenue contracting (${cagr.toFixed(1)}% p.a.) with net margins falling ${Math.abs(marginTrend).toFixed(2)} pp a year`,
@@ -435,32 +444,45 @@ function buildSector(p: SectorProfile): NgxSector {
   const last5 = series.slice(-5);
   const trailingCagr = round(last5.reduce((a, y) => a + y.realRevenueGrowth, 0) / 5);
   const marginTrend = round(slope(last5.map((y) => y.netMargin)), 2);
-  const lc = classifyLifeCycle(p.companies, trailingCagr, marginTrend);
+  // Life-cycle stage is classified at read time so tenant thresholds (business rules) apply immediately.
   return {
     ...p,
     series,
     trailingCagr,
     marginTrend,
-    lifeCycle: lc.stage,
-    lifeCycleReason: lc.reason,
+    get lifeCycle() {
+      return classifyLifeCycle(p.companies, trailingCagr, marginTrend).stage;
+    },
+    get lifeCycleReason() {
+      return classifyLifeCycle(p.companies, trailingCagr, marginTrend).reason;
+    },
   };
 }
 
 export const ngxSectors: NgxSector[] = ngxProfiles.map(buildSector);
 export const ngxById = new Map(ngxSectors.map((s) => [s.id, s]));
 
+/** Business-rule value meaning "no listed proxy" in `credit-analysis.ngxMapping.*`. */
+export const NO_NGX_PROXY = "none";
+
+export const ngxMappingRuleKey = (sectorId: string) => `credit-analysis.ngxMapping.${sectorId}`;
+
+/** Primary NGX classification for a tenant sector (business rule; null = no listed proxy). */
+export function ngxPrimaryFor(sectorId: string): string | null {
+  if (!sectorMapping[sectorId]) return null;
+  const v = getRule<string>(ngxMappingRuleKey(sectorId));
+  return v && v !== NO_NGX_PROXY ? v : null;
+}
+
 export const ngxForSector = (sectorId: string): NgxSector | undefined => {
-  const m = sectorMapping[sectorId];
-  return m?.primary ? ngxById.get(m.primary) : undefined;
+  const primary = ngxPrimaryFor(sectorId);
+  return primary ? ngxById.get(primary) : undefined;
 };
 
-/** Stage → Life-Cycle Stage parameter score (demo band; tenant-configurable). */
-export const lifeCycleScore: Record<LifeCycleStage, number> = {
-  Introduction: 6.5,
-  Growth: 8.5,
-  Maturity: 5,
-  Decline: 2,
-};
+export const lifeCycleStages: LifeCycleStage[] = ["Introduction", "Growth", "Maturity", "Decline"];
+
+/** Stage → Life-Cycle Stage parameter score (business rule `credit-analysis.lifeCycleScore.<stage>`). */
+export const lifeCycleScore = (stage: LifeCycleStage) => getRule<number>(`credit-analysis.lifeCycleScore.${stage}`);
 export const lifeCycleTone: Record<LifeCycleStage, "info" | "success" | "neutral" | "danger"> = {
   Introduction: "info",
   Growth: "success",
@@ -548,8 +570,8 @@ export const macroSnapshot = {
 /** Fictional other banks used in the demo (other-bank statements via §5.3; per-bank breakdown via §5.2). */
 const otherBanks = ["Meridian Trust Bank", "Kestrel Commercial Bank", "Atlas Union Bank", "Savanna Microfinance Bank", "Coastline Bank"];
 
-/** Tenant parameter: share at or above which a wallet share counts as "high" (demo 50%). */
-export const WALLET_HIGH_THRESHOLD = 0.5;
+/** Share (0–1) at or above which a wallet share counts as "high" — business rule `credit-analysis.sow.highSharePct`. */
+export const walletHighThreshold = () => getRule<number>("credit-analysis.sow.highSharePct") / 100;
 
 export type WalletPosition = "Primary Relationship" | "Untapped Lending Opportunity" | "Credit-Concentration Watch" | "Marginal Relationship";
 
@@ -587,8 +609,9 @@ export const walletPositionMeta: Record<
 };
 
 export function walletPosition(turnoverShare: number, loanShare: number): WalletPosition {
-  const ht = turnoverShare >= WALLET_HIGH_THRESHOLD;
-  const hl = loanShare >= WALLET_HIGH_THRESHOLD;
+  const high = walletHighThreshold();
+  const ht = turnoverShare >= high;
+  const hl = loanShare >= high;
   return ht && hl ? "Primary Relationship" : ht ? "Untapped Lending Opportunity" : hl ? "Credit-Concentration Watch" : "Marginal Relationship";
 }
 
@@ -635,7 +658,7 @@ export function walletFor(obligorId: string, verifiedTurnover: number, tenantOut
   const otherOutstandingTotal = tenantOutstanding > 0 ? Math.round(tenantOutstanding * (1 / lShareTarget - 1)) : Math.round(verifiedTurnover * (0.05 + r() * 0.2));
   const lines: BankLine[] = [
     {
-      bank: "Harbourline Bank (tenant)",
+      bank: "Harbourline Bank (tenant)", // TD-122: should come from the tenant profile
       tenant: true,
       creditTurnover: tenantTurnover,
       outstanding: tenantOutstanding,

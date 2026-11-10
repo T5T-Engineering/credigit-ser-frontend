@@ -36,16 +36,21 @@ import {
   type ChecklistStatus,
   type DataTableColumn,
 } from "@credigit/web-ui";
-import { useCan, useSession } from "@/lib/auth/session";
+import { useCan } from "@/lib/auth/session";
 import { useAudit, useCollateral, useDocuments, useSectors, useUsers } from "@/lib/data/hooks";
+import { usePendingFor } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import type { RoleId } from "@/lib/rbac/roles";
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { Collateral } from "@/lib/data/types";
 import { date, dateTime, money, moneyShort, pct } from "@/lib/format";
 import { useClauses } from "../../offer-letters/store";
-import { addDaysIso, cbnClassTones, demoNowIso, facilityStatusTones, hash, rand, useAuditLog } from "../common";
+import { requestRelease, setConditionStatus, type ActionResult } from "../actions";
+import { addDaysIso, cbnClassTones, facilityStatusTones, hash, rand } from "../common";
 import { covenantsFor, covenantTones, useFacilityRow, useWaivers, waiverStatus, type CovenantRow, type FacilityRow } from "../logic";
+import { PendingOperationNotice } from "../operations-ui";
 import { facilityClassOf } from "../register";
-import { useCreditAdminStore } from "../store";
 import { toActivityItem, toDocumentItem, waiverStatusTones } from "../view";
 
 export function FacilityPage() {
@@ -60,14 +65,17 @@ function FacilityRecord() {
   const id = useSearchParams().get("id");
   const row = useFacilityRow(id);
   const allowed = useCan("credit-admin");
-  const roleId = useSession((s) => s.roleId);
-  const isCad = roleId === "credit-admin-officer";
-  const release = useCreditAdminStore((s) => s.release);
-  const log = useAuditLog();
-  const user = useSession((s) => s.user);
+  const canEdit = useCan("credit-admin", "edit");
+  const { actor } = useScope();
+  const confirmerRoles = useRule<RoleId[]>("credit-admin.cpConfirmerRoles");
+  const requesterRoles = useRule<RoleId[]>("credit-admin.requesterRoles");
+  const isCad = canEdit && confirmerRoles.includes(actor.roleId);
+  const canRaise = canEdit && requesterRoles.includes(actor.roleId);
+  const pendingRelease = usePendingFor("Facility", id ?? "-");
   const [tab, setTab] = useState("overview");
   const [confirm, setConfirm] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
+  const [result, setResult] = useState<ActionResult | null>(null);
 
   if (!allowed) return <PermissionGate allowed={false} description="Your role doesn't include credit administration. Switch role from the user menu to see it.">{null}</PermissionGate>;
   if (!row) {
@@ -88,11 +96,10 @@ function FacilityRecord() {
   const { facility, obligor, app, letter } = row;
   const allCleared = row.cps.length > 0 && row.cleared === row.cps.length;
   const pending = facility.status === "Pending disbursement";
-  const canRelease = isCad && pending && allCleared && !row.released;
+  const canRelease = isCad && pending && allCleared && !row.released && !pendingRelease;
 
-  const doRelease = () => {
-    release(facility.id, user?.name ?? "Credit Administration", demoNowIso());
-    log("Released file for disbursement", "Facility", facility.id, "Conditions cleared — awaiting release", "Released to Domestic Operations");
+  const doRelease = async () => {
+    setResult(await requestRelease(row));
     setConfirm(false);
   };
 
@@ -116,20 +123,26 @@ function FacilityRecord() {
         ]}
         actions={
           <>
-            {isCad ? (
+            {canRaise ? (
               <Button as={Link} href={`/credit-admin/waivers/?facility=${facility.id}&new=1`} variant="tertiary">
                 Raise waiver / deferral
               </Button>
             ) : null}
             {isCad && pending ? (
               <Button iconBefore={<Unlock aria-hidden className="size-4" />} disabled={!canRelease} onClick={() => setConfirm(true)}>
-                {row.released ? "Released for disbursement" : "Release for disbursement"}
+                {row.released ? "Released for disbursement" : pendingRelease ? "Release awaiting confirmation" : "Release for disbursement"}
               </Button>
             ) : null}
           </>
         }
       />
 
+      {result ? (
+        <Alert tone={result.ok ? "success" : "danger"} title={result.ok ? "Done" : "Not done"} action={<Button size="small" variant="text" onClick={() => setResult(null)}>Dismiss</Button>}>
+          {result.ok ? result.message : result.reason}
+        </Alert>
+      ) : null}
+      {pendingRelease ? <PendingOperationNotice instance={pendingRelease} title="Release for disbursement awaiting confirmation" /> : null}
       {pending ? (
         row.released ? (
           <Alert tone="success" title="File released for disbursement (PRD §6.1.1 step 15)">
@@ -138,7 +151,7 @@ function FacilityRecord() {
               Open disbursement queue
             </TextLink>
           </Alert>
-        ) : allCleared ? (
+        ) : pendingRelease ? null : allCleared ? (
           <Alert tone="info" title="All conditions precedent are cleared">
             Credit Administration confirms the customer meets all approved terms and conditions, then releases the file to Domestic Operations for disbursement.
           </Alert>
@@ -170,14 +183,14 @@ function FacilityRecord() {
         open={confirm}
         onOpenChange={setConfirm}
         title="Release file for disbursement?"
-        description="Confirms the customer meets all approved terms and conditions (PRD §6.1.1 step 15). The facility moves to the Domestic Operations maker-checker queue."
+        description="Confirms the customer meets all approved terms and conditions (PRD §6.1.1 step 15). The release is confirmed through the Operations workflow; the facility then moves to the Domestic Operations maker-checker queue."
         footer={
           <>
             <Button variant="tertiary" onClick={() => setConfirm(false)}>
               Cancel
             </Button>
-            <Button iconBefore={<CheckCircle2 aria-hidden className="size-4" />} onClick={doRelease}>
-              Confirm release
+            <Button iconBefore={<CheckCircle2 aria-hidden className="size-4" />} onClick={() => void doRelease()}>
+              Request release
             </Button>
           </>
         }
@@ -323,16 +336,12 @@ function OverviewTab({ row, onPrint }: { row: FacilityRow; onPrint: () => void }
 }
 
 function ConditionsTab({ row, editable }: { row: FacilityRow; editable: boolean }) {
-  const setCp = useCreditAdminStore((s) => s.setCp);
-  const user = useSession((s) => s.user);
-  const log = useAuditLog();
   const waivers = useWaivers().filter((w) => w.facilityId === row.facility.id);
   const pending = row.facility.status === "Pending disbursement";
+  const [error, setError] = useState<string | null>(null);
 
   const onToggle = (id: string, status: ChecklistStatus) => {
-    const before = row.cps.find((c) => c.id === id)?.status;
-    setCp(row.cpKey, id, { status, byName: user?.name ?? "Credit Administration", at: demoNowIso() });
-    log(status === "met" ? "Confirmed condition precedent met" : "Reopened condition precedent", "Facility", row.facility.id, `${id}: ${before}`, `${id}: ${status}`);
+    void setConditionStatus(row, id, status).then((r) => setError(r.ok ? null : r.reason));
   };
 
   const items: ChecklistItem[] = row.cps.map((c) => ({
@@ -362,7 +371,13 @@ function ConditionsTab({ row, editable }: { row: FacilityRow; editable: boolean 
         )}
       </div>
       <Stack gap="medium">
+        {error ? (
+          <Alert tone="danger" title="Not saved">
+            {error}
+          </Alert>
+        ) : null}
         <Alert tone="info" title="What clears drawdown">
+
           A condition is cleared when it is <strong>met</strong>, <strong>waived</strong>, or <strong>deferred</strong> under an approved deferral (PRD §6.3.2). Waivers and deferrals are approved at the tier that approved the facility.
         </Alert>
         {!editable ? (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { RefreshCw } from "lucide-react";
 import {
@@ -12,7 +12,9 @@ import {
   CardTitle,
   DataTable,
   EmptyState,
+  Field,
   Grid,
+  Modal,
   MetricDelta,
   PhaseBadge,
   Sparkline,
@@ -27,16 +29,21 @@ import {
   TableRow,
   Text,
   TextLink,
+  Textarea,
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { useRole } from "@/lib/auth/session";
 import { useLookups } from "@/lib/data/hooks";
-import { date, dateTime, money, moneyShort, number, pct } from "@/lib/format";
-import { useActor, useAuditLog } from "@/modules/monitoring/audit";
+import { date, dateTime, moneyShort, number, pct } from "@/lib/format";
+import { useOperationsStore } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { PendingApproval } from "@/modules/monitoring/pending-approval";
+import { exceptionHref } from "@/modules/monitoring/service";
 import { useMonitoring } from "@/modules/monitoring/store";
 import { corporateActions, lienTones } from "../data";
-import { collateralAbilities, priceSeries, referencePrices } from "../logic";
+import { collateralAbilities, marginShortfall, priceSeries, referencePrices, requiredCover } from "../logic";
+import { raiseMarginCall, requestMarginRelease, setSimulatedPrices } from "../service";
 import { useCollateralStore, useCollateralView, useSharePrices, type CollateralView } from "../store";
 
 type Row = CollateralView & { obligorName: string; shortfall: number; topUp: number; callId?: string };
@@ -48,23 +55,33 @@ export function SharesPage() {
   const role = useRole();
   const can = collateralAbilities(role?.id);
   const store = useCollateralStore();
-  const raise = useMonitoring((s) => s.raise);
   const exceptions = useMonitoring((s) => s.exceptions);
-  const audit = useAuditLog();
-  const actor = useActor();
+  const instances = useOperationsStore((s) => s.instances);
+  const haircutPct = useRule<number>("collateral.haircut.quotedShares");
+  const minCoverPct = useRule<number>("collateral.margin.minCoverPct");
+  const minText = useRule<number>("collateral.legal.minOpinionLength");
   const canAct = can.manage || can.verify;
+  const [message, setMessage] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
+  const [releaseFor, setReleaseFor] = useState<Row | null>(null);
+  const [evidence, setEvidence] = useState("");
+  const pendingRelease = useMemo(
+    () => new Set(instances.filter((i) => i.operationType === "collateral.margin.release" && ["Pending", "In progress"].includes(i.status)).map((i) => i.subject.id)),
+    [instances],
+  );
 
   const rows: Row[] = useMemo(
     () =>
       view
         .filter((c) => c.type === "Quoted shares")
         .map((c) => {
-          const shortfall = c.exposure > 0 ? Math.max(0, c.exposure - c.adjusted) : 0;
+          const shortfall = marginShortfall(c.adjusted, c.exposure);
           const call = store.marginCalls[c.id];
-          const open = call && exceptions.find((e) => e.id === call.exceptionId && e.status !== "Resolved");
+          const open = call && !call.releasedAt && exceptions.find((e) => e.id === call.exceptionId && e.status !== "Resolved");
           return { ...c, obligorName: obligor.get(c.obligorId)?.name ?? c.obligorId, shortfall, topUp: Math.round(shortfall / (1 - c.haircutPct / 100)), callId: open ? call.exceptionId : undefined };
         }),
-    [view, obligor, store.marginCalls, exceptions],
+    // marginShortfall reads the margin rule at call time; minCoverPct re-runs it when the tenant value changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [view, obligor, store.marginCalls, exceptions, minCoverPct],
   );
 
   const tickers = Object.keys(referencePrices).filter((t) => rows.some((r) => r.ticker === t));
@@ -77,31 +94,25 @@ export function SharesPage() {
     const next: Record<string, number> = {};
     for (const [t, r] of Object.entries(referencePrices)) {
       const cur = prices[t] ?? r.price;
+      // TD-601: simulated CSCS feed — shock size is a simulator input, not a business rule.
       const shock = (Math.random() - 0.5) * 2 * r.vol * 1.5;
       next[t] = Math.round(cur * (1 + shock) * 100) / 100;
     }
-    store.setPrices(next);
-    audit({ action: "Refreshed share prices (simulated CSCS feed)", entityType: "Connector", entityId: "CON-CSCS", after: `${Object.keys(next).length} counters` });
+    setSimulatedPrices(next);
   };
-  const resetPrices = () => {
-    store.setPrices({});
-    audit({ action: "Reset simulated share prices to reference close", entityType: "Connector", entityId: "CON-CSCS" });
+  const resetPrices = () => setSimulatedPrices({});
+
+  const marginCall = async (r: Row) => {
+    const res = await raiseMarginCall(r);
+    setMessage(res.ok ? { tone: "success", text: `Margin call raised on ${r.id} — exception ${res.exceptionId} entered the escalation protocol.` } : { tone: "danger", text: res.reason });
   };
 
-  const marginCall = (r: Row) => {
-    const ex = raise({
-      type: "Share-collateral margin shortfall",
-      title: `Margin call — ${r.ticker}`,
-      detail: `${r.obligorName}: haircut-adjusted MTM of ${r.ticker} (${money(r.adjusted)}) covers ${pct(r.cover * 100, 0)} of the ${money(r.exposure)} exposure. Top-up of ${money(r.topUp)} market value required.`,
-      obligorId: r.obligorId,
-      facilityId: r.facilityIds[0],
-      collateralId: r.id,
-      amount: r.shortfall,
-      source: "Rule",
-      by: actor.name,
-    });
-    store.recordMarginCall(r.id, { by: actor.name, exceptionId: ex.id, topUp: r.topUp });
-    audit({ action: "Raised margin call / top-up request", entityType: "Collateral", entityId: r.id, after: `${ex.id} · top-up ${moneyShort(r.topUp)}` });
+  const release = async () => {
+    if (!releaseFor) return;
+    const res = await requestMarginRelease(releaseFor, evidence);
+    setMessage(res.ok ? { tone: "success", text: `Release of the margin call on ${releaseFor.id} submitted for cover verification (${res.operationId}).` } : { tone: "danger", text: res.reason });
+    setReleaseFor(null);
+    setEvidence("");
   };
 
   const columns: DataTableColumn<Row>[] = [
@@ -110,7 +121,7 @@ export function SharesPage() {
     { id: "ticker", header: "Ticker", accessor: "ticker", sortable: true, cell: (r) => <span className="font-mono">{r.ticker}</span> },
     { id: "units", header: "Units", accessor: "units", numeric: true, sortable: true, cell: (r) => number(r.units ?? 0) },
     { id: "mtm", header: "MTM", accessor: "mtm", numeric: true, sortable: true, cell: (r) => moneyShort(r.mtm ?? 0) },
-    { id: "adjusted", header: "After 20% haircut", accessor: "adjusted", numeric: true, sortable: true, cell: (r) => moneyShort(r.adjusted) },
+    { id: "adjusted", header: `After ${haircutPct}% haircut`, accessor: "adjusted", numeric: true, sortable: true, cell: (r) => moneyShort(r.adjusted) },
     { id: "exposure", header: "Exposure", accessor: "exposure", numeric: true, sortable: true, cell: (r) => moneyShort(r.exposure) },
     {
       id: "cover",
@@ -118,7 +129,7 @@ export function SharesPage() {
       accessor: "cover",
       numeric: true,
       sortable: true,
-      cell: (r) => (r.exposure > 0 ? <span className={r.cover < 1 ? "font-mono text-danger-strong" : "font-mono"}>{pct(r.cover * 100, 0)}</span> : "—"),
+      cell: (r) => (r.exposure > 0 ? <span className={r.cover * 100 < minCoverPct ? "font-mono text-danger-strong" : "font-mono"}>{pct(r.cover * 100, 0)}</span> : "—"),
     },
     { id: "lien", header: "Lien (CSCS)", accessor: "lien", sortable: true, cell: (r) => <StatusBadge status={r.lien ?? "—"} tones={lienTones} /> },
     {
@@ -130,11 +141,20 @@ export function SharesPage() {
         r.shortfall <= 0 ? (
           <StatusBadge status="Covered" tones={{ Covered: "success" }} />
         ) : r.callId ? (
-          <Stack gap="none">
+          <Stack gap="xsmall">
             <StatusBadge status="Call raised" tones={{ "Call raised": "warning" }} />
-            <TextLink as={Link} href="/monitoring/exceptions">
+            <TextLink as={Link} href={exceptionHref(r.callId)}>
               {r.callId}
             </TextLink>
+            {pendingRelease.has(r.id) ? (
+              <PendingApproval subjectType="Collateral" subjectId={r.id} compact />
+            ) : (
+              can.manage && (
+                <Button size="small" variant="tertiary" onClick={() => setReleaseFor(r)}>
+                  Release call
+                </Button>
+              )
+            )}
           </Stack>
         ) : canAct ? (
           <Button size="small" variant="danger" onClick={() => marginCall(r)}>
@@ -164,6 +184,11 @@ export function SharesPage() {
       }
     >
       <Stack gap="large">
+        {message && (
+          <Alert tone={message.tone} title={message.tone === "danger" ? "Not completed" : "Done"}>
+            {message.text}
+          </Alert>
+        )}
         <Alert tone="info" title={
             <>
               SEC / CSCS connector <PhaseBadge phase={2} className="ml-2 align-middle" />
@@ -174,8 +199,8 @@ export function SharesPage() {
         </Alert>
         <Grid columns={{ base: 2, lg: 4 }} gap="medium">
           <StatCard label="Share-backed collateral" value={number(rows.length)} hint={`${tickers.length} counters`} />
-          <StatCard label="Mark-to-market" value={moneyShort(mtm)} hint={`${moneyShort(adjusted)} after 20% haircut (PRD §6.7.3)`} />
-          <StatCard label="Exposure secured" value={moneyShort(exposure)} hint={`Cover ${pct((adjusted / Math.max(1, exposure)) * 100, 0)}`} tone={adjusted >= exposure ? "success" : "warning"} />
+          <StatCard label="Mark-to-market" value={moneyShort(mtm)} hint={`${moneyShort(adjusted)} after ${haircutPct}% haircut (PRD §6.7.3)`} />
+          <StatCard label="Exposure secured" value={moneyShort(exposure)} hint={`Cover ${pct((adjusted / Math.max(1, exposure)) * 100, 0)}`} tone={adjusted >= requiredCover(exposure) ? "success" : "warning"} />
           <StatCard label="Margin shortfalls" value={number(short.length)} hint={`${moneyShort(short.reduce((a, r) => a + r.topUp, 0))} top-up required`} tone="danger" />
         </Grid>
 
@@ -265,7 +290,7 @@ export function SharesPage() {
 
         <DataTable
           label="Share-backed positions"
-          caption="Margin call when haircut-adjusted MTM falls below the exposure it secures; raised through the PRD §6.4.4 escalation protocol."
+          caption={`Margin call when haircut-adjusted MTM covers less than ${minCoverPct}% of the exposure it secures (business rule); raised through the PRD §6.4.4 escalation protocol. Releases need cover verification in Operations.`}
           data={rows}
           columns={columns}
           getRowId={(r) => r.id}
@@ -281,6 +306,30 @@ export function SharesPage() {
           emptyState={<EmptyState title="No share-backed collateral" />}
         />
       </Stack>
+      {releaseFor && (
+        <Modal
+          open
+          onOpenChange={(o) => !o && (setReleaseFor(null), setEvidence(""))}
+          title="Release margin call"
+          description={`${releaseFor.id} · ${releaseFor.obligorName} · ${releaseFor.callId}`}
+          footer={
+            <>
+              <Button variant="tertiary" onClick={() => (setReleaseFor(null), setEvidence(""))}>
+                Cancel
+              </Button>
+              <Button onClick={release} disabled={evidence.trim().length < minText}>
+                Submit for verification
+              </Button>
+            </>
+          }
+        >
+          <Stack gap="medium">
+            <Field label="Top-up evidence" htmlFor="release-evidence" required description="Additional units lien-marked, cash top-up received or exposure reduced. Middle Office / Head of Risk verify restored cover before the call and its exception close.">
+              <Textarea id="release-evidence" rows={3} value={evidence} onChange={(e) => setEvidence(e.target.value)} />
+            </Field>
+          </Stack>
+        </Modal>
+      )}
     </ModulePage>
   );
 }

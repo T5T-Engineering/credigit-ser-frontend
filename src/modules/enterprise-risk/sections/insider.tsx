@@ -6,6 +6,8 @@ import { useCollateral, useFacilities, useObligors } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { Facility } from "@/lib/data/types";
 import { date, moneyShort, pct } from "@/lib/format";
+import { useRule } from "@/lib/platform/rules";
+import { ermKeys } from "../keys";
 import { insiderFlags, type Insider } from "../data";
 
 type Row = Facility & { obligorName: string; insider: Insider; secured: boolean; maturityBand: string; nonPerforming: boolean };
@@ -16,6 +18,7 @@ export function InsiderSection() {
   const obligors = useObligors();
   const facilities = useFacilities();
   const collateral = useCollateral();
+  const sigPct = useRule<number>(ermKeys.significantShareholdingPct);
   const flags = useMemo(() => insiderFlags(obligors, facilities), [obligors, facilities]);
 
   const rows: Row[] = useMemo(() => {
@@ -56,7 +59,7 @@ export function InsiderSection() {
 
   const columns: DataTableColumn<Row>[] = [
     { id: "obligor", header: "Obligor", accessor: "obligorName", searchable: true, cell: (r) => <div><div className="font-medium text-fg">{r.obligorName}</div><div className="font-mono text-xs text-fg-subtle">{r.obligorId} · {r.id}</div></div> },
-    { id: "insider", header: "Insider / relationship", accessor: (r) => `${r.insider.insider} — ${r.insider.relationship}`, cell: (r) => <div><div className="text-fg">{r.insider.insider}</div><div className="text-xs text-fg-subtle">{r.insider.relationship}{r.insider.holdingPct ? ` · ${r.insider.holdingPct}% holding` : ""}</div></div> },
+    { id: "insider", header: "Insider / relationship", accessor: (r) => `${r.insider.insider} — ${r.insider.relationship}`, cell: (r) => <div><div className="text-fg">{r.insider.insider}</div><div className="text-xs text-fg-subtle">{r.insider.relationship === "Significant shareholder" ? `Significant shareholder (≥${sigPct}%)` : r.insider.relationship}{r.insider.holdingPct ? ` · ${r.insider.holdingPct}% holding` : ""}</div></div> },
     { id: "product", header: "Facility", accessor: "product", sortable: true },
     { id: "outstanding", header: "Outstanding", numeric: true, sortable: true, accessor: "outstanding", cell: (r) => moneyShort(r.outstanding) },
     { id: "security", header: "Security", accessor: (r) => (r.secured ? "Secured" : "Unsecured") },
@@ -68,7 +71,7 @@ export function InsiderSection() {
   return (
     <Stack gap="large">
       <Alert tone="info" title="Flagged automatically from the Risk Data Spine">
-        Any facility to a director, significant shareholder (≥ 5% holding) or their related interest is flagged, and the CBN-mandated financial-statement disclosure fields are populated automatically. Insider links in this demo are fictional.
+        Any facility to a director, significant shareholder (≥ {sigPct}% holding) or their related interest is flagged, and the CBN-mandated financial-statement disclosure fields are populated automatically. Insider links in this demo are fictional.
       </Alert>
       <Grid columns={{ base: 1, sm: 3 }} gap="medium">
         <StatCard label="Aggregate insider-related credit" value={<span className="font-mono">{moneyShort(total)}</span>} hint={`${rows.length} facilities · ${flags.length} related parties`} />

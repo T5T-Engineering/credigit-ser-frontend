@@ -3,7 +3,7 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, FilePlus2, FileSearch, Pencil, Printer, RotateCcw, Scale, Send, Trash2 } from "lucide-react";
+import { CheckCircle2, FilePlus2, FileSearch, Pencil, Printer, RotateCcw, Send, ShieldCheck, Trash2 } from "lucide-react";
 import {
   ActivityFeed,
   AiDraftPanel,
@@ -39,16 +39,20 @@ import {
   type ChecklistItem,
   type StepItem,
 } from "@credigit/web-ui";
-import { useCan, useSession } from "@/lib/auth/session";
-import { useApplications, useCollateral, useDbActions, useFacilities, useObligors, useTenant, useUsers } from "@/lib/data/hooks";
+import { useCan } from "@/lib/auth/session";
+import { useApplications, useCollateral, useFacilities, useObligors, useTenant, useUsers } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { newId } from "@/lib/data/store";
 import type { Application, Collateral, Obligor } from "@/lib/data/types";
 import { date, dateTime, money } from "@/lib/format";
-import { roleById } from "@/lib/rbac/roles";
-import { daysBetween, demoNowIso, useActor, useAuditLog } from "../../credit-admin/common";
+import { canDecide, decideOperation, usePendingFor } from "@/lib/platform/operations";
+import { useRule } from "@/lib/platform/rules";
+import { useScope } from "@/lib/platform/scope";
+import { roleById, type RoleId } from "@/lib/rbac/roles";
+import { daysBetween, demoNowIso, useActor } from "../../credit-admin/common";
 import { useApplicationCps, useFacilityRow, type CpItem } from "../../credit-admin/logic";
-import { useCreditAdminStore } from "../../credit-admin/store";
+import { PendingOperationNotice } from "../../credit-admin/operations-ui";
+import { commentOnLetter, editLetter, recordAcceptance, submitForSignoff } from "../actions";
 import { libraryMeta, type Clause, type ClauseLibrary } from "../library";
 import { LetterDocument, Merged } from "../letter-document";
 import { buildMergeContext, facilityTerms, mergeText, securityLines, type MergeContext } from "../merge";
@@ -62,7 +66,6 @@ import {
   tagContextFor,
   tagReason,
   useClauses,
-  useOfferLetterStore,
   useOfferLetters,
   useTemplates,
   type CustomClause,
@@ -143,32 +146,36 @@ function useLetterContext(letter: OfferLetter) {
 
 function LetterRecord({ letter }: { letter: OfferLetter }) {
   const c = useLetterContext(letter);
-  const saveLetter = useOfferLetterStore((s) => s.saveLetter);
-  const setCp = useCreditAdminStore((s) => s.setCp);
-  const { update } = useDbActions();
-  const audit = useAuditLog();
   const actor = useActor();
-  const roleId = useSession((s) => s.roleId);
+  const { actor: scopeActor } = useScope();
+  const roleId = scopeActor.roleId;
   const canEdit = useCan("offer-letters", "edit");
-  const isLegal = roleId === "legal-officer";
-  const canRecordAcceptance = roleId === "account-officer" || roleId === "credit-admin-officer" || roleId === "legal-officer";
+  const canView = useCan("offer-letters");
+  const editorRoles = useRule<RoleId[]>("offer-letters.legalEditorRoles");
+  const requesterRoles = useRule<RoleId[]>("offer-letters.signoffRequesterRoles");
+  const recorderRoles = useRule<RoleId[]>("offer-letters.acceptanceRecorderRoles");
+  const pending = usePendingFor("OfferLetter", letter.id);
+  const isLegal = editorRoles.includes(roleId);
+  const canRequest = canView && requesterRoles.includes(roleId);
+  const canRecordAcceptance = canView && recorderRoles.includes(roleId);
+  const mayDecide = pending ? canDecide(pending, scopeActor).ok : false;
   const status = displayStatus(letter);
-  const editable = canEdit && (letter.status === "Draft" || letter.status === "Legal review");
+  const editable = canEdit && isLegal && (letter.status === "Draft" || letter.status === "Legal review");
   const [tab, setTab] = useState("preview");
   const [highlight, setHighlight] = useState(false);
   const [modal, setModal] = useState<null | "signoff" | "accept" | "custom" | { edit: string }>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
 
   if (!c.app) return <EmptyState icon={<FileSearch aria-hidden />} title="Application missing" description={`The application ${letter.applicationId} behind this letter no longer exists.`} />;
   const { app, obligor, facility, template, ctx, clauses } = c;
+  const info = { obligorName: obligor?.name ?? app.obligorId, amount: money(app.amount, facility?.currency), rmUserId: obligor?.relationshipManagerId ?? app.createdById };
+  const reissuePending = (pending?.payload as { mode?: string } | undefined)?.mode === "reissue";
 
-  /** Save with a version entry + audit event (PRD §7: every change tracked). */
+  const report = (r: { ok: true; message: string } | { ok: false; reason: string }) => setNotice(r.ok ? { tone: "success", text: r.message } : { tone: "danger", text: r.reason });
+
+  /** Save with a version entry + audit event + domain event (PRD §7: every change tracked). */
   const commit = (changes: Partial<OfferLetter>, summary: string, action: string, before?: string, after?: string) => {
-    const at = demoNowIso();
-    const version = (letter.versions[letter.versions.length - 1]?.version ?? 0) + 1;
-    saveLetter({ ...letter, ...changes, updatedAt: at, versions: [...letter.versions, { version, at, byName: actor.actorName, summary }] });
-    audit(action, "Offer letter", letter.id, before, after);
-    setNotice(summary);
+    void editLetter(letter, changes, summary, action, before, after).then(report);
   };
 
   const toggleClause = (clause: Clause, on: boolean) => {
@@ -178,19 +185,19 @@ function LetterRecord({ letter }: { letter: OfferLetter }) {
 
   const actions = (
     <Stack direction="horizontal" gap="small" wrap className="print:hidden">
-      {isLegal && letter.status === "Draft" ? (
-        <Button iconBefore={<Scale aria-hidden className="size-4" />} onClick={() => commit({ status: "Legal review", legalReviewerName: actor.actorName }, "Picked up for Legal review", "Started legal review", "Draft", "Legal review")}>
-          Start Legal review
+      {canRequest && !pending && (letter.status === "Draft" || letter.status === "Legal review") ? (
+        <Button iconBefore={<Send aria-hidden className="size-4" />} onClick={() => void submitForSignoff(letter, info, "issue").then(report)}>
+          Send to Legal for sign-off
         </Button>
       ) : null}
-      {isLegal && letter.status === "Legal review" ? (
-        <Button iconBefore={<Send aria-hidden className="size-4" />} onClick={() => setModal("signoff")}>
-          Legal sign-off & issue
+      {pending && mayDecide ? (
+        <Button iconBefore={<ShieldCheck aria-hidden className="size-4" />} onClick={() => setModal("signoff")}>
+          {reissuePending ? "Sign off re-issue" : "Legal sign-off & issue"}
         </Button>
       ) : null}
-      {isLegal && status === "Expired" ? (
-        <Button iconBefore={<RotateCcw aria-hidden className="size-4" />} onClick={() => commit({ issuedAt: demoNowIso() }, `Re-issued after lapse — new ${letter.validityDays}-day validity`, "Re-issued offer letter", "Expired", "Issued")}>
-          Re-issue offer
+      {canRequest && !pending && status === "Expired" ? (
+        <Button iconBefore={<RotateCcw aria-hidden className="size-4" />} onClick={() => void submitForSignoff(letter, info, "reissue").then(report)}>
+          Request re-issue
         </Button>
       ) : null}
       {canRecordAcceptance && status === "Issued" ? (
@@ -232,20 +239,28 @@ function LetterRecord({ letter }: { letter: OfferLetter }) {
 
       {notice ? (
         <div className="print:hidden">
-          <Alert tone="success" title="Saved" action={<Button size="small" variant="text" onClick={() => setNotice(null)}>Dismiss</Button>}>
-            {notice} — recorded in the letter&apos;s version history and the audit trail.
+          <Alert tone={notice.tone} title={notice.tone === "success" ? "Saved" : "Not saved"} action={<Button size="small" variant="text" onClick={() => setNotice(null)}>Dismiss</Button>}>
+            {notice.text}
+            {notice.tone === "success" ? " — recorded in the letter’s version history and the audit trail." : ""}
           </Alert>
+        </div>
+      ) : null}
+      {pending ? (
+        <div className="print:hidden">
+          <PendingOperationNotice instance={pending} title={reissuePending ? "Re-issue awaiting Legal sign-off" : "Awaiting Legal sign-off & issue"}>
+            {mayDecide ? "You can decide it here or in Operations. " : ""}
+          </PendingOperationNotice>
         </div>
       ) : null}
       {status === "Expired" ? (
         <Alert tone="danger" title="This offer has lapsed">
-          It was issued on {date(letter.issuedAt!)} with a {letter.validityDays}-day validity and was not accepted by {date(expiresAt(letter)!)} (PRD §7.3 Acceptance validity). {isLegal ? "Re-issue it to restart the validity period." : "Legal can re-issue it."}
+          It was issued on {date(letter.issuedAt!)} with a {letter.validityDays}-day validity and was not accepted by {date(expiresAt(letter)!)} (PRD §7.3 Acceptance validity). {canRequest ? "Request a re-issue to restart the validity period — Legal signs it off through Operations." : "The Account Officer can request a re-issue, signed off by Legal."}
         </Alert>
       ) : null}
-      {!canEdit && (letter.status === "Draft" || letter.status === "Legal review") ? (
+      {!editable && (letter.status === "Draft" || letter.status === "Legal review") ? (
         <div className="print:hidden">
-          <Alert tone="info" title="Legal is reviewing this letter">
-            Clauses can only be added, removed or edited by the Legal Officer before release (PRD §7). You can view the letter and comment.
+          <Alert tone="info" title={letter.status === "Draft" ? "Draft — not yet sent to Legal" : "Legal is reviewing this letter"}>
+            Clauses can only be added, removed or edited by Legal before release (PRD §7). You can view the letter and comment.
           </Alert>
         </div>
       ) : null}
@@ -305,10 +320,7 @@ function LetterRecord({ letter }: { letter: OfferLetter }) {
                     title="Review comments"
                     comments={letter.comments.map((m) => ({ id: m.id, author: { name: m.authorName, role: m.role }, body: m.body, time: dateTime(m.at), internal: true }))}
                     currentUser={{ name: actor.actorName, role: roleById[actor.roleId]?.name }}
-                    onSubmit={(body) => {
-                      saveLetter({ ...letter, comments: [...letter.comments, { id: newId("CMT"), authorName: actor.actorName, role: roleById[actor.roleId]?.name ?? "", body, at: demoNowIso() }] });
-                      audit("Commented on offer letter", "Offer letter", letter.id);
-                    }}
+                    onSubmit={(body) => commentOnLetter(letter, { id: newId("CMT"), authorName: actor.actorName, role: roleById[actor.roleId]?.name ?? "", body, at: demoNowIso() })}
                     placeholder="Add an internal review note… use @name to mention"
                     emptyMessage="No comments yet."
                   />
@@ -319,23 +331,32 @@ function LetterRecord({ letter }: { letter: OfferLetter }) {
         </Layout>
       </div>
 
-      {modal === "signoff" ? <SignOffModal letter={letter} c={c} onClose={() => setModal(null)} onConfirm={(validityDays) => {
-        const at = demoNowIso();
-        commit({ status: "Issued", validityDays, legalSignedOffByName: actor.actorName, legalSignedOffAt: at, issuedAt: at }, `Legal sign-off on conditions & covenants text; released to the Account Officer (validity ${validityDays} days)`, "Legal sign-off — offer letter issued", "Legal review", "Issued");
-        setModal(null);
-      }} /> : null}
+      {modal === "signoff" && pending ? (
+        <SignOffModal
+          letter={letter}
+          c={c}
+          reissue={reissuePending}
+          onClose={() => setModal(null)}
+          onConfirm={async (decision, validityDays, comment) => {
+            if (decision === "approve" && validityDays !== letter.validityDays) {
+              const r = await editLetter(letter, { validityDays }, `Acceptance validity set to ${validityDays} days`, "Changed offer-letter validity", `${letter.validityDays} days`, `${validityDays} days`);
+              if (!r.ok) return r.reason;
+            }
+            const res = await decideOperation(pending.id, decision, comment);
+            if (!res.ok) return res.reason;
+            setNotice({ tone: "success", text: decision === "approve" ? "Signed off and issued" : "Returned to the requester" });
+            setModal(null);
+            return null;
+          }}
+        />
+      ) : null}
       {modal === "accept" ? (
         <AcceptModal
           letter={letter}
           onClose={() => setModal(null)}
           onConfirm={(acceptedOn) => {
-            const at = new Date(`${acceptedOn}T12:00:00+01:00`).toISOString();
-            commit({ status: "Accepted", acceptedAt: at, acceptanceRecordedByName: actor.actorName }, `Customer acceptance recorded — signed duplicate dated ${date(at)}`, "Recorded customer acceptance", "Issued", "Accepted");
-            setCp(app.id, "CP-02", { status: "met", byName: actor.actorName, at: demoNowIso(), note: `Signed acceptance dated ${date(at)}` });
-            if (app.stage === "Offer") {
-              update("applications", app.id, { stage: "Conditions", updatedAt: demoNowIso() });
-              audit("Moved application to Conditions", "Application", app.id, "Offer", "Conditions");
-            }
+            const at = new Date(`${acceptedOn}T12:00:00+01:00`).toISOString(); // TD-859: tenant time zone
+            void recordAcceptance(letter, app, at, info).then(report);
             setModal(null);
           }}
         />
@@ -381,7 +402,7 @@ function Aside({ letter, c, editable, commit, lastAt }: { letter: OfferLetter; c
   const st = (i: number): StepItem["status"] => (i < idx || (i === idx && letter.status === "Accepted") ? "complete" : i === idx ? "current" : "upcoming");
   const steps: StepItem[] = [
     { title: "Auto-generated", description: "House template + auto-tagged clauses (§6.1.5)", status: st(0), meta: date(letter.createdAt) },
-    { title: "Legal review", description: letter.legalReviewerName ? `Reviewer: ${letter.legalReviewerName}` : "Awaiting Legal Officer", status: st(1) },
+    { title: "Legal review", description: letter.legalReviewerName ? `Reviewer: ${letter.legalReviewerName}` : letter.status === "Draft" ? "Sent by the Account Officer" : "With Legal (Operations workflow)", status: st(1) },
     { title: "Legal sign-off & issue", description: letter.legalSignedOffByName ? `Signed off by ${letter.legalSignedOffByName}` : "Conditions & covenants text approved", status: st(2), meta: letter.legalSignedOffAt ? date(letter.legalSignedOffAt) : undefined },
     { title: "Customer acceptance", description: letter.acceptedAt ? `Accepted ${date(letter.acceptedAt)}` : status === "Expired" ? "Lapsed — not accepted in time" : `Within ${letter.validityDays} days of issue`, status: st(3), meta: letter.acceptedAt ? date(letter.acceptedAt) : undefined },
   ];
@@ -405,6 +426,7 @@ function Aside({ letter, c, editable, commit, lastAt }: { letter: OfferLetter; c
 }
 
 function PreReleaseChecks({ letter, c }: { letter: OfferLetter; c: Ctx }) {
+  const insuranceDays = useRule<number>("offer-letters.insuranceWarningDays");
   const checks: Array<{ status: "red" | "amber" | "green"; label: string }> = [];
   const selected = c.clauses.filter((x) => letter.clauseIds.includes(x.id));
   const pendingText = selected.filter((x) => x.status !== "Legal-approved");
@@ -414,7 +436,7 @@ function PreReleaseChecks({ letter, c }: { letter: OfferLetter; c: Ctx }) {
   else checks.push({ status: "green", label: `All ${selected.length} library clauses are on their Legal-approved version` });
   for (const col of c.collateral) {
     if (col.perfection !== "Perfected") checks.push({ status: col.perfection === "Defective" ? "red" : "amber", label: `${col.id} ${col.type}: perfection "${col.perfection}" — keep the perfection CP open` });
-    if (col.insuranceExpiry && daysBetween(DEMO_NOW, col.insuranceExpiry) < 30) checks.push({ status: "amber", label: `${col.id} insurance expires ${date(col.insuranceExpiry)}` });
+    if (col.insuranceExpiry && daysBetween(DEMO_NOW, col.insuranceExpiry) < insuranceDays) checks.push({ status: "amber", label: `${col.id} insurance expires ${date(col.insuranceExpiry)}` });
   }
   checks.push(c.app.limitGate.startsWith("Breach") ? { status: "red", label: `Portfolio-limit gate: ${c.app.limitGate} (exception decision on file)` } : { status: "green", label: `Portfolio-limit gate: ${c.app.limitGate}` });
   const params = Object.entries(c.ctx).filter(([, v]) => v.startsWith("[")).map(([k]) => k);
@@ -692,23 +714,49 @@ function CovenantsTab({ letter, clauses, ctx, app }: { letter: OfferLetter; clau
 
 // ---------------------------------------------------------------------------------------------
 
-function SignOffModal({ letter, c, onClose, onConfirm }: { letter: OfferLetter; c: Ctx; onClose: () => void; onConfirm: (validityDays: number) => void }) {
+function SignOffModal({
+  letter,
+  c,
+  reissue,
+  onClose,
+  onConfirm,
+}: {
+  letter: OfferLetter;
+  c: Ctx;
+  reissue: boolean;
+  onClose: () => void;
+  /** Resolves to an error message, or null on success. */
+  onConfirm: (decision: "approve" | "return", validityDays: number, comment: string) => Promise<string | null>;
+}) {
+  const min = useRule<number>("offer-letters.validityDaysMin");
+  const max = useRule<number>("offer-letters.validityDaysMax");
   const [attest, setAttest] = useState(false);
   const [days, setDays] = useState(String(letter.validityDays));
+  const [comment, setComment] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const n = Number(days);
-  const valid = attest && Number.isInteger(n) && n >= 1 && n <= 90;
+  const daysOk = Number.isInteger(n) && n >= min && n <= max;
+  const run = async (decision: "approve" | "return") => {
+    setBusy(true);
+    setError(await onConfirm(decision, n, comment.trim()));
+    setBusy(false);
+  };
   return (
     <Modal
       open
       onOpenChange={(o) => !o && onClose()}
-      title="Legal sign-off"
-      description="Approve the conditions and covenants text and release the letter to the Account Officer for customer presentation (PRD §4.1, §6.5)."
+      title={reissue ? "Legal sign-off — re-issue" : "Legal sign-off"}
+      description="Approve the conditions and covenants text and release the letter to the Account Officer for customer presentation (PRD §4.1, §6.5). Your decision is recorded on the Operations request."
       footer={
         <>
           <Button variant="text" onClick={onClose}>
             Cancel
           </Button>
-          <Button disabled={!valid} onClick={() => onConfirm(n)}>
+          <Button variant="secondary" loading={busy} onClick={() => void run("return")}>
+            Return to requester
+          </Button>
+          <Button disabled={!attest || !daysOk} loading={busy} onClick={() => void run("approve")}>
             Sign off & issue
           </Button>
         </>
@@ -724,10 +772,18 @@ function SignOffModal({ letter, c, onClose, onConfirm }: { letter: OfferLetter; 
             { label: "Bespoke / edited", value: `${letter.customClauses.length} bespoke · ${Object.keys(letter.clauseEdits).length} edited` },
           ]}
         />
-        <Field label="Acceptance validity (days)" description="PRD §7.3: commonly 7 days from communication to the customer." htmlFor="validity">
-          <Input id="validity" type="number" min={1} max={90} value={days} onChange={(e) => setDays(e.target.value)} numeric suffix="days" />
+        <Field label="Acceptance validity (days)" description={`PRD §7.3: commonly 7 days from communication to the customer. Allowed ${min}–${max} days (business rules).`} htmlFor="validity" error={daysOk ? undefined : `Enter ${min}–${max} days.`}>
+          <Input id="validity" type="number" min={min} max={max} value={days} onChange={(e) => setDays(e.target.value)} numeric suffix="days" invalid={!daysOk} />
+        </Field>
+        <Field label="Comment" htmlFor="signoff-comment" description="Required when returning the letter." optional>
+          <Textarea id="signoff-comment" rows={3} value={comment} onChange={(e) => setComment(e.target.value)} />
         </Field>
         <Checkbox checked={attest} onChange={(e) => setAttest(e.target.checked)} label="I confirm the conditions and covenants text is legally sufficient and consistent with the approved credit." />
+        {error ? (
+          <Alert tone="danger" title="Decision not recorded">
+            {error}
+          </Alert>
+        ) : null}
       </Stack>
     </Modal>
   );
@@ -772,6 +828,7 @@ function AcceptModal({ letter, onClose, onConfirm }: { letter: OfferLetter; onCl
 }
 
 function CustomClauseModal({ onClose, onSave }: { onClose: () => void; onSave: (c: { library: ClauseLibrary; title: string; text: string }) => void }) {
+  const minText = useRule<number>("offer-letters.minClauseTextLength");
   const [library, setLibrary] = useState<ClauseLibrary>("special");
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
@@ -787,7 +844,7 @@ function CustomClauseModal({ onClose, onSave }: { onClose: () => void; onSave: (
           <Button variant="text" onClick={onClose}>
             Cancel
           </Button>
-          <Button disabled={!title.trim() || text.trim().length < 20} onClick={() => onSave({ library, title: title.trim(), text: text.trim() })}>
+          <Button disabled={!title.trim() || text.trim().length < minText} onClick={() => onSave({ library, title: title.trim(), text: text.trim() })}>
             Add to letter
           </Button>
         </>
@@ -810,6 +867,7 @@ function CustomClauseModal({ onClose, onSave }: { onClose: () => void; onSave: (
 
 function EditClauseModal({ clause, current, ctx, onClose, onSave }: { clause: Clause; current?: string; ctx: MergeContext; onClose: () => void; onSave: (text: string) => void }) {
   const [text, setText] = useState(current ?? clause.text);
+  const minText = useRule<number>("offer-letters.minClauseTextLength");
   return (
     <Modal
       open
@@ -825,7 +883,8 @@ function EditClauseModal({ clause, current, ctx, onClose, onSave }: { clause: Cl
           <Button variant="text" onClick={onClose}>
             Cancel
           </Button>
-          <Button disabled={text.trim().length < 20} onClick={() => onSave(text.trim())}>
+          <Button disabled={text.trim().length < minText} onClick={() => onSave(text.trim())}>
+
             Save wording
           </Button>
         </>

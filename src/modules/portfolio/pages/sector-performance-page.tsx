@@ -1,24 +1,24 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Alert, Badge, DataTable, DescriptionList, Grid, PhaseBadge, ScatterChart, Select, Stack, StatusBadge, WaterfallChart, type DataTableColumn } from "@credigit/web-ui";
+import { Alert, DataTable, Grid, PhaseBadge, ScatterChart, Select, Stack, StatusBadge, WaterfallChart, type DataTableColumn } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { rarPosition } from "@/lib/rar";
 import { moneyShort, pct } from "@/lib/format";
 import type { Facility } from "@/lib/data/types";
 import { KpiCard } from "../components/calc-note";
+import { RulesPanel } from "../components/governance";
 import { Panel } from "../components/panel";
 import { usePortfolioModel } from "../hooks";
+import { OBLIGOR_TYPES, PARAM_RULES, PORTFOLIO_RULES, riskWeightRuleKey } from "../rule-keys";
 import {
   computeWarr,
-  eclProxyPct,
   liveFacilities,
   nplRatio,
-  portfolioParams,
   productGroup,
   profitability,
-  riskWeightTable,
   tenorBand,
+  usePortfolioParams,
   warrExposure,
   type Profitability,
 } from "../selectors";
@@ -35,13 +35,15 @@ const dims: Array<{ value: Dim; label: string }> = [
 type Row = Profitability & { key: string; npl: number; warr: number };
 
 export function SectorPerformancePage() {
-  const { facilities, obligors, sectors, large } = usePortfolioModel();
+  const { facilities, obligors, sectors, large, rules } = usePortfolioModel();
   const [dim, setDim] = useState<Dim>("sector");
-  const p = portfolioParams;
+  const p = usePortfolioParams();
   const obligorById = useMemo(() => new Map(obligors.map((o) => [o.id, o])), [obligors]);
   const sectorName = useMemo(() => new Map(sectors.map((s) => [s.id, s.name])), [sectors]);
   const live = useMemo(() => liveFacilities(facilities), [facilities]);
-  const bank = useMemo(() => profitability(live, obligorById), [live, obligorById]);
+  // `rules` in deps: profitability reads business rules at call time.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `rules` re-runs rule-driven selectors
+  const bank = useMemo(() => profitability(live, obligorById), [live, obligorById, rules]);
 
   const rows: Row[] = useMemo(() => {
     const keyOf = (f: Facility) => {
@@ -62,7 +64,8 @@ export function SectorPerformancePage() {
         warr: computeWarr(list.map((f) => ({ exposure: warrExposure(f), grade: obligorById.get(f.obligorId)?.riskGrade ?? null, stage: f.stage }))).warr,
       }))
       .sort((a, b) => b.exposure - a.exposure);
-  }, [live, obligorById, sectorName, dim]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `rules` re-runs rule-driven selectors
+  }, [live, obligorById, sectorName, dim, rules]);
 
   const hurdle = p.rarocHurdlePct.value;
   const below = rows.filter((r) => r.raroc < hurdle);
@@ -114,7 +117,7 @@ export function SectorPerformancePage() {
             value={moneyShort(bank.capital)}
             hint={`RWA ${moneyShort(bank.rwa)} × ${p.minCarPct.value}% min CAR`}
             tone="warning"
-            calc={{ metric: "capital consumption", formula: "Capital consumption = Sector RWA × Minimum capital adequacy ratio", source: "RWA: exposure (off-balance at CCF) × risk weight per the tenant Basel/CBN table (demo weights). Min CAR 10% national authorisation / 15% international or SIB (§9.1).", prd: "§6.6.5", demo: true }}
+            calc={{ metric: "capital consumption", formula: "Capital consumption = Sector RWA × Minimum capital adequacy ratio", source: `RWA: exposure (off-balance at CCF) × risk weight per the tenant Basel/CBN table (demo weights). Min CAR ${p.minCarPct.value}% (business rule, §9.1: national authorisation; 15% international or SIB).`, prd: "§6.6.5", demo: true }}
           />
           <KpiCard
             label="Net interest margin"
@@ -126,9 +129,9 @@ export function SectorPerformancePage() {
           <KpiCard
             label="Large exposures to capital"
             value={pct(large.toCapitalPct, 0)}
-            hint={`${large.list.length} obligors ≥10% of SHF`}
+            hint={`${large.list.length} obligors ≥${p.largeExposurePct.value}% of SHF`}
             tone="accent"
-            calc={{ metric: "large exposures to capital", formula: "Aggregate large exposures / Total qualifying capital × 100", source: "Large exposures: obligors/groups ≥10% of SHF (CBN 3.2(d)). TQC: GL capital accounts (demo value).", prd: "§6.6.5", demo: true }}
+            calc={{ metric: "large exposures to capital", formula: "Aggregate large exposures / Total qualifying capital × 100", source: `Large exposures: obligors/groups ≥${p.largeExposurePct.value}% of SHF (CBN 3.2(d)). TQC: GL capital accounts (demo value).`, prd: "§6.6.5", demo: true }}
           />
         </Grid>
 
@@ -174,20 +177,23 @@ export function SectorPerformancePage() {
           <DataTable label="Segment profitability" data={rows} columns={columns} getRowId={(r) => r.key} paginate={rows.length > 15} exportFilename={`raroc-by-${dim}.csv`} defaultSort={{ id: "raroc", direction: "desc" }} />
         </Panel>
 
-        <Panel title="Inputs in force" description="Rules & Parameters Engine values used above. Demo values are placeholders until the tenant configures them.">
-          <DescriptionList
-            columns={2}
-            items={[
-              { label: "Minimum CAR", value: <span className="inline-flex items-center gap-2"><span className="font-mono">{p.minCarPct.value}%</span><Badge tone="success">CBN (PRD §9.1)</Badge></span>, hint: "15% for international authorisation / SIBs" },
-              { label: "Risk weights (demo table)", value: Object.entries(riskWeightTable).map(([k, v]) => `${k} ${v}%`).join(" · ") },
-              { label: p.costOfFundsPct.label, value: `${p.costOfFundsPct.value}% (demo)`, mono: true },
-              { label: p.feeIncomePct.label, value: `${p.feeIncomePct.value}% (demo)`, mono: true },
-              { label: p.opexAllocationPct.label, value: `${p.opexAllocationPct.value}% (demo)`, mono: true },
-              { label: "ECL proxy (until §6.7 feed)", value: `Stage 1 ${eclProxyPct.stage1}% · Stage 2 ${eclProxyPct.stage2}% · Stage 3 at CBN provisioning rates (10/50/100%)` },
-              { label: p.rarocHurdlePct.label, value: `${p.rarocHurdlePct.value}% (demo)`, mono: true },
-            ]}
-          />
-        </Panel>
+        <RulesPanel
+          title="Inputs in force"
+          description="Business rules used above (Rules & Parameters Engine). Demo values are placeholders until the tenant configures them; changes are approved in Operations."
+          keys={[
+            PARAM_RULES.minCarPct,
+            PARAM_RULES.rarocHurdlePct,
+            PARAM_RULES.costOfFundsPct,
+            PARAM_RULES.feeIncomePct,
+            PARAM_RULES.opexAllocationPct,
+            PORTFOLIO_RULES.eclStage1Pct,
+            PORTFOLIO_RULES.eclStage2Pct,
+            PORTFOLIO_RULES.eclSubstandardPct,
+            PORTFOLIO_RULES.eclDoubtfulPct,
+            PORTFOLIO_RULES.eclLostPct,
+            ...OBLIGOR_TYPES.map(riskWeightRuleKey),
+          ]}
+        />
       </Stack>
     </ModulePage>
   );

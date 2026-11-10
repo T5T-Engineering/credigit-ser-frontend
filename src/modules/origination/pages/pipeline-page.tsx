@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { AlarmClock, FilePlus2, Gauge, Hourglass, Layers, LayoutGrid, ListChecks, ShieldAlert, Table2, Zap } from "lucide-react";
 import {
@@ -12,6 +12,7 @@ import {
   Grid,
   KanbanBoard,
   SegmentedControl,
+  Spinner,
   StatCard,
   Stack,
   StatusBadge,
@@ -24,8 +25,12 @@ import { useApplications, useLookups } from "@/lib/data/hooks";
 import type { Application, Obligor } from "@/lib/data/types";
 import { roleById } from "@/lib/rbac/roles";
 import { date, moneyShort, money } from "@/lib/format";
-import { currentSteps, inMyQueue, isBreach, isOpen, pipelineStages, slaState, slaTones, stageTones, type SlaState } from "../logic";
-import { initiatorRoles, useMe } from "../use-me";
+import { chainStatus, currentSteps, inMyQueue, openOperations, isBreach, isOpen, pipelineStages, slaState, slaTones, stageTones, type SlaState } from "../logic";
+import { useMe } from "../use-me";
+import { inGroup } from "../params";
+import { useRulesVersion } from "../use-params";
+import { useOperationsStore } from "@/lib/platform/operations";
+import { useSearchParams } from "next/navigation";
 
 type Row = {
   id: string;
@@ -51,6 +56,7 @@ export function nextActionFor(a: Application): string {
     case "Recommendation":
     case "Approval": {
       if (isBreach(a.limitGate)) return "CRO / Board — limit exception";
+      if (!openOperations(a.id).some((op) => op.operationType.startsWith("credit.facility-approval")) && chainStatus(a.approvals) !== "Approved") return "Initiator — submit for approval";
       const steps = currentSteps(a.approvals);
       if (!steps.length) return "Release to offer letter";
       return steps.map((s) => (s.adjudicates ? `${roleById[s.roleId].short} (adjudicator)` : roleById[s.roleId].short)).join(" + ");
@@ -67,10 +73,22 @@ export function nextActionFor(a: Application): string {
 }
 
 export function OriginationPipelinePage() {
+  return (
+    <Suspense fallback={<Spinner label="Loading applications" />}>
+      <Pipeline />
+    </Suspense>
+  );
+}
+
+function Pipeline() {
   const applications = useApplications();
   const lookups = useLookups();
   const { user, roleId } = useMe();
-  const [scope, setScope] = useState<"mine" | "all">("all");
+  const params = useSearchParams();
+  const initialScope = params.get("scope");
+  const [scope, setScope] = useState<"mine" | "created" | "all">(initialScope === "mine" || initialScope === "created" ? initialScope : "all");
+  const instances = useOperationsStore((s) => s.instances);
+  const rulesVersion = useRulesVersion();
   const [view, setView] = useState<"board" | "table">("board");
   const [search, setSearch] = useState("");
   const [stage, setStage] = useState(ALL);
@@ -94,10 +112,13 @@ export function OriginationPipelinePage() {
           officer: lookups.user.get(a.createdById)?.name ?? "—",
         };
       }),
-    [applications, lookups],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rules are read at call time; re-derive when they change
+    [applications, lookups, rulesVersion],
   );
-  const myQueue = useMemo(() => rows.filter((r) => inMyQueue(r.app, roleId, user.id)), [rows, roleId, user.id]);
-  const base = scope === "mine" ? myQueue : rows;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- inMyQueue reads open operations; re-run when they change
+  const myQueue = useMemo(() => rows.filter((r) => inMyQueue(r.app, roleId, user.id)), [rows, roleId, user.id, instances]);
+  const created = useMemo(() => rows.filter((r) => r.app.createdById === user.id), [rows, user.id]);
+  const base = scope === "mine" ? myQueue : scope === "created" ? created : rows;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -125,7 +146,7 @@ export function OriginationPipelinePage() {
   const approved = rows.filter((r) => ["Offer", "Conditions", "Disbursement", "Booked"].includes(r.app.stage));
   const sum = (xs: Row[]) => xs.reduce((s, r) => s + r.app.amount, 0);
 
-  const canInitiate = Boolean(roleId && initiatorRoles.includes(roleId));
+  const canInitiate = inGroup("initiators", roleId);
   const columns = pipelineStages.filter((s) => s.id !== "Withdrawn" || rows.some((r) => r.app.stage === "Withdrawn"));
 
   const cards: KanbanCard[] = filtered.map((r) => ({
@@ -192,6 +213,7 @@ export function OriginationPipelinePage() {
             onChange={setScope}
             options={[
               { value: "mine", label: `My queue (${myQueue.length})`, icon: <ListChecks aria-hidden /> },
+              ...(canInitiate || created.length ? [{ value: "created" as const, label: `My applications (${created.length})` }] : []),
               { value: "all", label: `All applications (${rows.length})` },
             ]}
           />
