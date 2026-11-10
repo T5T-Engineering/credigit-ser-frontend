@@ -11,3 +11,12 @@ Routes, page compositions, data/hooks, domain logic and copy only. All UI comes 
 5. **Git workflow.** Work on a feature branch → merge (`--no-ff`) into local `develop` → push `origin develop`. Every remote has `develop`, `test`, `uat`, `staging`, `production`; never commit directly to the environment branches.
 6. **Dependencies:** latest stable/LTS versions, pinned exactly.
 7. **No secrets in repositories** (credigit-ser-web-component is public).
+8. **No hard-coded values — business rules drive behaviour (frontend and backend).** Limits, thresholds, rates, durations, URLs, role/route mappings, labels of configurable things and similar values must come from the application's business rules (Rules & Parameters engine / tenant configuration / environment config), never literals in code. Any temporary exception is recorded in the repo's `TECH-DEBT.md` with an ID referenced in the code.
+9. **Every feature is complete end-to-end.** For everything being worked on:
+   - **User-scoped:** data, actions and views respect the signed-in user, their role, tenant and permissions.
+   - **Audited:** every state change writes to the immutable audit log (who, what, before/after, when, where).
+   - **Notified:** relevant parties receive notifications; build the notification HTML message template if one doesn't exist.
+   - **Workflow-routed:** anything needing approval is routed through the **"Operations" workflow** (configurable steps, approvers, SLAs) — no ad-hoc approval logic.
+   - **Extensible:** expose subscribe-able **hook points** (before/after, can veto or enrich) and **event points** (published domain events) so extensions can plug in without changing core code.
+   - **Navigable:** wire up all necessary menus and sub-menus for the feature.
+   - **Consistent:** respect every other invariant in this list.
