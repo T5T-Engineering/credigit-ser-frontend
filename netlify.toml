@@ -1,0 +1,16 @@
+# Netlify build settings (these override the values in the Netlify UI).
+# Static export (output: "export" in next.config.ts) → ./out. @credigit/web-ui installs from its public GitHub repo.
+
+[build]
+  command = "npm run build"
+  publish = "out"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NEXT_TELEMETRY_DISABLED = "1"
+
+# Client-side routes for records created at runtime fall back to the app shell.
+[[redirects]]
+  from = "/*"
+  to = "/404.html"
+  status = 404

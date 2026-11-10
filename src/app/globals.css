@@ -1,0 +1,5 @@
+@import "tailwindcss";
+@import "@credigit/web-ui/styles.css";
+
+/* Scan the UI library (source distribution) for utility classes. */
+@source "../../node_modules/@credigit/web-ui/src";
