@@ -24,7 +24,8 @@ export type ModuleKey =
   | "connectors"
   | "admin"
   | "audit"
-  | "settings";
+  | "settings"
+  | "operations";
 
 export type Access = "view" | "edit";
 
@@ -72,7 +73,8 @@ export type Role = {
   modules: Partial<Record<ModuleKey, Access>>;
 };
 
-const common: Partial<Record<ModuleKey, Access>> = { dashboard: "view", inbox: "edit", settings: "edit" };
+/** Everyone can use Operations (their approval queue and requests are user-scoped). */
+const common: Partial<Record<ModuleKey, Access>> = { dashboard: "view", inbox: "edit", settings: "edit", operations: "view" };
 /** AI analytics & NL query console is restricted (PRD §6.13): CRO, Head of Risk; platform-data scope for System Admin / IT Support. */
 const aiConsole: Partial<Record<ModuleKey, Access>> = { "ai-console": "view" };
 const riskViewAll: Partial<Record<ModuleKey, Access>> = {
@@ -253,7 +255,7 @@ export const roles: Role[] = [
     tier: 5,
     limitNgn: 2_500_000_000,
     authority: "Tier 5 lending limit; adjudicator for CCO/HD dissent",
-    modules: { ...common, ...riskViewAll, ...aiConsole, executive: "edit", origination: "edit", "enterprise-risk": "edit", connectors: "view", audit: "view" },
+    modules: { ...common, ...riskViewAll, ...aiConsole, executive: "edit", origination: "edit", "enterprise-risk": "edit", connectors: "view", audit: "view", operations: "edit" },
   },
   {
     id: "head-of-risk",
@@ -264,7 +266,7 @@ export const roles: Role[] = [
     tier: null,
     limitNgn: null,
     authority: "Escalation and policy sign-off (below CRO/Board)",
-    modules: { ...common, ...riskViewAll, ...aiConsole, executive: "edit", "enterprise-risk": "edit", audit: "view" },
+    modules: { ...common, ...riskViewAll, ...aiConsole, executive: "edit", "enterprise-risk": "edit", audit: "view", operations: "edit" },
   },
   {
     id: "md",
@@ -352,7 +354,7 @@ export const roles: Role[] = [
     tier: null,
     limitNgn: null,
     authority: "Configuration, not credit, authority",
-    modules: { ...common, ...aiConsole, admin: "edit", audit: "view", connectors: "edit", settings: "edit" },
+    modules: { ...common, ...aiConsole, admin: "edit", audit: "view", connectors: "edit", settings: "edit", operations: "edit" },
   },
   {
     id: "it-support",

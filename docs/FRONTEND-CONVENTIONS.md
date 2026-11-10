@@ -49,3 +49,20 @@ Use the `ModulePage` wrapper (`@/components/module-page`): module header (icon, 
 ## Checks before you report
 
 `npx tsc --noEmit`, `npm run lint`, and visual screenshots of your pages (`bash ../credigit-ser-web-component/scripts/screenshot.sh <url> <out.png> [w] [h]`, ≤1440x1800; 390 width for mobile). The dev server runs at http://localhost:3100. Sign in first: screenshots can't log in, so use `?demoRole=<role-id>` on any app URL (demo auto sign-in for screenshots; see `src/components/auth-guard.tsx`).
+
+## Platform services (invariants 8 & 9 — mandatory for every feature)
+
+All in `src/lib/platform/`. Each module declares its registrations in **`src/modules/<module>/platform.ts`** and adds
+`import "@/modules/<module>/platform";` to `src/lib/platform/registry.ts` (append one line; nothing else in that file).
+
+| Need | Use | Notes |
+|---|---|---|
+| Any limit, threshold, rate, duration, ceiling, percentage, SLA, URL, mapping | `defineRules([...])` in platform.ts; read with `useRule(key)` in components / `getRule(key)` in logic **at call time** (never at module top level) | Key format `<module>.<name>`. Give `type`, `default`, `min/max`, `unit`, and `source` (PRD § or "Tenant parameter (demo value)"). PRD-stated regulatory values are rules too, with the PRD section as source. |
+| Anything needing approval | `registerOperation({ type, name, module, description, defaultSteps, apply, onReject })`; submit with `submitOperation(type, { title, subject, payload, summary })` | **No ad-hoc approval logic.** `apply` performs the change after final approval. Show pending state with `usePendingFor(subjectType, id)`; link to `/operations/item?id=`. Credit facility approvals keep the PRD chart-flow tiers but must be expressed as an operation (steps from rules). |
+| Notify people | `defineTemplates([...])` + `notify({ templateId, toRoles / toUserIds, href, data })` | Template = subject, HTML body with `{{vars}}` (simple p/strong/ul/li), in-app text, tone, documented variables with examples. Create the template if it doesn't exist. |
+| Extension points | `defineEvents([...])` + `publish(name, { module, subject, payload })` after each state change; `defineHookPoints([...])` + `await runHooks("<module>.<action>.before", ctx)` (respect vetoes) and `.after` | Event names `<module>.<entity>.<past-verb>`. |
+| Audit | `useDbActions().log(...)` (or module audit helper) for every state change | Operations/notifications audit themselves. |
+| User scope | `useScope()` / `currentActor()`; filter "my" views by actor; gate actions with `useCan` | Segregation of duties is enforced by the engine for operations. |
+| Hard-coded value you can't remove yet | add a row to `TECH-DEBT.md` (TD-###) and reference the ID in a code comment | |
+
+The Operations area (`/operations`): Approvals, My requests, Workflows, Business rules, Notifications (templates + outbox), Events & hooks.

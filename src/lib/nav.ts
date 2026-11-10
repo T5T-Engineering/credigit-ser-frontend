@@ -22,6 +22,7 @@ import {
   TrendingUp,
   Users,
   Waves,
+  Workflow,
 } from "lucide-react";
 import type { ModuleKey } from "./rbac/roles";
 
@@ -207,6 +208,26 @@ export const navigation: NavGroup[] = [
         ],
       },
       { module: "enterprise-risk", label: "Enterprise risk", href: "/enterprise-risk", icon: Building2, phase: 2, prd: "§6.10" },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      {
+        module: "operations",
+        label: "Operations",
+        href: "/operations",
+        icon: Workflow,
+        prd: "§10.4",
+        pages: [
+          { label: "Approvals", href: "/operations" },
+          { label: "My requests", href: "/operations/requests" },
+          { label: "Workflows", href: "/operations/workflows" },
+          { label: "Business rules", href: "/operations/rules" },
+          { label: "Notifications", href: "/operations/notifications" },
+          { label: "Events & hooks", href: "/operations/events" },
+        ],
+      },
     ],
   },
   {
