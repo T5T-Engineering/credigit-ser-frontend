@@ -8,7 +8,7 @@ realistic mock data with a backend-ready data seam. Read with:
 
 ## Hard rules
 
-1. **No UI components in this app.** Every visual building block comes from `@credigit/web-ui`. App code = routes, page compositions, data/hooks, domain logic, copy. If something is missing in the library, compose existing pieces; if that's impossible, list it as a library request in your report (don't hand-roll a component). Thin layout wrappers using library components + layout utilities are fine.
+1. **No UI components in this app (project invariant — see CLAUDE.md).** Every control is created in credigit-ser-web-component first and shared; this app only imports it from `@credigit/web-ui`. App code = routes, page compositions, data/hooks, domain logic, copy. If something is missing in the library, compose existing pieces; if that's impossible, list it as a library request in your report (don't hand-roll a component). Thin layout wrappers using library components + layout utilities are fine.
 2. **No hard-coded colours or fonts.** Only theme tokens/utilities (CONVENTIONS §3). Colour, logo and font change at runtime per tenant.
 3. **PRD fidelity.** Use PRD terminology, workflows, roles, formulas and phase tags. Don't invent regulatory rules, formula weights or limits. Where the PRD gives a formula, implement it on the mock data; where it doesn't, show the input and mark the gap ("Parameter — set by tenant"). Every computed figure should be traceable: show source/formula on hover or in a details panel where reasonable (PRD §2.1, §10.3).
 4. **Prototype honesty.** Data is fictional (demo tenant "Harbourline Bank"). AI output is canned/simulated and always labelled "AI-drafted"/"AI-flagged" with a human sign-off action (PRD §2.3, §6.12). Connectors are simulated.
