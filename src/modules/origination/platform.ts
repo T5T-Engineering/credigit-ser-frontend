@@ -112,6 +112,8 @@ const step = (id: string, name: string, approverRoles: WorkflowStep["approverRol
 
 const creditHandler = {
   module: M,
+  // PRD §6.1.2: the CCO adjudicates tier-2 dissent and also co-signs tier 3, so one person may decide two steps.
+  allowRepeatApprover: true,
   apply: (p: CreditPayload, ctx: { instance: OperationInstance; actor: Actor }) => onCreditApproved(p, ctx.instance, ctx.actor),
   onReject: (p: CreditPayload, ctx: { instance: OperationInstance; actor: Actor }) => onCreditRejected(p, ctx.instance, ctx.actor),
 };

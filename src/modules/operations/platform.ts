@@ -61,7 +61,7 @@ defineRules([
     module: M,
     category: "Extensions",
     type: "roles",
-    default: ["system-admin"],
+    default: ["system-admin", "cro"],
     source: DEMO,
   },
   {

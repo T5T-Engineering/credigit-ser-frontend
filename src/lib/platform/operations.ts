@@ -92,6 +92,11 @@ export type OperationHandler<P> = {
   module: string;
   description: string;
   defaultSteps: WorkflowStep[];
+  /**
+   * Allow the same person to decide more than one step (default false = four eyes across steps).
+   * Credit chart-flows need this: the PRD makes the CCO adjudicator at tier 2 and co-signer at tier 3.
+   */
+  allowRepeatApprover?: boolean;
   /** Runs when the final step approves (or immediately when the workflow is disabled/has no steps). */
   apply: (payload: P, ctx: { instance: OperationInstance; actor: Actor }) => void | Promise<void>;
   onReject?: (payload: P, ctx: { instance: OperationInstance; actor: Actor }) => void;
@@ -172,6 +177,8 @@ export function actingRoles(instance: OperationInstance): RoleId[] {
 /** Whether an actor may decide the instance now (role match + segregation of duties). */
 export function canDecide(instance: OperationInstance, actor: Pick<Actor, "id" | "roleId">): { ok: boolean; reason?: string } {
   if (instance.requestedBy.id === actor.id) return { ok: false, reason: "You requested this operation, so someone else must decide it (segregation of duties)." };
+  // Four eyes across steps: one person decides at most one step of a request.
+  if (!handlers.get(instance.operationType)?.allowRepeatApprover && instance.decisions.some((d) => d.actorId === actor.id)) return { ok: false, reason: "You already decided an earlier step of this request — a different person must decide this one." };
   if (!actingRoles(instance).includes(actor.roleId)) return { ok: false, reason: "This step is waiting for a different role." };
   return { ok: true };
 }
@@ -191,10 +198,17 @@ function get(id: string) {
 function notifyApprovers(instance: OperationInstance) {
   const roles = actingRoles(instance);
   if (!roles.length) return;
+  // Notify the eligible people, not whole roles: skip the requester and anyone who already decided.
+  const decided = new Set(instance.decisions.map((d) => d.actorId));
+  const userIds = useDb
+    .getState()
+    .users.filter((u) => u.status === "Active" && roles.includes(u.roleId) && u.id !== instance.requestedBy.id && !decided.has(u.id))
+    .map((u) => u.id);
+  if (!userIds.length) return;
   const step = currentStep(instance)!;
   notify({
     templateId: "operations.approval-requested",
-    toRoles: roles,
+    toUserIds: userIds,
     href: `/operations/item?id=${instance.id}`,
     data: { title: instance.title, operation: getDefinition(instance.operationType).name, requester: instance.requestedBy.name, step: step.name, due: new Date(stepDueAt(instance)!).toUTCString() },
   });

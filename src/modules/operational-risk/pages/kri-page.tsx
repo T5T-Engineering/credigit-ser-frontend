@@ -392,23 +392,25 @@ function ThresholdModal({ kri, onClose, onSubmit }: { kri: KriReading | null; on
   const minComment = useRule<number>("operations.minCommentLength");
   const error = !Number.isFinite(a) || !Number.isFinite(r) || a < 0 || r < 0 ? "Enter non-negative numbers" : kri?.higherIsWorse ? (a >= r ? "Amber must be below Red" : undefined) : a <= r ? "Amber must be above Red" : undefined;
   const reasonError = reason.trim().length < minComment ? `Give a reason (at least ${minComment} characters)` : undefined;
+  /** Clear the draft on every close path (Cancel, Escape, overlay) so the next proposal starts fresh. */
+  const close = () => {
+    setAmber("");
+    setRed("");
+    setReason("");
+    setTouched(false);
+    onClose();
+  };
   return (
     <Modal
       open={!!kri}
       onOpenChange={(o) => {
-        if (!o) {
-          setAmber("");
-          setRed("");
-          setReason("");
-          setTouched(false);
-          onClose();
-        }
+        if (!o) close();
       }}
       title="Propose threshold change"
       description={kri ? `${kri.name} — routed through the Operations workflow; the change takes effect once approved.` : undefined}
       footer={
         <div className="flex justify-end gap-2">
-          <Button variant="tertiary" onClick={onClose}>Cancel</Button>
+          <Button variant="tertiary" onClick={close}>Cancel</Button>
           <Button
             onClick={() => {
               setTouched(true);

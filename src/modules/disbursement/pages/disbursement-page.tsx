@@ -439,215 +439,218 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
   const cpItems: ChecklistItem[] = row.cps.map((c) => ({ id: c.id, title: c.title, description: c.category, status: c.status, owner: c.byName }));
 
   return (
-    <Drawer
-      open
-      onOpenChange={(o) => !o && onClose()}
-      size="large"
-      title={`${obligor?.name ?? facility.obligorId} — ${facility.product}`}
-      description={`Facility ${facility.id}${app ? ` · application ${app.id}` : ""}`}
-    >
-      <Stack gap="large">
-        {done ? (
-          <Alert tone={done.ok ? "success" : "danger"} title={done.ok ? "Done" : "Not done"}>
-            {done.text}
-          </Alert>
-        ) : null}
-        {pendingOp ? (
-          <PendingOperationNotice instance={pendingOp} title="Awaiting Checker authorisation">
-            {pendingOp.requestedBy.id === userId ? "You prepared it, so a different Checker must decide. " : ""}
-          </PendingOperationNotice>
-        ) : null}
+    <>
+      <Drawer
+        open
+        onOpenChange={(o) => !o && onClose()}
+        size="large"
+        title={`${obligor?.name ?? facility.obligorId} — ${facility.product}`}
+        description={`Facility ${facility.id}${app ? ` · application ${app.id}` : ""}`}
+      >
+        <Stack gap="large">
+          {done ? (
+            <Alert tone={done.ok ? "success" : "danger"} title={done.ok ? "Done" : "Not done"}>
+              {done.text}
+            </Alert>
+          ) : null}
+          {pendingOp ? (
+            <PendingOperationNotice instance={pendingOp} title="Awaiting Checker authorisation">
+              {pendingOp.requestedBy.id === userId ? "You prepared it, so a different Checker must decide. " : ""}
+            </PendingOperationNotice>
+          ) : null}
 
-        <DescriptionList
-          columns={2}
-          items={[
-            { label: "Approved amount", value: money(facility.approvedAmount, facility.currency), mono: true },
-            { label: "Undisbursed", value: money(row.undisbursed, facility.currency), mono: true, hint: "Approved amount − outstanding" },
-            { label: "Facility status", status: facility.status, statusTones: { Active: "success", "Pending disbursement": "info" } },
-            { label: "Tenor / rate", value: `${facility.tenorMonths} months · ${facility.ratePct.toFixed(1)}% p.a.` },
-            { label: "Branch", value: facility.branch },
-            {
-              label: "Credit Admin release",
-              value: row.released ? `Released by ${row.released.byName} · ${date(row.released.at)}` : "Not yet released for disbursement",
-            },
-            {
-              label: "Records",
-              span: 2,
-              value: (
-                <span className="flex flex-wrap gap-3">
-                  <TextLink as={Link} href={`/credit-admin/facility/?id=${facility.id}`}>Facility record</TextLink>
-                  {app ? <TextLink as={Link} href={`/offer-letters/letter/?applicationId=${app.id}`}>Offer letter</TextLink> : null}
-                  {app ? <TextLink as={Link} href={`/origination/application/?id=${app.id}`}>Application</TextLink> : null}
-                </span>
-              ),
-            },
-          ]}
-        />
+          <DescriptionList
+            columns={2}
+            items={[
+              { label: "Approved amount", value: money(facility.approvedAmount, facility.currency), mono: true },
+              { label: "Undisbursed", value: money(row.undisbursed, facility.currency), mono: true, hint: "Approved amount − outstanding" },
+              { label: "Facility status", status: facility.status, statusTones: { Active: "success", "Pending disbursement": "info" } },
+              { label: "Tenor / rate", value: `${facility.tenorMonths} months · ${facility.ratePct.toFixed(1)}% p.a.` },
+              { label: "Branch", value: facility.branch },
+              {
+                label: "Credit Admin release",
+                value: row.released ? `Released by ${row.released.byName} · ${date(row.released.at)}` : "Not yet released for disbursement",
+              },
+              {
+                label: "Records",
+                span: 2,
+                value: (
+                  <span className="flex flex-wrap gap-3">
+                    <TextLink as={Link} href={`/credit-admin/facility/?id=${facility.id}`}>Facility record</TextLink>
+                    {app ? <TextLink as={Link} href={`/offer-letters/letter/?applicationId=${app.id}`}>Offer letter</TextLink> : null}
+                    {app ? <TextLink as={Link} href={`/origination/application/?id=${app.id}`}>Application</TextLink> : null}
+                  </span>
+                ),
+              },
+            ]}
+          />
 
-        {pendingFacility && !gateOk ? (
-          <Alert tone="warning" title="Not ready for disbursement">
-            {!row.released ? "Credit Administration hasn't released this file for disbursement yet. " : ""}
-            {openCps.length ? `${openCps.length} condition${openCps.length > 1 ? "s" : ""} precedent still open: ${openCps.map((c) => c.title).join(", ")}. ` : ""}
-            The Maker can prepare the disbursement once every condition is met, waived or deferred and the file is released.
-          </Alert>
-        ) : null}
-        {!pendingFacility && !awaiting ? (
-          <Alert tone="success" title="Disbursed">
-            This facility is {facility.status.toLowerCase()} with {money(facility.outstanding, facility.currency)} outstanding.
-          </Alert>
-        ) : null}
+          {pendingFacility && !gateOk ? (
+            <Alert tone="warning" title="Not ready for disbursement">
+              {!row.released ? "Credit Administration hasn't released this file for disbursement yet. " : ""}
+              {openCps.length ? `${openCps.length} condition${openCps.length > 1 ? "s" : ""} precedent still open: ${openCps.map((c) => c.title).join(", ")}. ` : ""}
+              The Maker can prepare the disbursement once every condition is met, waived or deferred and the file is released.
+            </Alert>
+          ) : null}
+          {!pendingFacility && !awaiting ? (
+            <Alert tone="success" title="Disbursed">
+              This facility is {facility.status.toLowerCase()} with {money(facility.outstanding, facility.currency)} outstanding.
+            </Alert>
+          ) : null}
 
-        {isMakerRole && pendingFacility && !awaiting ? (
+          {isMakerRole && pendingFacility && !awaiting ? (
+            <Card variant="outlined">
+              <CardHeader>
+                <CardTitle>Prepare disbursement</CardTitle>
+                <CardDescription>
+                  {returned ? `Last request ${returned.id} was ${returned.status.toLowerCase()}${returned.comment ? `: “${returned.comment}”` : ""}. Correct and resubmit.` : "Execution only, within the approved facility amount (PRD §4.1)."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!makerOk ? (
+                  <Alert tone="danger" title="You can't prepare this disbursement">
+                    {mChecks.filter((c) => !c.ok).map((c) => c.detail).join(". ")}.
+                  </Alert>
+                ) : (
+                  <Form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void prepare();
+                    }}
+                  >
+                    <Grid columns={{ base: 1, md: 2 }} gap="medium">
+                      <Field label="Amount" required error={touched ? amountError : undefined} description={`Up to ${money(row.undisbursed, facility.currency)}`}>
+                        <Input prefix={facility.currency === "USD" ? "$" : "₦"} numeric inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={!gateOk} />
+                      </Field>
+                      <Field label="Value date" required>
+                        <Input type="date" value={valueDate} onChange={(e) => setValueDate(e.target.value)} disabled={!gateOk} />
+                      </Field>
+                      <Field label="Beneficiary account (NUBAN)" required error={touched ? accountError : undefined} description="Customer's operating account in the CBA">
+                        <Input inputMode="numeric" maxLength={accountLength} className="font-mono" value={account} onChange={(e) => setAccount(e.target.value.replace(/\D/g, ""))} disabled={!gateOk} />
+                      </Field>
+                      <Field label="Account name" required error={touched ? nameError : undefined}>
+                        <Input value={accountName} onChange={(e) => setAccountName(e.target.value)} disabled={!gateOk} />
+                      </Field>
+                    </Grid>
+                    <Field label="Narration">
+                      <Input value={narration} onChange={(e) => setNarration(e.target.value)} disabled={!gateOk} />
+                    </Field>
+                    <FormActions>
+                      <Button type="submit" disabled={!canPrepare}>
+                        Submit for authorisation
+                      </Button>
+                    </FormActions>
+                  </Form>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {awaiting ? (
+            <Card variant="outlined">
+              <CardHeader>
+                <CardTitle>Authorisation</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Stack gap="medium">
+                  <DescriptionList
+                    columns={2}
+                    items={[
+                      { label: "Request", value: awaiting.id, mono: true },
+                      { label: "Amount", value: money(awaiting.amount, awaiting.currency), mono: true },
+                      { label: "Beneficiary", value: `${awaiting.accountName} · ${awaiting.accountNumber}` },
+                      { label: "Value date", value: date(awaiting.valueDate) },
+                      { label: "Prepared by", value: `${awaiting.makerName} · ${dateTime(awaiting.preparedAt)}` },
+                      { label: "Step-up", value: awaiting.amount > stepUpThreshold ? `Required — above ${moneyShort(stepUpThreshold)}` : "Not required" },
+                      { label: "Narration", value: awaiting.narration, span: 2 },
+                    ]}
+                  />
+                  {!pendingOp ? (
+                    <Alert tone="warning" title="Not yet routed to Operations">
+                      This request pre-dates the Operations workflow.{" "}
+                      {awaiting.makerId === userId && isMakerRole ? (
+                        <Button size="small" variant="text" onClick={() => void prepareDisbursement(awaiting, app?.id).then((r) => setDone(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.reason }))}>
+                          Route to Operations
+                        </Button>
+                      ) : (
+                        "The Maker who prepared it must route it to Operations."
+                      )}
+                    </Alert>
+                  ) : pendingOp.requestedBy.id === userId ? (
+                    <Button variant="secondary" onClick={() => void withdrawDisbursement(pendingOp.id, "Withdrawn by the Maker").then((r) => setDone(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.reason }))}>
+                      Withdraw request
+                    </Button>
+                  ) : isCheckerRole ? (
+                    <DecisionPanel
+                      title="Checker decision"
+                      actions={["approve", "return", "decline"]}
+                      actionLabels={{ approve: "Authorise", return: "Return to maker", decline: "Reject" }}
+                      commentRequired={["return", "decline"]}
+                      requireStepUp={(d) => d === "approve" && awaiting.amount > stepUpThreshold}
+                      onStepUp={stepUp}
+                      onDecide={decide}
+                      disabled={!checkerOk}
+                      notice={
+                        checkerOk ? (
+                          <Text variant="small" tone="muted">
+                            Your decision is recorded on Operations request {pendingOp.id}. Authorising posts the disbursement to the CBA (simulated) and activates the facility.
+                          </Text>
+                        ) : (
+                          <Alert tone="danger" title="You can't authorise this disbursement">
+                            {cChecks.filter((c) => !c.ok).map((c) => c.detail).join(". ")}.
+                          </Alert>
+                        )
+                      }
+                    />
+                  ) : (
+                    <Alert tone="info" title="Awaiting a Disbursement Checker">
+                      A Disbursement Checker who isn&apos;t the Maker, initiator or recommender must authorise this request.
+                    </Alert>
+                  )}
+                </Stack>
+              </CardContent>
+            </Card>
+          ) : null}
+
           <Card variant="outlined">
             <CardHeader>
-              <CardTitle>Prepare disbursement</CardTitle>
+              <CardTitle>Segregation of duties</CardTitle>
               <CardDescription>
-                {returned ? `Last request ${returned.id} was ${returned.status.toLowerCase()}${returned.comment ? `: “${returned.comment}”` : ""}. Correct and resubmit.` : "Execution only, within the approved facility amount (PRD §4.1)."}
+                PRD §4.2: whoever initiated or recommended the facility can&apos;t be its Maker or Checker, and the Checker must be a different person from the Maker. Switching role from the user menu keeps you the same person — try it to see no-self-approval enforced.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {!makerOk ? (
-                <Alert tone="danger" title="You can't prepare this disbursement">
-                  {mChecks.filter((c) => !c.ok).map((c) => c.detail).join(". ")}.
-                </Alert>
-              ) : (
-                <Form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void prepare();
-                  }}
-                >
-                  <Grid columns={{ base: 1, md: 2 }} gap="medium">
-                    <Field label="Amount" required error={touched ? amountError : undefined} description={`Up to ${money(row.undisbursed, facility.currency)}`}>
-                      <Input prefix={facility.currency === "USD" ? "$" : "₦"} numeric inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} disabled={!gateOk} />
-                    </Field>
-                    <Field label="Value date" required>
-                      <Input type="date" value={valueDate} onChange={(e) => setValueDate(e.target.value)} disabled={!gateOk} />
-                    </Field>
-                    <Field label="Beneficiary account (NUBAN)" required error={touched ? accountError : undefined} description="Customer's operating account in the CBA">
-                      <Input inputMode="numeric" maxLength={accountLength} className="font-mono" value={account} onChange={(e) => setAccount(e.target.value.replace(/\D/g, ""))} disabled={!gateOk} />
-                    </Field>
-                    <Field label="Account name" required error={touched ? nameError : undefined}>
-                      <Input value={accountName} onChange={(e) => setAccountName(e.target.value)} disabled={!gateOk} />
-                    </Field>
-                  </Grid>
-                  <Field label="Narration">
-                    <Input value={narration} onChange={(e) => setNarration(e.target.value)} disabled={!gateOk} />
-                  </Field>
-                  <FormActions>
-                    <Button type="submit" disabled={!canPrepare}>
-                      Submit for authorisation
-                    </Button>
-                  </FormActions>
-                </Form>
-              )}
-            </CardContent>
-          </Card>
-        ) : null}
-
-        {awaiting ? (
-          <Card variant="outlined">
-            <CardHeader>
-              <CardTitle>Authorisation</CardTitle>
-            </CardHeader>
-            <CardContent>
               <Stack gap="medium">
-                <DescriptionList
-                  columns={2}
-                  items={[
-                    { label: "Request", value: awaiting.id, mono: true },
-                    { label: "Amount", value: money(awaiting.amount, awaiting.currency), mono: true },
-                    { label: "Beneficiary", value: `${awaiting.accountName} · ${awaiting.accountNumber}` },
-                    { label: "Value date", value: date(awaiting.valueDate) },
-                    { label: "Prepared by", value: `${awaiting.makerName} · ${dateTime(awaiting.preparedAt)}` },
-                    { label: "Step-up", value: awaiting.amount > stepUpThreshold ? `Required — above ${moneyShort(stepUpThreshold)}` : "Not required" },
-                    { label: "Narration", value: awaiting.narration, span: 2 },
-                  ]}
-                />
-                {!pendingOp ? (
-                  <Alert tone="warning" title="Not yet routed to Operations">
-                    This request pre-dates the Operations workflow.{" "}
-                    {awaiting.makerId === userId && isMakerRole ? (
-                      <Button size="small" variant="text" onClick={() => void prepareDisbursement(awaiting, app?.id).then((r) => setDone(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.reason }))}>
-                        Route to Operations
-                      </Button>
-                    ) : (
-                      "The Maker who prepared it must route it to Operations."
-                    )}
-                  </Alert>
-                ) : pendingOp.requestedBy.id === userId ? (
-                  <Button variant="secondary" onClick={() => void withdrawDisbursement(pendingOp.id, "Withdrawn by the Maker").then((r) => setDone(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.reason }))}>
-                    Withdraw request
-                  </Button>
-                ) : isCheckerRole ? (
-                  <DecisionPanel
-                    title="Checker decision"
-                    actions={["approve", "return", "decline"]}
-                    actionLabels={{ approve: "Authorise", return: "Return to maker", decline: "Reject" }}
-                    commentRequired={["return", "decline"]}
-                    requireStepUp={(d) => d === "approve" && awaiting.amount > stepUpThreshold}
-                    onStepUp={stepUp}
-                    onDecide={decide}
-                    disabled={!checkerOk}
-                    notice={
-                      checkerOk ? (
-                        <Text variant="small" tone="muted">
-                          Your decision is recorded on Operations request {pendingOp.id}. Authorising posts the disbursement to the CBA (simulated) and activates the facility.
-                        </Text>
-                      ) : (
-                        <Alert tone="danger" title="You can't authorise this disbursement">
-                          {cChecks.filter((c) => !c.ok).map((c) => c.detail).join(". ")}.
-                        </Alert>
-                      )
-                    }
-                  />
-                ) : (
-                  <Alert tone="info" title="Awaiting a Disbursement Checker">
-                    A Disbursement Checker who isn&apos;t the Maker, initiator or recommender must authorise this request.
-                  </Alert>
-                )}
+                {!isCheckerRole ? <SodPanel title={`You (${actor.name}) as Maker`} checks={mChecks} /> : null}
+                {!isMakerRole ? <SodPanel title={`You (${actor.name}) as Checker`} checks={cChecks} /> : null}
               </Stack>
             </CardContent>
           </Card>
-        ) : null}
 
-        <Card variant="outlined">
-          <CardHeader>
-            <CardTitle>Segregation of duties</CardTitle>
-            <CardDescription>
-              PRD §4.2: whoever initiated or recommended the facility can&apos;t be its Maker or Checker, and the Checker must be a different person from the Maker. Switching role from the user menu keeps you the same person — try it to see no-self-approval enforced.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Stack gap="medium">
-              {!isCheckerRole ? <SodPanel title={`You (${actor.name}) as Maker`} checks={mChecks} /> : null}
-              {!isMakerRole ? <SodPanel title={`You (${actor.name}) as Checker`} checks={cChecks} /> : null}
-            </Stack>
-          </CardContent>
-        </Card>
-
-        <ChecklistPanel
-          title="Conditions precedent to drawdown"
-          description="Confirmed by Credit Administration (PRD §6.1.1 step 15, §7.1). Approved deferrals count as cleared."
-          items={cpItems}
-          action={
-            <Button as={Link} href={`/credit-admin/facility/?id=${facility.id}`} size="small" variant="tertiary">
-              Open in Credit Admin
-            </Button>
-          }
-        />
-
-        {requests.length ? (
-          <ActivityFeed
-            label="Disbursement activity"
-            items={requests.flatMap((r) => [
-              ...(r.decidedAt ? [{ id: `${r.id}-d`, actor: r.checkerName ?? "Checker", action: r.status === "Authorised" ? "authorised" : r.status === "Rejected" ? "rejected" : "returned", target: `${r.id} · ${money(r.amount, r.currency)}`, timestamp: r.decidedAt, note: r.comment || (r.cbaReference ? `CBA ref ${r.cbaReference}` : undefined) }] : []),
-              { id: `${r.id}-p`, actor: r.makerName, action: "prepared", target: `${r.id} · ${money(r.amount, r.currency)}`, timestamp: r.preparedAt },
-            ])}
+          <ChecklistPanel
+            title="Conditions precedent to drawdown"
+            description="Confirmed by Credit Administration (PRD §6.1.1 step 15, §7.1). Approved deferrals count as cleared."
+            items={cpItems}
+            action={
+              <Button as={Link} href={`/credit-admin/facility/?id=${facility.id}`} size="small" variant="tertiary">
+                Open in Credit Admin
+              </Button>
+            }
           />
-        ) : null}
-      </Stack>
 
+          {requests.length ? (
+            <ActivityFeed
+              label="Disbursement activity"
+              items={requests.flatMap((r) => [
+                ...(r.decidedAt ? [{ id: `${r.id}-d`, actor: r.checkerName ?? "Checker", action: r.status === "Authorised" ? "authorised" : r.status === "Rejected" ? "rejected" : "returned", target: `${r.id} · ${money(r.amount, r.currency)}`, timestamp: r.decidedAt, note: r.comment || (r.cbaReference ? `CBA ref ${r.cbaReference}` : undefined) }] : []),
+                { id: `${r.id}-p`, actor: r.makerName, action: "prepared", target: `${r.id} · ${money(r.amount, r.currency)}`, timestamp: r.preparedAt },
+              ])}
+            />
+          ) : null}
+        </Stack>
+      </Drawer>
+      {/* Rendered beside the Drawer, not inside it: React propagates a nested <dialog>'s close event to the
+          parent dialog's onClose, so closing the step-up dialog used to close the workspace too. */}
       <StepUpAuthDialog
         open={stepUpOpen}
         onOpenChange={(o) => {
@@ -672,6 +675,6 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
         description="High-value disbursement — enter the one-time code sent to your registered device. Demo: any 6-digit code works."
         errorMessage="Enter all 6 digits."
       />
-    </Drawer>
+    </>
   );
 }
