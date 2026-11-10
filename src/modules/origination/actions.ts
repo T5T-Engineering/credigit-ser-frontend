@@ -16,7 +16,7 @@ import { roleById, type RoleId } from "@/lib/rbac/roles";
 import { publish, type EventSubject } from "@/lib/platform/events";
 import { runHooks } from "@/lib/platform/hooks";
 import { notify } from "@/lib/platform/notifications";
-import { decideOperation, getDefinition, submitOperation, useOperationsStore, type OperationInstance, type StepDecision } from "@/lib/platform/operations";
+import { decideOperation, getDefinition, instanceSteps, submitOperation, useOperationsStore, type OperationInstance, type StepDecision } from "@/lib/platform/operations";
 import { getRule } from "@/lib/platform/rules";
 import { currentActor, type Actor } from "@/lib/platform/scope";
 import { buildApprovalChain, chainFromOperation, creditOperationType, type Flow } from "@/lib/workflow";
@@ -390,7 +390,8 @@ export function syncFromOperation(instance: OperationInstance) {
   const p = instance.payload as CreditPayload;
   const app = findApp(p.applicationId);
   if (!app) return;
-  const steps = getDefinition(instance.operationType).steps;
+  // Steps snapshotted at submission: a later workflow edit must not reshape an in-flight approval.
+  const steps = instanceSteps(instance);
   const approvals = chainFromOperation(steps, instance, db().users);
   const changes: Partial<Application> = { approvals };
   if (app.stage === "Recommendation" && instance.stepIndex > 0) changes.stage = "Approval";

@@ -57,9 +57,9 @@ test.describe("Waiver request", () => {
     await switchRole(page, "credit-admin-officer", `/credit-admin/waivers/?facility=${fac.id}`);
     // Open the request (row on desktop, card on phones) and read its status in the drawer.
     await page.getByText(w.id).filter({ visible: true }).first().click();
-    const drawer = page.getByRole("dialog", { name: `Waiver ${w.id}` });
-    await expect(drawer.getByText("Approved").first()).toBeVisible();
-    await expect(drawer.getByText(/Low-risk documentation item; waiver granted/)).toBeVisible();
+    const decided = page.getByRole("dialog", { name: `Waiver ${w.id}` });
+    await expect(decided.getByText("Approved").first()).toBeVisible();
+    await expect(decided.getByText(/Low-risk documentation item; waiver granted/)).toBeVisible();
     expect(await cpStatus(page, w.cpKey, w.conditionId)).toBe("waived");
   });
 
