@@ -16,7 +16,8 @@ import type { RoleId } from "@/lib/rbac/roles";
 import { logAudit } from "../operational-risk/shared";
 import { useAi, type SavedQuery } from "./store";
 
-export const AI = "ai";
+/** Same key as the nav module ("ai-console") so Operations shows the module name, not a raw id. */
+export const AI = "ai-console";
 const DEMO = "Tenant parameter (demo value)";
 
 export type QueryScope = "full" | "platform";

@@ -12,6 +12,8 @@ const EXTERNAL = process.env.E2E_BASE_URL;
 
 export default defineConfig({
   testDir: "./e2e",
+  /** Separate folders per run (E2E_OUTPUT) so parallel runs don't delete each other's traces. */
+  outputDir: process.env.E2E_OUTPUT ?? "test-results",
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: true,

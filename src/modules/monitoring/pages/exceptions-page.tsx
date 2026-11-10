@@ -46,11 +46,17 @@ import { PendingApproval } from "../pending-approval";
 import { changeExceptionStatus, commentOnException, requestEscalation, requestResolution, runEscalationSweep, slaLapsed } from "../service";
 import { useMonitoring, type MonitoringException } from "../store";
 
+type ExceptionStatus = MonitoringException["status"];
+/** Kanban column ids must be valid DOM ids (the board labels each column via aria-labelledby), so statuses are slugged. */
+const columnIdOf = (status: ExceptionStatus) => status.toLowerCase().replace(/\s+/g, "-");
+const statusOrder: ExceptionStatus[] = ["Raised", "Under review", "Escalated", "Resolved"];
+const statusOfColumn = (columnId: string) => statusOrder.find((s) => columnIdOf(s) === columnId);
+
 const columns: KanbanColumn[] = [
-  { id: "Raised", title: "Raised", tone: "info" },
-  { id: "Under review", title: "Under review", tone: "accent" },
-  { id: "Escalated", title: "Escalated", tone: "danger" },
-  { id: "Resolved", title: "Resolved", tone: "success" },
+  { id: columnIdOf("Raised"), title: "Raised", tone: "info" },
+  { id: columnIdOf("Under review"), title: "Under review", tone: "accent" },
+  { id: columnIdOf("Escalated"), title: "Escalated", tone: "danger" },
+  { id: columnIdOf("Resolved"), title: "Resolved", tone: "success" },
 ];
 
 const statusTones = { Raised: "info", "Under review": "accent", Escalated: "danger", Resolved: "success" } as const;
@@ -95,7 +101,7 @@ function ExceptionsInner() {
     () =>
       scoped.map((e) => ({
         id: e.id,
-        columnId: e.status,
+        columnId: columnIdOf(e.status),
         title: obligor.get(e.obligorId)?.name ?? e.obligorId,
         textTitle: obligor.get(e.obligorId)?.name ?? e.obligorId,
         meta: `${e.id} · ${e.type}`,
@@ -112,9 +118,10 @@ function ExceptionsInner() {
     [scoped, obligor, user, pendingOps],
   );
 
-  const move = (id: string, to: string) => {
+  const move = (id: string, toColumn: string) => {
     const e = exceptions.find((x) => x.id === id);
-    if (!e || e.status === to) return;
+    const to = statusOfColumn(toColumn);
+    if (!e || !to || e.status === to) return;
     if (pendingOps.has(id)) return setNotice({ tone: "info", text: `${id} is awaiting sign-off (${pendingOps.get(id)!.id}) — decide it in Operations first.` });
     if (to === "Resolved") return setDialog({ kind: "resolve", id });
     if (to === "Escalated") return setDialog({ kind: "escalate", id });

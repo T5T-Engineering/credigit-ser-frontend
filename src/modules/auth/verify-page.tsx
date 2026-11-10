@@ -48,7 +48,7 @@ export function VerifyPage() {
         >
           {demoAccessEnabled ? (
             <Alert tone="info" title="Prototype">
-              Sign in as System Admin (demo access) and open Admin → Users to approve this request.
+              Sign in as System Admin (demo access) and approve this request in Operations → Approvals (it is also listed under Admin → Users).
             </Alert>
           ) : null}
         </AuthCard>

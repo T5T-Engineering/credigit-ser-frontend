@@ -331,7 +331,13 @@ function AnswerCard({ answer, record, onSave }: { answer: Answer; record: QueryR
       signOffNote="AI-generated ad hoc analysis — verify before relying on it. It has no workflow effect and is logged to the audit trail."
     >
       <Stack gap="medium" className="mt-2">
-        {answer.chart && <ChartView chart={answer.chart} />}
+        {/* Layout wrapper: the library charts' sr-only data tables are absolutely positioned and, without a positioned
+            ancestor, widen the mobile layout viewport (2,000px+ horizontal overflow). Clip them to the answer card. */}
+        {answer.chart && (
+          <div className="relative overflow-x-clip">
+            <ChartView chart={answer.chart} />
+          </div>
+        )}
         {answer.table && (
           <DataTable
             label={answer.title}

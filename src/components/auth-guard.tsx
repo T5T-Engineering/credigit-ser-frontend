@@ -33,9 +33,15 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     if (!hydrated) return;
     const params = new URLSearchParams(window.location.search);
     const requested = params.get("demoRole") as RoleId | null;
-    if (demoAccessEnabled && requested && requested in roleById && requested !== roleId) {
-      demoSignIn(requested);
-      return;
+    if (demoAccessEnabled && requested && requested in roleById) {
+      // Consume the parameter: left in the URL, signing out (or an idle timeout) would sign straight back in.
+      params.delete("demoRole");
+      const query = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+      if (requested !== roleId) {
+        demoSignIn(requested);
+        return;
+      }
     }
     if (!user) router.replace(`/login/?next=${encodeURIComponent(pathname)}`);
   }, [hydrated, user, roleId, router, pathname]);

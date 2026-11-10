@@ -455,7 +455,8 @@ function NewApplicationWizard({ meId }: { meId: string }) {
         </Card>
       </Grid>
       {uploads.length ? (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
+          {/* `relative`: containing block for the header's sr-only (absolute) label, so it is clipped instead of widening the page on phones. */}
           <Table>
             <TableHead>
               <TableRow>
@@ -561,7 +562,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
               <KeyValueGrid key={b.source} columns={2} items={[{ label: b.source, value: b.score ? String(b.score) : `${b.lines.length} lines`, mono: true }, { label: "Reference", value: b.reference, mono: true }]} />
             ))}
           </Grid>
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <Table>
               <TableHead>
                 <TableRow>

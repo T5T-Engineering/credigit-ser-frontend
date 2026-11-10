@@ -117,6 +117,7 @@ export function ParametersTab({ a, editing, draft, setDraft }: Props) {
       cell: (r) => <span className="font-mono text-sm">{date(r.updatedAt)}</span>,
     },
   ];
+  const scoreColumn = columns.find((c) => c.id === "score")!;
 
   return (
     <Stack gap="large">
@@ -158,9 +159,14 @@ export function ParametersTab({ a, editing, draft, setDraft }: Props) {
                 mobileCard={(r) => (
                   <span className="flex flex-col gap-1">
                     <span className="font-semibold text-fg">{r.param.name}</span>
-                    <span className="font-mono text-sm">
-                      {r.score.toFixed(1)} / 10 · {r.observed ?? "Analyst-scored"}
-                    </span>
+                    {/* Edit mode must work on phones too: show the same score input as the desktop "Score" column. */}
+                    {editing && isEnrichable(r.param) ? (
+                      scoreColumn.cell!(r)
+                    ) : (
+                      <span className="font-mono text-sm">
+                        {r.score.toFixed(1)} / 10 · {r.observed ?? "Analyst-scored"}
+                      </span>
+                    )}
                     <span className="text-xs text-fg-muted">{r.param.systemSource ?? r.param.enrichmentSource}</span>
                   </span>
                 )}

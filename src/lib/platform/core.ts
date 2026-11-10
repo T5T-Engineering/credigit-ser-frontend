@@ -65,7 +65,7 @@ registerOperation<RuleChangePayload>({
   name: "Business rule change",
   module: "operations",
   description: "Change a business rule / tenant parameter. Second-person approval (PRD §10.4 configurability with control).",
-  defaultSteps: [step("review", "Risk review", ["head-of-risk", "cro"], 24), step("confirm", "System Admin confirmation", ["system-admin"], 24)],
+  defaultSteps: [step("review", "Risk review", ["head-of-risk", "cro"], 24), step("confirm", "Confirmation (System Admin or CRO)", ["system-admin", "cro"], 24)],
   apply: (p, { instance, actor }) => {
     const def = ruleDefinition(p.key);
     const before = getRule(p.key);
@@ -105,7 +105,7 @@ registerOperation<TemplatePayload>({
   name: "Notification template change",
   module: "operations",
   description: "Change the wording of a notification template.",
-  defaultSteps: [step("review", "Compliance / risk review", ["head-of-risk"], 48)],
+  defaultSteps: [step("review", "Compliance / risk review", ["head-of-risk", "cro"], 48)],
   apply: (t) => {
     useNotificationStore.setState((s) => ({ overrides: { ...s.overrides, [t.id]: { subject: t.subject, body: t.body, inApp: t.inApp } } }));
     publish("operations.template.changed", { module: "operations", subject: { type: "NotificationTemplate", id: t.id, href: "/operations/notifications" }, payload: {} });
