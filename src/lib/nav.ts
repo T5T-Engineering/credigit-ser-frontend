@@ -233,6 +233,7 @@ export const navigation: NavGroup[] = [
         icon: SlidersHorizontal,
         pages: [
           { label: "Profile & security", href: "/settings" },
+          { label: "Password", href: "/settings/password" },
           { label: "Branding", href: "/settings/branding" },
         ],
       },

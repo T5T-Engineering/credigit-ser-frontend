@@ -1,7 +1,7 @@
 "use client";
 
-import { ModulePage } from "@/components/module-page";
+import { DashboardPage } from "@/modules/workspace/dashboard-page";
 
 export default function Page() {
-  return <ModulePage module="dashboard">Dashboard coming next.</ModulePage>;
+  return <DashboardPage />;
 }

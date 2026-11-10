@@ -72,7 +72,9 @@ export type Role = {
   modules: Partial<Record<ModuleKey, Access>>;
 };
 
-const common: Partial<Record<ModuleKey, Access>> = { dashboard: "view", inbox: "edit", settings: "edit", "ai-console": "view" };
+const common: Partial<Record<ModuleKey, Access>> = { dashboard: "view", inbox: "edit", settings: "edit" };
+/** AI analytics & NL query console is restricted (PRD §6.13): CRO, Head of Risk; platform-data scope for System Admin / IT Support. */
+const aiConsole: Partial<Record<ModuleKey, Access>> = { "ai-console": "view" };
 const riskViewAll: Partial<Record<ModuleKey, Access>> = {
   origination: "view",
   "credit-analysis": "view",
@@ -251,7 +253,7 @@ export const roles: Role[] = [
     tier: 5,
     limitNgn: 2_500_000_000,
     authority: "Tier 5 lending limit; adjudicator for CCO/HD dissent",
-    modules: { ...common, ...riskViewAll, executive: "view", origination: "edit", "enterprise-risk": "edit", connectors: "view", audit: "view" },
+    modules: { ...common, ...riskViewAll, ...aiConsole, executive: "edit", origination: "edit", "enterprise-risk": "edit", connectors: "view", audit: "view" },
   },
   {
     id: "head-of-risk",
@@ -262,7 +264,7 @@ export const roles: Role[] = [
     tier: null,
     limitNgn: null,
     authority: "Escalation and policy sign-off (below CRO/Board)",
-    modules: { ...common, ...riskViewAll, executive: "view", "enterprise-risk": "edit", audit: "view" },
+    modules: { ...common, ...riskViewAll, ...aiConsole, executive: "edit", "enterprise-risk": "edit", audit: "view" },
   },
   {
     id: "md",
@@ -350,7 +352,7 @@ export const roles: Role[] = [
     tier: null,
     limitNgn: null,
     authority: "Configuration, not credit, authority",
-    modules: { ...common, admin: "edit", audit: "view", connectors: "edit", settings: "edit" },
+    modules: { ...common, ...aiConsole, admin: "edit", audit: "view", connectors: "edit", settings: "edit" },
   },
   {
     id: "it-support",
@@ -361,7 +363,7 @@ export const roles: Role[] = [
     tier: null,
     limitNgn: null,
     authority: "Technical only — no business data entry or approval",
-    modules: { ...common, connectors: "edit", admin: "view", audit: "view" },
+    modules: { ...common, ...aiConsole, connectors: "edit", admin: "view", audit: "view" },
   },
 ];
 

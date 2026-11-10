@@ -4,7 +4,7 @@
  * Signed-in session for the prototype. Stored in sessionStorage (cleared when the browser tab closes).
  * Real authorisation will be enforced by the backend; the UI only hides what a role can't use.
  */
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { roleById, type ModuleKey, type Access, type RoleId, canAccess } from "../rbac/roles";
@@ -15,7 +15,7 @@ export type SessionUser = {
   id: string;
   name: string;
   email: string;
-  source: "microsoft" | "demo";
+  source: "microsoft" | "demo" | "password";
 };
 
 type SessionState = {
@@ -39,7 +39,7 @@ export const useSession = create<SessionState>()(
           actorId: user.id,
           actorName: user.name,
           roleId,
-          action: user.source === "microsoft" ? "Signed in (Microsoft SSO)" : "Signed in (demo access)",
+          action: user.source === "microsoft" ? "Signed in (Microsoft SSO)" : user.source === "password" ? "Signed in (email + password + one-time code)" : "Signed in (demo access)",
           entityType: "Session",
           entityId: "-",
         });
@@ -74,13 +74,12 @@ export function useCan(module: ModuleKey, level: Access = "view"): boolean {
 }
 
 /** True once persisted stores have loaded in the browser (avoids rendering seed data before stored data). */
+const hydrationDone = () => useSession.persist.hasHydrated() && useDb.persist.hasHydrated();
+function subscribeHydration(onChange: () => void) {
+  const unsubs = [useSession.persist.onFinishHydration(onChange), useDb.persist.onFinishHydration(onChange)];
+  return () => unsubs.forEach((u) => u());
+}
 export function useHydrated(): boolean {
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => {
-    const done = () => useSession.persist.hasHydrated() && useDb.persist.hasHydrated();
-    if (done()) setHydrated(true);
-    const unsubs = [useSession.persist.onFinishHydration(() => done() && setHydrated(true)), useDb.persist.onFinishHydration(() => done() && setHydrated(true))];
-    return () => unsubs.forEach((u) => u());
-  }, []);
-  return hydrated;
+  // Server render: false. Browser: true once both persisted stores have loaded.
+  return useSyncExternalStore(subscribeHydration, hydrationDone, () => false);
 }

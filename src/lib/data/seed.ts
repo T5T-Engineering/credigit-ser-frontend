@@ -205,11 +205,13 @@ export function createSeed(): SeedData {
     "Personal guarantee",
     "Insurance policy",
   ];
+  // PRD §6.7.3 haircut weightings where stated (cash 0%, quoted equities 20%, legal mortgages 50%);
+  // other types are tenant parameters (demo values).
   const haircut: Record<CollateralType, number> = {
-    "Legal mortgage": 30,
-    "Equitable mortgage": 40,
+    "Legal mortgage": 50,
+    "Equitable mortgage": 50,
     Debenture: 50,
-    "Quoted shares": 40,
+    "Quoted shares": 20,
     "Cash / lien on deposit": 0,
     Vehicle: 40,
     Equipment: 45,
@@ -222,7 +224,7 @@ export function createSeed(): SeedData {
   const newCollateral = (obligor: Obligor, value: number): Collateral => {
     const type = pick(collateralTypes);
     const perfection: PerfectionStatus = weighted([
-      { value: "Perfected" as const, weight: 7 },
+      { value: "Perfected" as const, weight: 16 },
       { value: "Registration" as const, weight: 1 },
       { value: "Documentation" as const, weight: 1 },
       { value: "Search in progress" as const, weight: 1 },
@@ -446,8 +448,8 @@ export function createSeed(): SeedData {
   });
 
   const notifications: Notification[] = [
-    { id: "NTF-1", title: "Sector limit near breach", body: "General commerce is at 96% of its sectoral limit.", tone: "warning", createdAt: iso(subDays(DEMO_NOW, 0)), read: false, href: "/portfolio/limits", roleIds: ["cro", "head-of-risk", "portfolio-mis-officer", "credit-analyst"] },
-    { id: "NTF-2", title: "AI flag: inflow shortfall", body: "Three obligors show account inflows below 60% of declared turnover.", tone: "danger", createdAt: iso(subDays(DEMO_NOW, 1)), read: false, href: "/monitoring/covenants", roleIds: ["loan-review-officer", "cro", "head-of-risk", "credit-analyst"] },
+    { id: "NTF-1", title: "Government exposure above ceiling", body: "Government-sector exposure is above its 10% ceiling. Review in Portfolio → Limits.", tone: "warning", createdAt: iso(subDays(DEMO_NOW, 0)), read: false, href: "/portfolio/limits", roleIds: ["cro", "head-of-risk", "portfolio-mis-officer", "credit-analyst"] },
+    { id: "NTF-2", title: "AI flag: inflow shortfall", body: "Three obligors show account inflows below 60% of declared turnover.", tone: "danger", createdAt: iso(subDays(DEMO_NOW, 1)), read: false, href: "/monitoring/covenants?tab=inflows", roleIds: ["loan-review-officer", "cro", "head-of-risk", "credit-analyst"] },
     { id: "NTF-3", title: "Bureau connector delayed", body: "Credit bureau responses are taking longer than usual. Retrying automatically.", tone: "info", createdAt: iso(subDays(DEMO_NOW, 1)), read: true, href: "/connectors", roleIds: [] },
     { id: "NTF-4", title: "Approval requested", body: "A facility above your limit has been escalated to you.", tone: "info", createdAt: iso(subDays(DEMO_NOW, 0)), read: false, href: "/inbox", roleIds: ["cco", "directorate-head", "cro", "md", "group-head"] },
     { id: "NTF-5", title: "Insurance expiring", body: "7 collateral insurance policies expire in the next 30 days.", tone: "warning", createdAt: iso(subDays(DEMO_NOW, 2)), read: false, href: "/collateral", roleIds: ["collateral-officer", "credit-admin-officer", "legal-officer"] },

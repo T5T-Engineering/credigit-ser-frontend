@@ -12,6 +12,7 @@ import {
   NotificationCenter,
   SessionTimeoutDialog,
   SideNav,
+  Toaster,
   UserMenu,
   type AppNotification,
   type CommandItem,
@@ -27,6 +28,17 @@ import { demoAccessEnabled } from "./auth-guard";
 /** Normalise "/origination/" → "/origination". */
 export function cleanPath(path: string) {
   return path.length > 1 ? path.replace(/\/$/, "") : path;
+}
+
+/**
+ * Reset the shared spine and every module store (keys "credigit.ser.*"), keeping the session,
+ * accounts and branding, then reload so module stores re-seed.
+ */
+export function resetAllDemoData(resetSpine: () => void) {
+  resetSpine();
+  const keep = new Set(["credigit.ser.session", "credigit.ser.accounts", "credigit.ser.demo-data"]);
+  for (const key of Object.keys(localStorage)) if (key.startsWith("credigit.ser.") && !keep.has(key)) localStorage.removeItem(key);
+  window.location.reload();
 }
 
 const IDLE_LIMIT_MS = 15 * 60 * 1000;
@@ -90,16 +102,17 @@ export function AppFrame({ children }: { children: ReactNode }) {
 
   const onCommand = (item: CommandItem) => {
     if (item.id === "act:reset") {
-      if (window.confirm("Reset all demo data to its original state?")) resetDemo();
+      if (window.confirm("Reset all demo data to its original state?")) resetAllDemoData(resetDemo);
       return;
     }
     if (item.href) router.push(item.href);
   };
 
   // ---------- Idle session timeout (PRD §4.2: configurable per role) ----------
-  const lastActivity = useRef(Date.now());
+  const lastActivity = useRef(0);
   const [warnAt, setWarnAt] = useState<number | null>(null);
   useEffect(() => {
+    if (lastActivity.current === 0) lastActivity.current = Date.now();
     const bump = () => {
       if (warnAt === null) lastActivity.current = Date.now();
     };
@@ -192,9 +205,10 @@ export function AppFrame({ children }: { children: ReactNode }) {
         placeholder="Search obligors, applications, pages…"
         limit={12}
       />
+      <Toaster />
       <SessionTimeoutDialog
         open={warnAt !== null}
-        expiresAt={(warnAt ?? Date.now()) + WARNING_SECONDS * 1000}
+        expiresAt={(warnAt ?? 0) + WARNING_SECONDS * 1000}
         onStaySignedIn={() => {
           lastActivity.current = Date.now();
           setWarnAt(null);

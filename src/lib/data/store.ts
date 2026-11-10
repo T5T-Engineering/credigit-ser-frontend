@@ -29,7 +29,7 @@ type DbState = SeedData & {
   resetDemo: () => void;
 };
 
-const STORE_VERSION = 1;
+const STORE_VERSION = 3;
 
 export const useDb = create<DbState>()(
   persist(
@@ -64,7 +64,7 @@ export const useDb = create<DbState>()(
       version: STORE_VERSION,
       storage: createJSONStorage(() => localStorage),
       // Data only; actions come from the initializer.
-      partialize: ({ upsert: _u, update: _p, remove: _r, log: _l, resetDemo: _x, ...data }) => data,
+      partialize: (state) => Object.fromEntries(Object.entries(state).filter(([, value]) => typeof value !== "function")) as SeedData,
       migrate: () => createSeed() as unknown as DbState,
     },
   ),

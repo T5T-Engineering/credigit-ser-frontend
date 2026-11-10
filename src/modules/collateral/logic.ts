@@ -1,0 +1,178 @@
+/**
+ * Collateral Management & Legal Review logic (PRD §6.5, §6.7.3, §5.7).
+ * Pure functions. BACKEND SEAM: haircut weightings come from the Rules & Parameters Engine (CBN 12.13(a)(5)).
+ */
+import { addDays, subDays } from "date-fns";
+import type { Tone } from "@credigit/web-ui";
+import { DEMO_NOW } from "@/lib/data/seed";
+import type { Collateral, Facility, PerfectionStatus } from "@/lib/data/types";
+import type { RoleId } from "@/lib/rbac/roles";
+
+/* ---------------- Haircut weighting (PRD §6.7.3) ---------------- */
+
+export type HaircutRule = { pct: number; source: "PRD §6.7.3" | "Tenant parameter"; prdCategory?: string };
+
+/** PRD §6.7.3 table; types the PRD doesn't list use the tenant's configured value (demo value from the register). */
+export function haircutFor(c: Pick<Collateral, "type" | "haircutPct" | "description">): HaircutRule {
+  switch (c.type) {
+    case "Cash / lien on deposit":
+      return { pct: 0, source: "PRD §6.7.3", prdCategory: "Cash / deposits with the lending bank" };
+    case "Quoted shares":
+      return { pct: 20, source: "PRD §6.7.3", prdCategory: "Quoted equities & other traded securities" };
+    case "Legal mortgage":
+      return { pct: 50, source: "PRD §6.7.3", prdCategory: /duplex|plot/i.test(c.description) ? "Residential legal mortgage" : "Commercial legal mortgage" };
+    default:
+      return { pct: c.haircutPct, source: "Tenant parameter" };
+  }
+}
+
+/** Value-of-collateral basis for the haircut formula: CSCS mark-to-market for quoted shares; FSV for mortgages and other realisable assets. */
+export function valueBasis(c: Collateral, mtm?: number): { value: number; basis: string } {
+  if (c.type === "Quoted shares" && mtm !== undefined) return { value: Math.round(mtm), basis: "CSCS mark-to-market (units × price)" };
+  if (c.type === "Cash / lien on deposit") return { value: c.marketValue, basis: "Deposit balance" };
+  if (c.type === "Legal mortgage" || c.type === "Equitable mortgage") return { value: c.forcedSaleValue, basis: "Forced-sale value (independent valuer, CBN 12.13(a)(6))" };
+  // Types outside the PRD §6.7.3 table: the tenant haircut is applied to the assessed value (avoids discounting twice). See OPEN-QUESTIONS.
+  return { value: c.marketValue, basis: c.type.includes("guarantee") ? "Guarantor assessed value (tenant policy)" : "Assessed market value (tenant haircut applies)" };
+}
+
+/** Haircut-adjusted value = Value of Collateral × (1 − Haircut Weighting). Eligible only when perfected (CBN 12.13(a)(1)). */
+export function adjustedValue(c: Collateral, mtm?: number) {
+  const basis = valueBasis(c, mtm);
+  const h = haircutFor(c);
+  const adjusted = Math.round(basis.value * (1 - h.pct / 100));
+  return { ...basis, haircut: h, adjusted, eligible: c.perfection === "Perfected" };
+}
+
+/** Exposure secured: outstanding, or the contingent amount for guarantees. */
+export function facilityExposure(f: Facility): number {
+  return f.product.includes("guarantee") ? f.approvedAmount : f.outstanding;
+}
+
+/* ---------------- Perfection workflow ---------------- */
+
+export const perfectionSteps: { id: PerfectionStatus; title: string; description: string; owner: "legal-officer" | "collateral-officer" }[] = [
+  { id: "Search in progress", title: "Search", description: "Legal search at the registry (parallel to BDM review, PRD §6.1.1)", owner: "legal-officer" },
+  { id: "Documentation", title: "Documentation", description: "Security documents executed; genuineness and authenticity confirmed", owner: "legal-officer" },
+  { id: "Registration", title: "Registration", description: "Charge / mortgage / lien registered (CAC, Lands Registry, CSCS)", owner: "collateral-officer" },
+  { id: "Perfected", title: "Perfected", description: "Perfection complete; documents vaulted", owner: "collateral-officer" },
+];
+
+export function perfectionIndex(s: PerfectionStatus): number {
+  if (s === "Not started") return -1;
+  if (s === "Defective") return 1;
+  return perfectionSteps.findIndex((p) => p.id === s);
+}
+
+export const perfectionTones: Record<string, Tone> = {
+  "Not started": "neutral",
+  "Search in progress": "info",
+  Documentation: "info",
+  Registration: "warning",
+  Perfected: "success",
+  Defective: "danger",
+};
+
+/* ---------------- Role abilities inside the Collateral module (PRD §4.1) ---------------- */
+
+export function collateralAbilities(roleId: RoleId | undefined) {
+  return {
+    /** Collateral Management Officer: register, value, perfection/registration, haircut, insurance. */
+    manage: roleId === "collateral-officer",
+    /** Legal Officer: searches, genuineness, vaulting, legal sufficiency sign-off. */
+    legal: roleId === "legal-officer",
+    /** Middle Office: independent valuation verification. */
+    verify: roleId === "middle-office-officer",
+  };
+}
+
+/* ---------------- Simulated NGX prices (PRD §5.7 — prototype only) ---------------- */
+
+/** Reference closing prices (₦) — simulated demo values, not market data. */
+export const referencePrices: Record<string, { name: string; price: number; sector: string; vol: number }> = {
+  DANGCEM: { name: "Dangote Cement Plc", price: 478.5, sector: "Industrial goods", vol: 0.012 },
+  MTNN: { name: "MTN Nigeria Communications Plc", price: 268.0, sector: "ICT", vol: 0.015 },
+  ZENITHBANK: { name: "Zenith Bank Plc", price: 52.4, sector: "Banking", vol: 0.02 },
+  GTCO: { name: "Guaranty Trust Holding Co Plc", price: 61.85, sector: "Banking", vol: 0.02 },
+  NESTLE: { name: "Nestlé Nigeria Plc", price: 1120.0, sector: "Consumer goods", vol: 0.01 },
+  SEPLAT: { name: "Seplat Energy Plc", price: 5250.0, sector: "Oil & gas", vol: 0.018 },
+  BUACEMENT: { name: "BUA Cement Plc", price: 96.3, sector: "Industrial goods", vol: 0.014 },
+  AIRTELAFRI: { name: "Airtel Africa Plc", price: 2150.0, sector: "ICT", vol: 0.013 },
+  OKOMUOIL: { name: "Okomu Oil Palm Plc", price: 498.0, sector: "Agriculture", vol: 0.022 },
+  PRESCO: { name: "Presco Plc", price: 612.0, sector: "Agriculture", vol: 0.021 },
+};
+
+function seeded(n: number) {
+  const x = Math.sin(n * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/** Units pledged, derived so that the pledge-date value matches the register (prototype; seed units are random). */
+export function pledgedUnits(c: Collateral): number {
+  const ref = c.ticker ? referencePrices[c.ticker] : undefined;
+  if (!ref) return c.units ?? 0;
+  const seed = c.id.split("").reduce((a, ch) => a + ch.charCodeAt(0), 0);
+  const pledgeFactor = 0.92 + seeded(seed) * 0.3; // price at pledge vs today
+  return Math.round(c.marketValue / (ref.price * pledgeFactor) / 100) * 100;
+}
+
+/** 30 trading-day simulated price series ending at DEMO_NOW (deterministic). Some counters trend down to create margin calls. */
+export function priceSeries(ticker: string, days = 30): { date: Date; price: number }[] {
+  const ref = referencePrices[ticker];
+  if (!ref) return [];
+  const drift = ticker === "ZENITHBANK" || ticker === "OKOMUOIL" || ticker === "MTNN" ? -0.0065 : ticker === "SEPLAT" ? 0.004 : 0.0015;
+  const out: { date: Date; price: number }[] = [];
+  let p = ref.price;
+  const seedBase = ticker.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+  // build backwards from the reference so the last point equals the reference close
+  const pts = [p];
+  for (let i = 1; i < days; i++) {
+    const shock = (seeded(seedBase + i) - 0.5) * 2 * ref.vol;
+    p = p / (1 + drift + shock);
+    pts.unshift(p);
+  }
+  let d = DEMO_NOW;
+  const dates: Date[] = [];
+  while (dates.length < days) {
+    const wd = d.getDay();
+    if (wd !== 0 && wd !== 6) dates.unshift(d);
+    d = subDays(d, 1);
+  }
+  pts.forEach((price, i) => out.push({ date: dates[i]!, price: Math.round(price * 100) / 100 }));
+  return out;
+}
+
+/* ---------------- Collateral monitoring alerts (PRD §6.4.2) ---------------- */
+
+export type CollateralAlertKind = "Perfection incomplete" | "Perfection defective" | "Revaluation overdue" | "Revaluation due ≤ 90 days" | "Insurance expired" | "Insurance expiring ≤ 30 days" | "Margin shortfall";
+
+export type CollateralAlert = { id: string; collateralId: string; obligorId: string; kind: CollateralAlertKind; detail: string; tone: Tone; dueAt?: string };
+
+/** `mtmOf` returns the current mark-to-market value of a quoted-share collateral (undefined for other types). */
+export function buildCollateralAlerts(collateral: Collateral[], facilities: Facility[], mtmOf: (c: Collateral) => number | undefined): CollateralAlert[] {
+  const facMap = new Map(facilities.map((f) => [f.id, f]));
+  const alerts: CollateralAlert[] = [];
+  const now = DEMO_NOW;
+  for (const c of collateral) {
+    const linked = c.facilityIds.map((id) => facMap.get(id)).filter((f): f is Facility => !!f && f.status !== "Closed");
+    if (!linked.length) continue;
+    if (c.perfection === "Defective") alerts.push({ id: `${c.id}-pd`, collateralId: c.id, obligorId: c.obligorId, kind: "Perfection defective", detail: "Security document defect reported by Legal — cure before relying on the haircut adjustment.", tone: "danger" });
+    else if (c.perfection !== "Perfected" && new Date(c.valuedAt) < subDays(now, 90)) alerts.push({ id: `${c.id}-pi`, collateralId: c.id, obligorId: c.obligorId, kind: "Perfection incomplete", detail: `Stalled at ${c.perfection.toLowerCase()} for over 90 days on a live facility.`, tone: "warning" });
+    const reval = new Date(c.nextRevaluation);
+    if (c.type !== "Quoted shares" && c.type !== "Cash / lien on deposit") {
+      if (reval < now) alerts.push({ id: `${c.id}-ro`, collateralId: c.id, obligorId: c.obligorId, kind: "Revaluation overdue", detail: `Revaluation was due ${reval.toDateString().slice(4)}.`, tone: "danger", dueAt: c.nextRevaluation });
+    }
+    if (c.insuranceExpiry) {
+      const ins = new Date(c.insuranceExpiry);
+      if (ins < now) alerts.push({ id: `${c.id}-ie`, collateralId: c.id, obligorId: c.obligorId, kind: "Insurance expired", detail: "Insurance cover is not current.", tone: "danger", dueAt: c.insuranceExpiry });
+      else if (ins < addDays(now, 30)) alerts.push({ id: `${c.id}-ix`, collateralId: c.id, obligorId: c.obligorId, kind: "Insurance expiring ≤ 30 days", detail: "Request renewal certificate noting the bank's interest.", tone: "warning", dueAt: c.insuranceExpiry });
+    }
+    const mtm = mtmOf(c);
+    if (c.type === "Quoted shares" && mtm !== undefined) {
+      const adj = adjustedValue(c, mtm).adjusted;
+      const exposure = linked.reduce((a, f) => a + facilityExposure(f), 0);
+      if (exposure > 0 && adj < exposure)
+        alerts.push({ id: `${c.id}-mc`, collateralId: c.id, obligorId: c.obligorId, kind: "Margin shortfall", detail: `Haircut-adjusted MTM covers ${Math.round((adj / exposure) * 100)}% of exposure.`, tone: "danger" });
+    }
+  }
+  return alerts;
+}

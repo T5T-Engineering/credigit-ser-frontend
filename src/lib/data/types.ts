@@ -94,6 +94,7 @@ export type Facility = {
   product: ProductType;
   approvedAmount: number;
   outstanding: number;
+  /** Booking currency. Prototype: amounts on USD facilities are stored as NGN equivalents (no FX conversion applied). */
   currency: "NGN" | "USD";
   ratePct: number;
   tenorMonths: number;
