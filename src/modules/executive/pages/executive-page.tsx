@@ -31,10 +31,11 @@ import {
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
-import { getDefinition, useMyApprovalQueue } from "@/lib/platform/operations";
+import { useMyApprovalQueue } from "@/lib/platform/operations";
+import { safeDefinition } from "@/modules/operations/logic";
 import { useRule } from "@/lib/platform/rules";
 import { useScope } from "@/lib/platform/scope";
-import { useApplications, useCollateral, useLookups, useNotifications, useTasks } from "@/lib/data/hooks";
+import { useApplications, useCollateral, useLookups, useTasks } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { roleById } from "@/lib/rbac/roles";
 import { rarPosition } from "@/lib/rar";
@@ -46,6 +47,7 @@ import { isNewBusiness } from "@/modules/portfolio/data";
 import { useActor, useLimitMonitor, usePortfolioModel } from "@/modules/portfolio/hooks";
 import { computeWarr, limitStatus, usePortfolioParams } from "@/modules/portfolio/selectors";
 import { demoExceptions, demoFeeds, shareMarginStatus, type ExceptionItem, type Kri, type Rag } from "../data";
+import { useMyNotifications } from "@/lib/platform/notifications";
 import { useExecutiveGovernance } from "../hooks";
 import { EXEC_RULES, PACK_HREF } from "../platform";
 
@@ -63,7 +65,7 @@ export function ExecutivePage() {
   const tasks = useTasks();
   const applications = useApplications();
   const collateral = useCollateral();
-  const notifications = useNotifications();
+  const notifications = useMyNotifications();
   const { obligor } = useLookups();
   const [view, setView] = useState<View>(actor.roleId === "head-of-risk" ? "hor" : "cro");
   const { actor: me } = useScope();
@@ -157,7 +159,7 @@ export function ExecutivePage() {
   // Escalations awaiting this role's decision
   const myTasks = tasks.filter((t) => t.status === "Open" && t.assigneeRoleId === actor.roleId);
   const awaiting = applications.filter((a) => a.stage === "Approval" && a.approvals.some((s) => s.decision === "pending" && s.roleId === actor.roleId));
-  const approvals = queue.map((i) => ({ id: i.id, title: i.title, detail: `${getDefinition(i.operationType).name} · requested by ${i.requestedBy.name}`, due: i.stepStartedAt, href: operationHref(i.id), kind: "Approval" }));
+  const approvals = queue.map((i) => ({ id: i.id, title: i.title, detail: `${safeDefinition(i.operationType)?.name ?? i.operationType} · requested by ${i.requestedBy.name}`, due: i.stepStartedAt, href: operationHref(i.id), kind: "Approval" }));
   const escalations = [
     ...approvals,
     // Applications already routed through Operations appear once, as an approval above.
@@ -176,7 +178,7 @@ export function ExecutivePage() {
   ];
   const exceptions = [...creditExceptions, ...demoExceptions];
 
-  const { brcRun, packItems, signOff, summaryPending } = gov;
+  const { latestPack, packItems, signOff, summaryPending } = gov;
   const headline = `The loan book stands at ${moneyShort(totals.grossLoans)} with an NPL ratio of ${pct(totals.nplRatio, 2)} (appetite ${p.nplAppetitePct.value}%) and ${pct(totals.stageShare[2])} in Stage 2. WARR is ${warr.warr.toFixed(2)} against a ${p.warrCeiling.value} ceiling; new business is rated ${wNew.warr.toFixed(2)} versus ${wOld.warr.toFixed(2)} for the existing book.`;
 
   const kriColumns: DataTableColumn<Kri>[] = [
@@ -357,16 +359,12 @@ export function ExecutivePage() {
             </div>
             <ChecklistPanel
               title="Board Risk Committee pack"
-              description="Pack builder — sections pulled from each module."
+              description={latestPack ? `Latest pack ${latestPack.id} · meeting ${latestPack.meeting} · ${latestPack.status}. Compiled, submitted and approved in Enterprise risk → BRC pack.` : "Readiness of the pack sections. The pack is compiled, submitted and approved in Enterprise risk → BRC pack."}
               items={packItems}
               action={
-                brcRun ? (
-                  <Button as={Link} href={PACK_HREF} size="small" variant="secondary">
-                    Open pack ({brcRun.status === "Released" ? "approved" : brcRun.status === "Submitted for release" ? "awaiting approval" : "draft"})
-                  </Button>
-                ) : canEdit ? (
-                  <Button size="small" variant="primary" iconBefore={<FileStack size={14} aria-hidden />} onClick={() => void gov.buildPack()}>Build {gov.period} pack</Button>
-                ) : undefined
+                <Button as={Link} href={PACK_HREF} size="small" variant={latestPack ? "secondary" : "primary"} iconBefore={<FileStack size={14} aria-hidden />}>
+                  {latestPack ? "Open BRC pack" : "Compile BRC pack"}
+                </Button>
               }
             />
           </Grid>

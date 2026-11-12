@@ -7,9 +7,9 @@
  */
 import { DEMO_NOW } from "@/lib/data/seed";
 import { defineEvents, publish, subscribe } from "@/lib/platform/events";
-import { defineHookPoints } from "@/lib/platform/hooks";
+import { defineHookPoints, registerHook } from "@/lib/platform/hooks";
 import { defineTemplates, notify } from "@/lib/platform/notifications";
-import { registerOperation, submitOperation, type WorkflowStep } from "@/lib/platform/operations";
+import { registerOperation, submitOperation, useOperationsStore, type WorkflowStep } from "@/lib/platform/operations";
 import { applyRuleValue, defineRules, getRule, type RuleDefinition } from "@/lib/platform/rules";
 import type { RoleId } from "@/lib/rbac/roles";
 import { logAudit } from "../operational-risk/shared";
@@ -19,6 +19,7 @@ import { useErm } from "./store";
 
 export { ermKeys };
 export const ERM = "enterprise-risk";
+export const BRC_HREF = "/enterprise-risk/brc-pack";
 const DEMO = "Tenant parameter (demo value)";
 const BOARD_RAS = "Board RAS — tenant parameter (demo value)";
 
@@ -56,6 +57,7 @@ defineRules([
   { key: ermKeys.significantShareholdingPct, label: "Significant shareholder threshold", description: "Holding at or above which a shareholder is an insider for related-party disclosure.", module: ERM, category: "Insider & related party", type: "percent", default: 5, min: 0.1, max: 100, unit: "%", source: "PRD §6.10" },
   roleRule(ermKeys.amberEscalationRoles, "Appetite early warning — escalate to", "Roles an Amber appetite metric is escalated to.", ["cro"], "PRD §6.10 (automated breach escalation) — demo mapping"),
   roleRule(ermKeys.redEscalationRoles, "Appetite breach — escalate to", "Roles a Red appetite breach is escalated to (CRO and Board Risk Committee).", ["cro", "board"], "PRD §6.10 / §6.11 — demo mapping"),
+  { key: ermKeys.brcRequiresAdoptedSummary, label: "BRC pack needs an adopted summary", description: "The Board Risk Committee pack can't be submitted until its AI-drafted executive summary is reviewed and adopted.", module: ERM, category: "Board reporting", type: "boolean", default: true, source: "PRD §6.12 — AI-drafted, human-approved (tenant choice, demo on)" },
   roleRule(ermKeys.brcNotifyRoles, "BRC pack ready — notify", "Roles notified when the Board Risk Committee pack is approved for circulation.", ["board", "head-of-risk", "cro"], "PRD §6.11 — demo mapping"),
 ]);
 
@@ -104,11 +106,43 @@ registerOperation<BrcPackPayload>({
     publish("enterprise-risk.brc-pack.approved", { module: ERM, subject: { type: "BrcPack", id: p.packId, href: "/enterprise-risk/brc-pack" }, payload: { meeting: p.meeting } });
     notify({ templateId: "enterprise-risk.brc-pack-ready", toRoles: getRule<RoleId[]>(ermKeys.brcNotifyRoles), href: "/enterprise-risk/brc-pack", data: { packId: p.packId, meeting: p.meeting, sections: p.sections, approvedBy: actor.name } });
   },
-  onReject: (p) => {
-    useErm.getState().updatePack(p.packId, { status: "Draft" });
-    logAudit("BRC pack returned to Head of Risk", "BRC pack", p.packId, "Submitted to CRO", "Draft");
-    publish("enterprise-risk.brc-pack.returned", { module: ERM, subject: { type: "BrcPack", id: p.packId, href: "/enterprise-risk/brc-pack" } });
+  onReject: (p, { instance, actor }) => reopenPack(p.packId, "Rejected", instance.requestedBy.id, actor.name, instance.reason),
+
+});
+
+/** A rejected / returned / withdrawn / failed pack request puts the pack back to Draft (and tells the requester when an approver sent it back). */
+function reopenPack(packId: string, outcome: "Rejected" | "Returned" | "Withdrawn" | "Failed", requesterId: string, decidedBy: string, reason?: string) {
+  const pack = useErm.getState().packs.find((x) => x.id === packId);
+  if (!pack || pack.status !== "Submitted to CRO") return;
+  useErm.getState().updatePack(packId, { status: "Draft" });
+  logAudit(`BRC pack back to Draft (${outcome.toLowerCase()})`, "BRC pack", packId, "Submitted to CRO", "Draft");
+  publish("enterprise-risk.brc-pack.returned", { module: ERM, subject: { type: "BrcPack", id: packId, href: BRC_HREF }, payload: { outcome, reason } });
+  // Withdrawn: the requester did it. Failed: the requester already got operations.apply-failed.
+  if (outcome === "Rejected" || outcome === "Returned") notify({ templateId: "enterprise-risk.brc-pack-returned", toUserIds: [requesterId], href: BRC_HREF, data: { packId, meeting: pack.meeting, outcome: outcome.toLowerCase(), decidedBy, reason: reason ?? "" } });
+}
+
+// Returned / withdrawn requests don't call apply / onReject — put the pack back to Draft.
+subscribe({
+  id: "enterprise-risk.brc-pack-reopen",
+  name: "Enterprise risk: reopen BRC pack on returned / withdrawn request",
+  pattern: "operations.request.*",
+  handler: (e) => {
+    if (!["operations.request.returned", "operations.request.cancelled", "operations.request.failed"].includes(e.name)) return;
+    const { operationType, subject } = e.payload as { operationType: string; subject: { id: string } };
+    if (operationType !== "enterprise-risk.brc-pack.approval") return;
+    const outcome = e.name.endsWith("cancelled") ? "Withdrawn" : e.name.endsWith("failed") ? "Failed" : "Returned";
+    const op = useOperationsStore.getState().instances.find((i) => i.id === e.subject?.id);
+    reopenPack(subject.id, outcome, op?.requestedBy.id ?? "", e.actorName, op?.reason);
   },
+});
+
+// Built-in policy hook: the pack needs its AI-drafted summary adopted before submission (PRD §6.12).
+registerHook<{ pack: { summaryAdoptedBy?: string } }>({
+  id: "enterprise-risk.brc-pack-needs-adopted-summary",
+  name: "Adopted summary gate",
+  point: "enterprise-risk.brc-pack.submit.before",
+  priority: 10,
+  run: ({ pack }) => (getRule<boolean>(ermKeys.brcRequiresAdoptedSummary) && !pack.summaryAdoptedBy ? { veto: "the AI-drafted executive summary hasn't been reviewed and adopted yet." } : undefined),
 });
 
 /** Submit a RAS limit/tolerance change. */
@@ -151,6 +185,23 @@ defineTemplates([
     ],
   },
   {
+    id: "enterprise-risk.brc-pack-returned",
+    name: "BRC pack returned",
+    module: ERM,
+    trigger: "enterprise-risk.brc-pack.returned",
+    subject: "Board Risk Committee pack {{packId}} was {{outcome}}",
+    inApp: "BRC pack {{packId}} ({{meeting}} meeting) was {{outcome}} by {{decidedBy}} and is back in Draft.",
+    body: "<p>The Board Risk Committee pack <strong>{{packId}}</strong> for the meeting on <strong>{{meeting}}</strong> was <strong>{{outcome}}</strong> by {{decidedBy}}.</p><p>{{reason}}</p><p>The pack is back in Draft. Revise it and submit it again.</p>",
+    tone: "warning",
+    variables: [
+      { name: "packId", description: "Pack id", example: "BRC-20261126-01" },
+      { name: "meeting", description: "Meeting date", example: "2026-11-26" },
+      { name: "outcome", description: "rejected / returned", example: "returned" },
+      { name: "decidedBy", description: "Approver", example: "Chinedu Okafor" },
+      { name: "reason", description: "Approver comment", example: "Add the IFRS 9 stage-migration section." },
+    ],
+  },
+  {
     id: "enterprise-risk.brc-pack-ready",
     name: "BRC pack ready",
     module: ERM,
@@ -177,7 +228,7 @@ defineEvents([
   { name: "enterprise-risk.brc-pack.compiled", module: ERM, description: "A Board Risk Committee pack was compiled." },
   { name: "enterprise-risk.brc-pack.submitted", module: ERM, description: "A BRC pack was submitted to the CRO for approval." },
   { name: "enterprise-risk.brc-pack.approved", module: ERM, description: "A BRC pack was approved for circulation." },
-  { name: "enterprise-risk.brc-pack.returned", module: ERM, description: "A BRC pack was rejected and returned to Draft." },
+  { name: "enterprise-risk.brc-pack.returned", module: ERM, description: "A BRC pack request was rejected, returned or withdrawn; the pack is back in Draft." },
   { name: "enterprise-risk.brc-pack.summary-adopted", module: ERM, description: "The AI-drafted executive summary was signed off and adopted." },
   { name: "enterprise-risk.circular.assessed", module: ERM, description: "A CBN circular's impact assessment started." },
   { name: "enterprise-risk.circular.linked", module: ERM, description: "A CBN circular was linked to a policy (or closed — no action)." },
@@ -187,6 +238,8 @@ defineEvents([
 defineHookPoints([
   { point: "enterprise-risk.appetite.escalate.before", module: ERM, kind: "before", description: "Before an appetite breach is escalated. Veto, or enrich the escalation targets." },
   { point: "enterprise-risk.appetite.escalate.after", module: ERM, kind: "after", description: "After an appetite breach is escalated and notified." },
+  { point: "enterprise-risk.brc-pack.submit.before", module: ERM, kind: "before", description: "Before a BRC pack is submitted for approval. Veto or enrich. Built-in: adopted-summary gate." },
+  { point: "enterprise-risk.brc-pack.submit.after", module: ERM, kind: "after", description: "After a BRC pack is submitted (operation created)." },
   { point: "enterprise-risk.brc-pack.compile.before", module: ERM, kind: "before", description: "Before a BRC pack is compiled. Veto, or enrich sections/summary (e.g. add an extension section)." },
   { point: "enterprise-risk.brc-pack.compile.after", module: ERM, kind: "after", description: "After a BRC pack is compiled (e.g. render to PDF, archive)." },
 ]);

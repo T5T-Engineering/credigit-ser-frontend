@@ -57,6 +57,7 @@ Exported API: `requestRasChange()`, `ermKeys`, `ERM`, payload types.
 | `enterprise-risk.ras.version` etc. | `data.ts` `rasVersion()`; appetite section |
 | `enterprise-risk.appetite.amberEscalationRoles` / `.redEscalationRoles` | `sections/appetite.tsx` |
 | `enterprise-risk.brc.packReadyRoles` | `platform.ts` BRC approval apply |
+| `enterprise-risk.brcPack.requiresAdoptedSummary` | `platform.ts` hook `enterprise-risk.brc-pack-needs-adopted-summary`; `sections/brc-pack.tsx` (notice, submit disabled) |
 | `enterprise-risk.policy.reviewCycleYears` / `.dueSoonDays` | `data.ts` `policyStatus`; `sections/regulatory.tsx` |
 | `enterprise-risk.insider.significantShareholdingPct` | `sections/insider.tsx` |
 | `enterprise-risk.largeExposurePct` | `data.ts` `spineFigures` |
@@ -78,13 +79,14 @@ Exported API: `requestRasChange()`, `ermKeys`, `ERM`, payload types.
 | §5 AI summary sign-off | `sections/brc-pack.tsx` → `submitAiSignOff` (ai module); adopted by subscriber in `platform.ts` |
 | §6 `enterprise-risk.appetite-breach` | `sections/appetite.tsx` escalate |
 | §6 `enterprise-risk.brc-pack-ready` | `platform.ts` BRC approval apply |
+| §6 `enterprise-risk.brc-pack-returned` | `platform.ts` `onReject` and `enterprise-risk.brc-pack-reopen` subscriber (returned) |
 | §7 events | `platform.ts` (ras.changed, risk.accepted, brc-pack.approved/returned/summary-adopted); sections (appetite.breach-escalated, risk.reviewed, brc-pack.compiled/submitted, circular.assessed/linked, policy.reviewed) |
-| §7 hooks | `sections/appetite.tsx` (appetite.escalate.before/after); `sections/brc-pack.tsx` (brc-pack.compile.before/after) |
+| §7 hooks | `sections/appetite.tsx` (appetite.escalate.before/after); `sections/brc-pack.tsx` (brc-pack.compile.before/after, brc-pack.submit.before/after); built-in submit veto in `platform.ts` |
 
 ## 8. Tests
 | Test file / suite | Covers |
 |---|---|
-| `e2e/risk/enterprise-risk.spec.ts` — "Head of Risk compiles and submits the BRC pack; CRO approves it in Operations" | ERM-FR-10 |
+| `e2e/risk/enterprise-risk.spec.ts` — "Head of Risk compiles and submits the BRC pack; CRO approves it in Operations" (adopts the AI summary first; submit gate) and "the old executive board-pack route redirects" | ERM-FR-10, EXE-FR-11 |
 | `e2e/risk/enterprise-risk.spec.ts` — "a role with view-only access can't compile a pack" | Module-level access gate |
 | `e2e/risk/pages-load.spec.ts` | All six pages load per role |
 | Unit tests | None (vitest configured, no tests) — `appetiteRag`, `policyStatus`, `insiderFlags` untested |
@@ -108,11 +110,10 @@ Exported API: `requestRasChange()`, `ermKeys`, `ERM`, payload types.
 ## 10. Gaps against the invariants
 - Invariant 12: no named permission checks — `useCan("enterprise-risk", "edit")` only; view-level keys per tab and export key not mirrored.
 - Invariant 9 (automated escalation): PRD §6.10 asks for automated breach escalation; escalation is a user action and there is no scheduler or SLA.
-- Invariant 9 (notified): RAS change approval, risk acceptance and BRC pack return have no module notification (generic `operations.request-completed` to the requester only); metric owners aren't notified of breaches.
+- Invariant 9 (notified): RAS change approval and risk acceptance have no module notification (generic `operations.request-completed` to the requester only); metric owners aren't notified of breaches.
 - Invariant 8: workflow step SLAs are literals in `defaultSteps` (TD-127 pattern); role-to-line mapping literal (TD-903); BRC page count heuristic (TD-902); CAR / liquidity / LCR / NOP actuals and insider names are demo literals in `data.ts` without a TD entry (cf. TD-507 for executive).
-- Duplication: a second BRC pack builder exists in the executive module (`executive.brc-pack.approve`, approver CRO or Head of Risk) alongside `enterprise-risk.brc-pack.approval` (CRO only) — two flows for one PRD artefact (ER4 / EX1).
 - Duplication: RAS-style KRI thresholds also defined as executive rules (TD-508).
-- Invariant 9 (connector-ready): CBN circulars feed (§5.5) not recorded in `docs/integration-points.md` (file missing); circulars are seeded.
+- Invariant 9 (connector-ready): CBN circulars feed and BRC pack rendering are recorded in [`docs/integration-points.md`](../../integration-points.md) (§5); circulars are seeded.
 - Shares audit helpers from `operational-risk/shared` (cross-module coupling).
 
 ## 11. Tech debt

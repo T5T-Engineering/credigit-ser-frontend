@@ -30,7 +30,7 @@ The workspace is each user's landing area: a role-aware dashboard (KPIs, approva
 |---|---|---|
 | WS-FR-01 | Dashboard adapts to the user's audience (admin, front office, approver, risk, operations) with KPIs: open tasks, awaiting my decision / recommendation, my sign-on limit and chart-flow tier, decisions in window, NPL ratio, near-limit sectors, applications by stage. | PRD §4.1, §6.6.1 |
 | WS-FR-02 | Quick actions only for modules the user can access (new application, limits, exceptions, disbursement, invite user, rules, audit). | Invariant 9 (navigable, user-scoped) |
-| WS-FR-03 | Notifications panel for the user's role with mark-read / mark-all-read. | Invariant 9 (notified) |
+| WS-FR-03 | Notifications panel: role broadcasts for the user's role plus notifications addressed to the user personally (never another user's), with per-user mark-read / mark-all-read (audited, event `platform.notification.read`). | Invariant 9 (notified, user-scoped, audited); OPS-FR-18 |
 | WS-FR-04 | Recent activity from the audit log: all entries for audit viewers, otherwise own / own-role entries within `workspace.activityWindowHours`. | PRD §10.1; assumption |
 | WS-FR-05 | AI-flagged exceptions (inflow shortfall below COP ratio, stalled applications, near-limit sectors) labelled AI-flagged with human sign-off or dismiss, audited and published. | PRD §6.12, §2.3, §6.4.3 |
 | WS-FR-06 | My tasks lists role tasks, chart-flow approvals, Operations approvals the user may decide and own requests; high priority above `workspace.highPriorityAmountNgn` or step-up threshold; due-soon highlighting. | PRD §4; invariant 9 |
@@ -85,7 +85,7 @@ The workspace is each user's landing area: a role-aware dashboard (KPIs, approva
 
 ## 9. Non-functional
 
-- User scope: tasks and notifications are role-scoped (not user-scoped); approvals via `canDecide`; activity filtered unless the role can access Audit.
+- User scope: tasks are role-scoped (not user-scoped); notifications are role broadcasts or personal (addressee only) with per-user read state; approvals via `canDecide`; activity filtered unless the role can access Audit.
 - Audit: task status changes and AI flag reviews audited; mark-read is not.
 - Demo clock: `DEMO_NOW` for ageing / due logic.
 

@@ -126,7 +126,7 @@ Catalogue keys to adopt: REQUIREMENTS §2.
 - Invariant 9 (workflow / extensible): `market-risk.breach.close` and `market-risk.ras.change` have no `onReject` (rejection not published or reflected on the record); no subscriber syncs Returned / withdrawn operations (ifrs9 has one); `setChapterReviewed` has no hook point.
 - Invariant 9 (notified): no notification on ILAAP return, stress-run rejection, RAS rejection or ILAAP submission (generic approval-requested only).
 - PRD §6.8.2 / §6.4.4: breaches and early warnings are not raised or escalated automatically; no SLA clock per escalation level.
-- Invariant 9 (connector-ready): no `docs/integration-points.md` entries for Treasury, CBA deposit / asset ledgers, market-data feed, GL capital.
+- Invariant 9 (connector-ready): Treasury, CBA deposit / asset ledgers, market-data feed and GL capital are recorded in [`docs/integration-points.md`](../../integration-points.md) (§1, §3, §4); simulated (TD-126).
 - Tests: no unit tests for liquidity / stress calculators.
 
 ## 11. Tech debt

@@ -7,12 +7,14 @@
  *
  * Approval flows routed through Operations:
  *  - executive.summary.signoff   — AI executive risk summary signed off by the CRO / Head of Risk (§6.12).
- *  - executive.brc-pack.approve  — Board Risk Committee pack approved for issue (§6.6.6, §6.11).
+ *
+ * The Board Risk Committee pack has ONE flow, owned by enterprise-risk (`enterprise-risk.brc-pack.approval`,
+ * /enterprise-risk/brc-pack). The former executive pack flow was retired; /executive/board-pack redirects.
  */
 import { useDb } from "@/lib/data/store";
 import type { RoleId } from "@/lib/rbac/roles";
-import { defineEvents, publish, subscribe } from "@/lib/platform/events";
-import { defineHookPoints, registerHook } from "@/lib/platform/hooks";
+import { defineEvents, publish } from "@/lib/platform/events";
+import { defineHookPoints } from "@/lib/platform/hooks";
 import { defineTemplates, notify, type NotificationTemplate } from "@/lib/platform/notifications";
 import { registerOperation, type WorkflowStep } from "@/lib/platform/operations";
 import { defineRules, getRule, type RuleDefinition } from "@/lib/platform/rules";
@@ -35,9 +37,7 @@ export const EXEC_RULES = {
   varLimitNgn: "executive.varLimitNgn",
   opLossAppetitePct: "executive.opLossAppetitePct",
   quotedEquityHaircutPct: "executive.quotedEquityHaircutPct",
-  packRequiresSignedSummary: "executive.brcPack.requiresSignedSummary",
   summaryNotifyRoles: "executive.summary.notifyRoles",
-  packNotifyRoles: "executive.brcPack.notifyRoles",
 } as const;
 
 const pctRule = (key: string, label: string, description: string, category: string, value: number, source: string, extra: Partial<RuleDefinition> = {}): RuleDefinition => ({
@@ -58,9 +58,7 @@ defineRules([
   { key: R.varLimitNgn, label: "Trading VaR limit (1-day, 99%)", description: "VaR above this is a breach.", module: MODULE, category: "KRI thresholds", type: "money", default: 600e6, min: 0, source: "PRD §6.8.1 — tenant parameter (demo value)" },
   pctRule(R.opLossAppetitePct, "Operational loss appetite (% of gross income)", "Loss rate at or above this is Red.", "KRI thresholds", 0.5, "PRD §6.9 — tenant parameter (demo value)", { step: 0.01 }),
   pctRule(R.quotedEquityHaircutPct, "Quoted-equity collateral haircut", "Haircut applied to CSCS mark-to-market for share-margin status.", "Collateral", 20, "PRD §6.7.3 / §5.7 — quoted equity haircut"),
-  { key: R.packRequiresSignedSummary, label: "BRC pack needs a signed-off summary", description: "The Board Risk Committee pack can't be submitted until the executive summary is signed off.", module: MODULE, category: "Board reporting", type: "boolean", default: true, source: "PRD §6.12 — AI-drafted, human-approved (tenant choice, demo on)" },
   { key: R.summaryNotifyRoles, label: "Executive summary sign-off — notify roles", description: "Roles notified when the executive summary is signed off.", module: MODULE, category: "Notifications", type: "roles", default: ["cro", "head-of-risk", "md"], source: DEMO },
-  { key: R.packNotifyRoles, label: "BRC pack approval — notify roles", description: "Roles notified when the Board Risk Committee pack is approved.", module: MODULE, category: "Notifications", type: "roles", default: ["cro", "head-of-risk", "md", "board", "portfolio-mis-officer"], source: DEMO },
 ]);
 
 // ---------------------------------------------------------------- helpers
@@ -70,7 +68,8 @@ function audit(actor: Actor, action: string, entityType: string, entityId: strin
   useDb.getState().log({ actorId: actor.id, actorName: actor.name, roleId: actor.roleId, action, entityType, entityId, before, after });
 }
 
-export const PACK_HREF = "/executive/board-pack";
+/** The single Board Risk Committee pack flow (enterprise-risk module). */
+export const PACK_HREF = "/enterprise-risk/brc-pack";
 
 // ---------------------------------------------------------------- operations
 export type SummarySignOffPayload = { key: string; period: string; headline: string };
@@ -87,55 +86,6 @@ registerOperation<SummarySignOffPayload>({
     publish("executive.summary.signedOff", { module: MODULE, subject: { type: "ExecutiveSummary", id: p.key, title: `Executive risk summary — ${p.period}`, href: "/executive" }, payload: { period: p.period, operationId: instance.id } });
     notify({ templateId: "executive.summary-signed-off", toRoles: getRule<RoleId[]>(R.summaryNotifyRoles), toUserIds: [instance.requestedBy.id], href: "/executive", data: { period: p.period, signedOffBy: actor.name, headline: p.headline } });
   },
-});
-
-export type PackApprovalPayload = { runId: string; period: string };
-
-registerOperation<PackApprovalPayload>({
-  type: "executive.brc-pack.approve",
-  name: "Board Risk Committee pack approval",
-  module: MODULE,
-  description: "Approve the Board Risk Committee pack for issue to the committee (PRD §6.6.6, §6.11).",
-  defaultSteps: [step("approve", "CRO / Head of Risk approval", ["cro", "head-of-risk"], 48)],
-  apply: (p, { instance, actor }) => {
-    const store = usePortfolioStore.getState();
-    const before = store.runs.find((r) => r.id === p.runId)?.status;
-    store.updateRun(p.runId, { status: "Released", releasedBy: actor.name, releasedAt: new Date().toISOString(), operationId: instance.id, returnReason: undefined });
-    audit(actor, "Approved Board Risk Committee pack", "Report", p.runId, before, "Released");
-    publish("executive.brcPack.approved", { module: MODULE, subject: { type: "BoardPack", id: p.runId, title: `Board Risk Committee pack — ${p.period}`, href: PACK_HREF }, payload: { period: p.period, operationId: instance.id } });
-    notify({ templateId: "executive.brc-pack-approved", toRoles: getRule<RoleId[]>(R.packNotifyRoles), href: PACK_HREF, data: { period: p.period, run: p.runId, approvedBy: actor.name, preparedBy: instance.requestedBy.name } });
-  },
-  onReject: (p, { instance, actor }) => {
-    usePortfolioStore.getState().updateRun(p.runId, { status: "Returned for correction", returnReason: instance.reason });
-    audit(actor, "Rejected Board Risk Committee pack", "Report", p.runId, "Submitted for release", "Returned for correction");
-    publish("executive.brcPack.rejected", { module: MODULE, subject: { type: "BoardPack", id: p.runId, title: `Board Risk Committee pack — ${p.period}`, href: PACK_HREF }, payload: { reason: instance.reason } });
-    notify({ templateId: "executive.brc-pack-returned", toUserIds: [instance.requestedBy.id], href: PACK_HREF, data: { period: p.period, run: p.runId, decidedBy: actor.name, reason: instance.reason ?? "" } });
-  },
-});
-
-// Returned / withdrawn pack requests don't call apply/onReject — make the pack editable again.
-subscribe({
-  id: "executive.operations-closed",
-  name: "Executive: reset BRC pack on returned / withdrawn request",
-  pattern: "operations.request.*",
-  handler: (e) => {
-    if (!["operations.request.returned", "operations.request.cancelled"].includes(e.name)) return;
-    const { operationType, subject } = e.payload as { operationType: string; subject: { id: string } };
-    if (operationType !== "executive.brc-pack.approve") return;
-    const store = usePortfolioStore.getState();
-    const run = store.runs.find((r) => r.id === subject.id);
-    if (run?.status === "Submitted for release") store.updateRun(run.id, { status: "Returned for correction", returnReason: e.name.endsWith("cancelled") ? "Withdrawn by requester" : "Returned by approver" });
-  },
-});
-
-// Built-in policy hook: the pack needs a signed-off executive summary (PRD §6.12).
-registerHook<{ summaryKey: string }>({
-  id: "executive.pack-needs-signed-summary",
-  name: "Signed-off summary gate",
-  point: "executive.brcPack.submit.before",
-  priority: 10,
-  run: ({ summaryKey }) =>
-    getRule<boolean>(R.packRequiresSignedSummary) && !usePortfolioStore.getState().signOffs[summaryKey] ? { veto: "the executive risk summary for this period isn't signed off yet." } : undefined,
 });
 
 // ---------------------------------------------------------------- notification templates
@@ -156,55 +106,15 @@ defineTemplates([
       { name: "headline", description: "First paragraph of the summary", example: "The loan book stands at ₦412bn with an NPL ratio of 4.1%…" },
     ],
   }),
-  tpl({
-    id: "executive.brc-pack-approved",
-    name: "Board Risk Committee pack approved",
-    module: MODULE,
-    trigger: "executive.brcPack.approved",
-    subject: "Board Risk Committee pack approved — {{period}}",
-    inApp: "The {{period}} Board Risk Committee pack was approved by {{approvedBy}}.",
-    body: "<p>The <strong>{{period}}</strong> Board Risk Committee pack (run {{run}}) was approved by <strong>{{approvedBy}}</strong> for issue to the committee.</p><ul><li>Prepared by: {{preparedBy}}</li><li>Approved by: {{approvedBy}}</li></ul>",
-    tone: "success",
-    variables: [
-      { name: "period", description: "Pack period", example: "Q4 2026" },
-      { name: "run", description: "Run id", example: "RUN-MH3K2A" },
-      { name: "approvedBy", description: "Approver", example: "Ngozi Eze" },
-      { name: "preparedBy", description: "Who built and submitted the pack", example: "Tunde Bakare" },
-    ],
-  }),
-  tpl({
-    id: "executive.brc-pack-returned",
-    name: "Board Risk Committee pack not approved",
-    module: MODULE,
-    trigger: "executive.brcPack.rejected",
-    subject: "Board Risk Committee pack not approved — {{period}}",
-    inApp: "The {{period}} Board Risk Committee pack was rejected by {{decidedBy}}.",
-    body: "<p>The <strong>{{period}}</strong> Board Risk Committee pack (run {{run}}) was rejected by {{decidedBy}}.</p><p>{{reason}}</p><p>Update the pack and submit it again.</p>",
-    tone: "warning",
-    variables: [
-      { name: "period", description: "Pack period", example: "Q4 2026" },
-      { name: "run", description: "Run id", example: "RUN-MH3K2A" },
-      { name: "decidedBy", description: "Approver", example: "Ngozi Eze" },
-      { name: "reason", description: "Approver comment", example: "IFRS 9 section still pending." },
-    ],
-  }),
 ]);
 
 // ---------------------------------------------------------------- events & hooks
 defineEvents([
   { name: "executive.summary.submitted", module: MODULE, description: "The AI executive summary was submitted for sign-off." },
   { name: "executive.summary.signedOff", module: MODULE, description: "The executive summary was signed off (after approval)." },
-  { name: "executive.brcPack.built", module: MODULE, description: "A Board Risk Committee pack draft was built.", payloadExample: { period: "Q4 2026 (draft)" } },
-  { name: "executive.brcPack.submitted", module: MODULE, description: "The Board Risk Committee pack was submitted for approval." },
-  { name: "executive.brcPack.approved", module: MODULE, description: "The Board Risk Committee pack was approved for issue." },
-  { name: "executive.brcPack.rejected", module: MODULE, description: "The Board Risk Committee pack was rejected." },
 ]);
 
 defineHookPoints([
   { point: "executive.summary.submit.before", module: MODULE, kind: "before", description: "Before the executive summary is submitted for sign-off. Veto or enrich." },
   { point: "executive.summary.submit.after", module: MODULE, kind: "after", description: "After the executive summary is submitted." },
-  { point: "executive.brcPack.build.before", module: MODULE, kind: "before", description: "Before a Board Risk Committee pack draft is built. Veto or add sections." },
-  { point: "executive.brcPack.build.after", module: MODULE, kind: "after", description: "After a pack draft is built." },
-  { point: "executive.brcPack.submit.before", module: MODULE, kind: "before", description: "Before the pack is submitted for approval. Built-in: signed-off summary gate." },
-  { point: "executive.brcPack.submit.after", module: MODULE, kind: "after", description: "After the pack is submitted." },
 ]);

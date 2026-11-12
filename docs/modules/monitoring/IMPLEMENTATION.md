@@ -117,7 +117,7 @@ Public API used by other modules: `raiseException`, `openExceptionFor`, `useMoni
 - Invariant 9 (notified): APG crystallise / call / release, TOD regularise / convert, and assignment send no notifications; recipients outside the ladder are code lists (TD-604).
 - Invariant 9 (workflow): TOD "converted to facility" is a direct action although conversion implies a credit decision (not routed through Operations).
 - Invariant 8: exception type list and covenant frequency months are code literals without TD id; `evidenceRequiredTypes` default says "Limit near-breach" where the PRD says "limit breach".
-- Invariant 9 (connector-ready): CBA / other-bank / document connectors not recorded — the repo has no `docs/integration-points.md`.
+- Invariant 9 (connector-ready): CBA, other-bank and document connectors are recorded in [`docs/integration-points.md`](../../integration-points.md) (§1, §2, §8); simulated, no Connectors framework yet (TD-967).
 - MON-FR-15 (feed to op-risk loss-event register) not built; SLA sweep has no scheduler (manual button).
 - No unit tests.
 

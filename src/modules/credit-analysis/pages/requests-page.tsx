@@ -18,6 +18,7 @@ const statusTone: Record<OperationStatus, "info" | "success" | "danger" | "warni
   Rejected: "danger",
   Returned: "warning",
   Cancelled: "neutral",
+  Failed: "danger",
 };
 
 const opHref = (i: OperationInstance) => `/operations/item?id=${encodeURIComponent(i.id)}`;

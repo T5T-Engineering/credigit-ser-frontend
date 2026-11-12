@@ -36,7 +36,7 @@ import { PendingBadge, SubmitOutcome } from "../../operational-risk/operation-ui
 import { useAuditLog } from "../../operational-risk/shared";
 import { fmtMetric, packSections, type BrcPack } from "../data";
 import { useAppetite } from "../logic";
-import { ERM, type BrcPackPayload } from "../platform";
+import { BRC_HREF, ERM, ermKeys, type BrcPackPayload } from "../platform";
 import { useErm } from "../store";
 
 /** Estimated page count shown on a compiled pack (TD-902: layout heuristic, not a business rule). */
@@ -48,6 +48,7 @@ export function BrcPackSection() {
   const canEdit = useCan("enterprise-risk", "edit");
   const { actor } = useScope();
   const narrativeModel = useRule<string>(aiKeys.narrativeModel);
+  const needsAdoptedSummary = useRule<boolean>(ermKeys.brcRequiresAdoptedSummary);
   const packs = useErm((s) => s.packs);
   const { addPack, updatePack } = useErm.getState();
   const { metrics, readings } = useAppetite();
@@ -109,6 +110,11 @@ export function BrcPackSection() {
 
   /** Head of Risk submits; the CRO approves in Operations (or inline below via the same workflow engine). */
   const submit = async (p: BrcPack) => {
+    const before = await runHooks("enterprise-risk.brc-pack.submit.before", { pack: p, actor });
+    if (!before.ok) {
+      setOutcome({ ok: false, reason: `Blocked by ${before.vetoedBy}: ${before.reason}` });
+      return;
+    }
     const r = await submitOperation<BrcPackPayload>("enterprise-risk.brc-pack.approval", {
       title: `BRC pack ${p.id} — meeting ${p.meeting}`,
       subject: { type: "BrcPack", id: p.id, title: `BRC pack ${p.id}`, href: "/enterprise-risk/brc-pack" },
@@ -124,7 +130,8 @@ export function BrcPackSection() {
     if (!r.ok) return;
     if (!r.applied) updatePack(p.id, { status: "Submitted to CRO" });
     audit("Submitted BRC pack to CRO", "BRC pack", p.id, "Draft", `Submitted to CRO · ${r.instance.id}`);
-    publish("enterprise-risk.brc-pack.submitted", { module: ERM, subject: { type: "BrcPack", id: p.id, href: "/enterprise-risk/brc-pack" }, payload: { operationId: r.instance.id } });
+    publish("enterprise-risk.brc-pack.submitted", { module: ERM, subject: { type: "BrcPack", id: p.id, href: BRC_HREF }, payload: { operationId: r.instance.id } });
+    await runHooks("enterprise-risk.brc-pack.submit.after", { pack: p, actor, operationId: r.instance.id });
   };
   const decide = async (decision: "approve" | "reject") => {
     if (!pendingOp) return;
@@ -207,9 +214,14 @@ export function BrcPackSection() {
                       );
                     })}
                   </div>
+                  {active.status === "Draft" && needsAdoptedSummary && !active.summaryAdoptedBy && (
+                    <Alert tone="warning" title="Adopt the executive summary first">
+                      Review and adopt the AI-drafted executive summary below before submitting the pack (business rule).
+                    </Alert>
+                  )}
                   <div className="flex flex-wrap justify-end gap-2">
                     {active.status === "Draft" && canEdit && (
-                      <Button iconBefore={<Send aria-hidden />} onClick={() => void submit(active)}>Submit to CRO</Button>
+                      <Button iconBefore={<Send aria-hidden />} disabled={needsAdoptedSummary && !active.summaryAdoptedBy} onClick={() => void submit(active)}>Submit to CRO</Button>
                     )}
                     {active.status === "Submitted to CRO" && pendingOp?.subject.id === active.id && mayDecide && (
                       <>
@@ -239,6 +251,7 @@ export function BrcPackSection() {
                   : undefined
               }
               signOffNote="The Head of Risk must review and adopt the summary; the CRO approves the pack."
+              signedOffBy={active.summaryAdoptedBy}
             />
             {packs.length > 1 && (
               <Alert tone="info" title="Earlier packs">

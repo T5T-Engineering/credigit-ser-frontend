@@ -34,7 +34,7 @@ Public API: `useAuditLog()`.
 | Store / source | Key fields |
 |---|---|
 | Spine `tasks` | `id`, `title`, `module`, `href`, `assigneeRoleId`, `dueAt`, `priority`, `status` (Open / Done) |
-| Spine `notifications` | `title`, `body`, `tone`, `href`, `roleIds[]`, `read` |
+| Spine `notifications` | `title`, `body`, `tone`, `href`, `roleIds[]` (broadcast), `userIds[]` (personal), `readBy[]` (per-user read), legacy `read` |
 | Spine `applications.approvals` | Chart-flow steps (`roleId`, `decidedAt`) |
 | `credigit.ser.workspace` | `signedOff {id → by, at}`, `dismissed[]` |
 
@@ -77,7 +77,7 @@ Public API: `useAuditLog()`.
 |---|---|---|---|
 | WS-FR-01 | `dashboard-page.tsx` | smoke | Done |
 | WS-FR-02 | `dashboard-page.tsx` quick actions | pages-load | Done |
-| WS-FR-03 | `dashboard-page.tsx` notifications | — | Partial (read state shared per role, not audited) |
+| WS-FR-03 | `dashboard-page.tsx` + `app-frame.tsx` via `useMyNotifications` / `markNotificationsRead` (`src/lib/platform/notifications.ts`) | operations-scope | Done |
 | WS-FR-04 | `dashboard-page.tsx` activity | — | Done |
 | WS-FR-05 | `dashboard-page.tsx` AI flags | — | Partial (state per browser, not per user / tenant) |
 | WS-FR-06 | `inbox-page.tsx`, `data.ts` | pages-load | Done |
@@ -86,10 +86,10 @@ Public API: `useAuditLog()`.
 ## 10. Gaps against the invariants
 
 - **Inv 12:** no named permission keys (`dashboard.*`, `inbox.*`, `notifications.inbox.*`); role-id literals decide the dashboard audience and the portfolio panel (`account-officer`, `bdm`, `credit-analyst`, also `cro` / `md` KPI sets).
-- **Inv 9 user-scoped:** tasks are assigned to a role (`assigneeRoleId`), so every member of the role shares one task list; notification read state is shared by the role; AI-flag sign-off / dismiss is stored per browser (`credigit.ser.workspace`).
-- **Inv 9 audited:** notification mark-read / mark-all-read are not audited; AI-flag audit has no before state.
+- **Inv 9 user-scoped:** tasks are assigned to a role (`assigneeRoleId`), so every member of the role shares one task list; AI-flag sign-off / dismiss is stored per browser (`credigit.ser.workspace`).
+- **Inv 9 audited:** AI-flag audit has no before state.
 - **Inv 9 notified / workflow:** completing or reopening a task notifies nobody; AI-flag sign-off is a direct action (acceptable as human review, no approval defined).
-- **Inv 9 externally reachable:** events / hooks in-browser only; `docs/integration-points.md` missing.
+- **Inv 9 externally reachable:** events / hooks in-browser only (TD-963); tasks / notifications API recorded in [`docs/integration-points.md`](../../integration-points.md) (§10).
 - **Tests:** no unit tests for `approvalsAwaiting` / `portfolioSnapshot`.
 
 ## 11. Tech debt

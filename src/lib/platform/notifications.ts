@@ -9,11 +9,14 @@
  * Templates are registered by modules; tenant edits are stored as overrides (approved through Operations).
  * BACKEND SEAM: `notify` posts to the notification service (email/SMS/in-app).
  */
+import { useMemo } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { defaultBrand } from "@credigit/web-ui";
 import type { RoleId } from "../rbac/roles";
+import { useSession } from "../auth/session";
 import { useDb, newId } from "../data/store";
+import type { Notification } from "../data/types";
 import { publish } from "./events";
 import { currentActor } from "./scope";
 
@@ -143,7 +146,11 @@ export type NotifyInput = {
   href?: string;
 };
 
-/** Send a notification: in-app (by role) + rendered HTML email per recipient into the outbox. */
+/**
+ * Send a notification. In-app: one role broadcast for `toRoles` (seen by everyone in those roles) and one
+ * personal notification per addressed user in `toUserIds` who isn't already reached by the broadcast — a
+ * personal notification is shown only to that user (OPS-FR-18). Email: one rendered HTML email per recipient.
+ */
 export function notify(input: NotifyInput) {
   const template = getTemplate(input.templateId);
   if (!template) throw new Error(`Unknown notification template "${input.templateId}".`);
@@ -151,22 +158,61 @@ export function notify(input: NotifyInput) {
   const data: Record<string, unknown> = { ...input.data, link: input.href ? `${origin}${input.href}` : input.data.link };
   const db = useDb.getState();
   const roleIds = input.toRoles ?? [];
-  const recipients = db.users.filter((u) => u.status === "Active" && (roleIds.includes(u.roleId) || input.toUserIds?.includes(u.id)));
-  const userRoleIds = recipients.filter((u) => input.toUserIds?.includes(u.id)).map((u) => u.roleId);
-  db.upsert("notifications", {
-    id: newId("NTF"),
-    title: fill(template.subject, data, false),
-    body: fill(template.inApp, data, false),
-    tone: template.tone,
-    createdAt: new Date().toISOString(),
-    read: false,
-    href: input.href,
-    roleIds: [...new Set([...roleIds, ...userRoleIds])],
-  });
+  const userIds = input.toUserIds ?? [];
+  const recipients = db.users.filter((u) => u.status === "Active" && (roleIds.includes(u.roleId) || userIds.includes(u.id)));
+  const title = fill(template.subject, data, false);
+  const body = fill(template.inApp, data, false);
+  const createdAt = new Date().toISOString();
+  const base = { title, body, tone: template.tone, createdAt, read: false, href: input.href, readBy: [] as string[] };
+  if (roleIds.length) db.upsert("notifications", { ...base, id: newId("NTF"), roleIds: [...new Set(roleIds)] });
+  for (const u of recipients.filter((r) => userIds.includes(r.id) && !roleIds.includes(r.roleId))) {
+    db.upsert("notifications", { ...base, id: newId("NTF"), roleIds: [], userIds: [u.id] });
+  }
   const { subject, html } = renderEmail(template, data);
-  const items: OutboxItem[] = recipients.map((u) => ({ id: newId("OUT"), templateId: template.id, to: `${u.name} <${u.email}>`, subject, html, createdAt: new Date().toISOString(), status: "Queued (demo — not sent)" }));
+  const items: OutboxItem[] = recipients.map((u) => ({ id: newId("OUT"), templateId: template.id, to: `${u.name} <${u.email}>`, subject, html, createdAt, status: "Queued (demo — not sent)" }));
   useNotificationStore.setState((s) => ({ outbox: [...items, ...s.outbox].slice(0, OUTBOX_LIMIT) }));
   const actor = currentActor();
   db.log({ actorId: actor.id, actorName: actor.name, roleId: actor.roleId, action: `Sent notification "${template.name}"`, entityType: "Notification", entityId: template.id, after: `${items.length} recipient(s)` });
   publish("platform.notification.sent", { module: "platform", subject: { type: "NotificationTemplate", id: template.id, title: template.name }, payload: { recipients: items.length } });
+}
+
+// ---------------------------------------------------------------- in-app visibility & read state (OPS-FR-18)
+
+type Viewer = { id: string; roleId: RoleId };
+
+/** Personal notifications reach only their addressees; role broadcasts reach the role (empty = everyone). */
+export function notificationVisibleTo(n: Notification, viewer: Viewer): boolean {
+  if (n.userIds?.length) return n.userIds.includes(viewer.id);
+  return n.roleIds.length === 0 || n.roleIds.includes(viewer.roleId);
+}
+
+/** Per-user read state; seed rows without `readBy` fall back to the legacy `read` flag. */
+export function isNotificationRead(n: Notification, userId: string): boolean {
+  return n.readBy ? n.readBy.includes(userId) : n.read;
+}
+
+/** Mark notifications read for the signed-in user (audited + published). Ignores ones they can't see or already read. */
+export function markNotificationsRead(ids: string[]) {
+  const actor = currentActor();
+  const db = useDb.getState();
+  const changed = db.notifications.filter((n) => ids.includes(n.id) && notificationVisibleTo(n, actor) && !isNotificationRead(n, actor.id));
+  if (!changed.length) return;
+  for (const n of changed) {
+    const readBy = n.readBy ?? (n.read ? db.users.map((u) => u.id) : []);
+    db.update("notifications", n.id, { readBy: [...new Set([...readBy, actor.id])] });
+  }
+  db.log({ actorId: actor.id, actorName: actor.name, roleId: actor.roleId, action: changed.length === 1 ? "Marked notification read" : `Marked ${changed.length} notifications read`, entityType: "Notification", entityId: changed.length === 1 ? changed[0].id : "-", before: "Unread", after: "Read" });
+  publish("platform.notification.read", { module: "platform", subject: { type: "Notification", id: changed[0].id, title: changed[0].title }, payload: { count: changed.length } });
+}
+
+/** The signed-in user's in-app notifications (newest first as stored) with per-user `read`. */
+export function useMyNotifications(): Notification[] {
+  const all = useDb((s) => s.notifications);
+  const user = useSession((s) => s.user);
+  const roleId = useSession((s) => s.roleId);
+  return useMemo(() => {
+    if (!user || !roleId) return [];
+    const viewer = { id: user.id, roleId };
+    return all.filter((n) => notificationVisibleTo(n, viewer)).map((n) => ({ ...n, read: isNotificationRead(n, user.id) }));
+  }, [all, user, roleId]);
 }

@@ -13,4 +13,5 @@ export const ermKeys = {
   amberEscalationRoles: "enterprise-risk.appetite.amberEscalationRoles",
   redEscalationRoles: "enterprise-risk.appetite.redEscalationRoles",
   brcNotifyRoles: "enterprise-risk.brc.packReadyRoles",
+  brcRequiresAdoptedSummary: "enterprise-risk.brcPack.requiresAdoptedSummary",
 } as const;

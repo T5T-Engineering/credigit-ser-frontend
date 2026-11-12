@@ -152,6 +152,8 @@ export const uiStatus: Record<OperationInstance["status"], UiOperationStatus> = 
   Rejected: "rejected",
   Returned: "returned",
   Cancelled: "cancelled",
+  // TD-960: the library has no "failed" status yet.
+  Failed: "rejected",
 };
 
 export function stepsFor(i: OperationInstance): OperationStep[] {

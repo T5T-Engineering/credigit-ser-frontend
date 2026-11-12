@@ -134,7 +134,7 @@ Catalogue keys to adopt: see REQUIREMENTS §2.
 - Invariant 12: actions gated by `useCan("ifrs9", level)` (role → module access), not catalogue permission keys; System Admin is not granted every permission (has no `ifrs9` access at all).
 - Invariant 8: notification recipient roles are code lists in `platform.ts` / `pages/icaap.tsx` (no `ifrs9.*Roles` rules, compare TD-604); workflow SLA literals (TD-127); ECL-movement quarter start uses a `90`-day literal in `pages/overview.tsx` without a TD id; `GAUGE_MAX_CAR = 30` display constant in `pages/icaap.tsx`.
 - Invariant 8 / 9: rule-by-rule `rule.change` bypasses the scenario workflow (TD-128); capital base is a rules calibration instead of GL data (TD-125).
-- Invariant 9 (connector-ready): frontend has no `docs/integration-points.md`; GL capital accounts, Finance posting, macro feed and spot-rate feed are not recorded or connected.
+- Invariant 9 (connector-ready): GL capital accounts, Finance posting, macro and spot-rate feeds are recorded in [`docs/integration-points.md`](../../integration-points.md) (§3, §4); not connected.
 - Invariant 9 (extensible): AI finding accept/dismiss has no hook points; stress-run records not published to an outbound channel (events are browser-only).
 - Invariant 9 (notified): model submission, declassification proposal and reserve-posting request notify only via generic `operations.approval-requested`; no notification on declassification rejection.
 - PRD: specialised-loan overlays (Annexures 2–6) not applied (IF9-FR-14); currency-mismatch 150% overlay not reflected in RWA.

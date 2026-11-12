@@ -12,9 +12,9 @@ Two pages. The cockpit (`executive-page.tsx`) computes credit KRIs, postures, li
 ## 2. Files and entry points
 | Path | Role |
 |---|---|
-| `src/app/(app)/executive/page.tsx`, `executive/board-pack/page.tsx` | Routes (thin client pages) |
+| `src/app/(app)/executive/page.tsx` | Route (thin client page) |
+| `src/app/(app)/executive/board-pack/page.tsx` | Legacy route — client redirect to `/enterprise-risk/brc-pack` (consolidated BRC pack flow) |
 | `src/modules/executive/pages/executive-page.tsx` | Cockpit: AI summary, appetite scorecard, escalations, exception feed, BRC pack card, KRI table, heat-map, posture, stage, WARR, CAR, liquidity/NOP, share margin, op-risk, drill-down |
-| `src/modules/executive/pages/board-pack-page.tsx` | BRC pack checklist, build / submit, link to the Operations request |
 | `src/modules/executive/hooks.ts` | `useExecutiveGovernance()` (submitSummary, buildPack, submitPack), `boardPeriod()` |
 | `src/modules/executive/platform.ts` | Rules (`EXEC_RULES`), operations, signed-summary gate hook, templates, events, hook points, operations subscriber |
 | `src/modules/executive/data.ts` | `demoFeeds`, `shareMarginStatus`, `demoExceptions`, `Kri` type |
@@ -23,7 +23,7 @@ Two pages. The cockpit (`executive-page.tsx`) computes credit KRIs, postures, li
 | Route | Page | Menu entry (Workspace → Executive view, §6.11, §3 row 19, Phase 1) |
 |---|---|---|
 | `/executive` | `ExecutivePage` | Cockpit |
-| `/executive/board-pack` | `BoardPackPage` | Board Risk Committee pack |
+| `/executive/board-pack` | redirect → `/enterprise-risk/brc-pack` | (removed from the menu; Enterprise risk → BRC pack) |
 
 Exported: `EXEC_RULES`, `PACK_HREF`, payload types, `useExecutiveGovernance`.
 
@@ -33,15 +33,14 @@ Exported: `EXEC_RULES`, `PACK_HREF`, payload types, `useExecutiveGovernance`.
 | `Kri` (computed) | id, domain, name, value, appetite, rag, href |
 | `ExceptionItem` (`demoExceptions` + derived credit exceptions) | id, domain, title, severity, href |
 | Portfolio store `signOffs[exec-summary:<period>]` | by, role, at, operationId |
-| Portfolio store `runs` (BRC pack report) | id, period, status (Draft / Submitted for release / Released / Returned for correction), releasedBy/At, operationId, returnReason |
+| Enterprise-risk store `packs` (read-only here) | latest pack id, meeting, status — shown on the cockpit BRC card |
 | `demoFeeds` | carPct, carHistory, liquidityRatioPct, ldrPct, nopToCapitalPct, varNgn, opLossRatePct, opLossTrend, kriRag, walletMix, peerOutliers, momentumFlags |
 
 ## 5. Rule keys used
 | Key | Where read |
 |---|---|
 | All `executive.*` thresholds (`stage2ShareRedPct` … `quotedEquityHaircutPct`) | `executive-page.tsx` (`useRule`) |
-| `executive.brcPack.requiresSignedSummary` | `platform.ts` hook `executive.pack-needs-signed-summary` |
-| `executive.summary.notifyRoles`, `executive.brcPack.notifyRoles` | `platform.ts` apply |
+| `executive.summary.notifyRoles` | `platform.ts` apply |
 | Portfolio / RAR rules (limits, WARR appetite) | via portfolio selectors |
 
 ## 6. Permission keys enforced
@@ -53,10 +52,9 @@ Exported: `EXEC_RULES`, `PACK_HREF`, payload types, `useExecutiveGovernance`.
 | Item (REQUIREMENTS §) | Code location |
 |---|---|
 | §5 `executive.summary.signoff` | `platform.ts` register; submitted in `hooks.ts` `submitSummary` |
-| §5 `executive.brc-pack.approve` | `platform.ts` register (apply / onReject); submitted in `hooks.ts` `submitPack` |
 | §5 returned / withdrawn | `platform.ts` subscriber `executive.operations-closed` |
 | §6 templates | `platform.ts` apply / onReject → `notify` |
-| §7 events | `hooks.ts` (summary.submitted, brcPack.built, brcPack.submitted); `platform.ts` (summary.signedOff, brcPack.approved / rejected) |
+| §7 events | `hooks.ts` (summary.submitted); `platform.ts` (summary.signedOff) |
 | §7 hooks | `hooks.ts` (all six before/after points); built-in veto handler in `platform.ts` |
 
 ## 8. Tests
@@ -64,7 +62,7 @@ Exported: `EXEC_RULES`, `PACK_HREF`, payload types, `useExecutiveGovernance`.
 |---|---|
 | `e2e/risk/pages-load.spec.ts` | Both pages load per role |
 | `e2e/risk/portfolio.spec.ts` — "Head of Risk submits the AI executive summary → CRO signs it off" | EXE-FR-10 |
-| BRC pack build / submit / approve e2e | None |
+| BRC pack build / submit / approve e2e | `e2e/risk/enterprise-risk.spec.ts` (consolidated flow, incl. `/executive/board-pack` redirect) |
 | Unit tests | None (vitest configured, no tests) |
 
 ## 9. Requirements traceability
@@ -80,16 +78,16 @@ Exported: `EXEC_RULES`, `PACK_HREF`, payload types, `useExecutiveGovernance`.
 | EXE-FR-08 | Drill-down links on each panel | — | Done |
 | EXE-FR-09 | Escalations + exception feed (non-credit items `demoExceptions`) | — | Partial |
 | EXE-FR-10 | `hooks.ts` `submitSummary`, `executive.summary.signoff` | portfolio.spec | Done |
-| EXE-FR-11 | `hooks.ts` build / submit, `executive.brc-pack.approve`, gate hook | — | Done (no e2e) |
+| EXE-FR-11 | `executive-page.tsx` BRC card (reads `useErm` packs), legacy route redirect | enterprise-risk.spec | Done |
 
 ## 10. Gaps against the invariants
 - Invariant 12: module-level `useCan("executive", "edit")` only; export permissions not mirrored.
-- Duplicated BRC pack flow: this module (`executive.brc-pack.approve`, CRO or Head of Risk, stored as portfolio report runs) and enterprise-risk (`enterprise-risk.brc-pack.approval`, CRO only) implement the same PRD artefact differently (ER4 / EX1).
+- Board / MCC / BCC roles have `executive` access but no `enterprise-risk` view, so they can't open the consolidated BRC pack page (TD-964; IAM permission `enterprise-risk.brc-pack.view`).
 - Invariant 8: KRI thresholds owned by other modules duplicated as executive rules (TD-508); workflow SLAs are literals in `defaultSteps` (TD-127 pattern).
 - Invariant 9 (end-to-end): non-credit actuals and exception items are demo feeds, not owning-module data (TD-507); no events consumed from those modules.
 - Invariant 9 (notified): no notification to approvers beyond the generic `operations.approval-requested`; no alert when a KRI turns Red.
-- Invariant 9 (connector-ready): CSCS feed not recorded in `docs/integration-points.md` (file missing).
-- No e2e for BRC pack build / submit / approve; no unit tests.
+- Invariant 9 (connector-ready): CSCS mark-to-market and module actuals are recorded in [`docs/integration-points.md`](../../integration-points.md) (§3, §4); simulated (TD-507).
+- No unit tests.
 
 ## 11. Tech debt
 | TD id | Summary |

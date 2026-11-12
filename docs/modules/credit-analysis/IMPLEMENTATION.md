@@ -108,7 +108,7 @@ data.ts: NGX corpus, life-cycle, macro snapshot, wallet generator (simulated)
 - Inv. 8: 1–10 scale literal (TD-120); single weighting scheme (TD-121); tenant bank name literal (TD-122); COP bands duplicated with origination (TD-123); default step SLAs literal in `defaultSteps`.
 - Inv. 9 (notified): rejected enrichment / advisory / override publish events but send no module notification to the requester (relies on Operations' generic notices).
 - Inv. 9 (end-to-end): approved gating override and signed-off advisory are not read back into the origination credit memo / approval gate.
-- Inv. 9 (connector-ready): NGX corpus, macro, bureau / other-bank lines are simulated in `data.ts`, not via the Connectors framework; not recorded in `docs/integration-points.md` (missing).
+- Inv. 9 (connector-ready): NGX corpus, macro, bureau / other-bank lines are recorded in [`docs/integration-points.md`](../../integration-points.md) (§2, §3) and simulated in `data.ts`; no Connectors framework yet (TD-967).
 - Inv. 9 (scheduled): no automatic refresh when inputs change (§6.2.5 "refreshed automatically"); manual refresh only.
 - Tests: no unit tests for `assess`, posture bands, gating or momentum.
 

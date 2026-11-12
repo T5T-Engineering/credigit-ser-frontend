@@ -110,7 +110,7 @@ Exported for other modules: `roleName`, `roleSecurity`, `roleIdleTimeoutMinutes`
 - Inv. 12: no named permission checks (`identity.users.*`, `identity.roles.*`, `platform.*`, `audit.log.*`); gating is `useCan("admin","edit")` by role → module map.
 - Inv. 9 (workflow): MFA reset applies directly with no Operations step and no permission check.
 - Inv. 9 (notified): invitee receives nothing (ADM-OPS3); deactivation notifies before suspension as a workaround.
-- Inv. 9 (connector-ready): no `docs/integration-points.md` entry for Identity & Access / Entra ID.
+- Inv. 9 (connector-ready): Identity & Access API and Entra ID are recorded in [`docs/integration-points.md`](../../integration-points.md) (§6); the RBAC API is a BACKEND SEAM.
 - Inv. 8: approver roles in `confirm()` / sector-limit step and SLA hours (24/48) are literals in default workflow definitions; demo tenor function `demoTenor` and tighter-role list are code (defaults only).
 - Inv. 8 / PRD §4.0: role set and tiers are a static `RoleId` union; tier add/remove/merge not possible (TD-805, TD-110, TD-804).
 - Audit: audit log is client-side (localStorage) and therefore not immutable; IP/device are demo values.

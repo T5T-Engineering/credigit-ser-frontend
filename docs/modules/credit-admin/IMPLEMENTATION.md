@@ -105,7 +105,7 @@ logic.ts / crms.ts / credit-files.ts / register.ts → derived views from useDb 
 - Inv. 9 (notified/scheduled): waiver expiry reminders and lapse need a manual sweep; no scheduler marks waivers "Lapsed".
 - Inv. 9 (end-to-end): sanctions create no real loss event (TD-854); facilities for newly originated applications are never booked (TD-951).
 - Inv. 9 (user-scoped): register, waivers and credit files show the whole book to every role with view access; no "mine" filter.
-- Inv. 9 (connector-ready): CBA, CRMS and the loss-event intake are not recorded in `docs/integration-points.md` (file doesn't exist yet) and CRMS is called from the page, not through the Connectors framework.
+- Inv. 9 (connector-ready): CBA, CRMS and the loss-event intake are recorded in [`docs/integration-points.md`](../../integration-points.md) (§1, §2, §9); CRMS is called from the page, no Connectors framework yet (TD-967).
 - Tests: no unit tests for tolerance, tier check or reminder logic.
 
 ## 11. Tech debt

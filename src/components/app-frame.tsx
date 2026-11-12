@@ -21,7 +21,8 @@ import {
 import { allNavItems, navigation, navItemFor } from "@/lib/nav";
 import { roles, canAccess } from "@/lib/rbac/roles";
 import { useRole, useSession } from "@/lib/auth/session";
-import { useApplications, useDbActions, useNotifications, useObligors, useTenant } from "@/lib/data/hooks";
+import { useApplications, useDbActions, useObligors, useTenant } from "@/lib/data/hooks";
+import { markNotificationsRead, useMyNotifications } from "@/lib/platform/notifications";
 import { ago } from "@/lib/format";
 import { useRule, useRulesStore } from "@/lib/platform/rules";
 import { roleIdleTimeoutMinutes } from "@/modules/admin/rule-keys";
@@ -53,10 +54,10 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const switchRole = useSession((s) => s.switchRole);
   const signOut = useSession((s) => s.signOut);
   const tenant = useTenant();
-  const notifications = useNotifications();
+  const notifications = useMyNotifications();
   const obligors = useObligors();
   const applications = useApplications();
-  const { update, resetDemo } = useDbActions();
+  const { resetDemo } = useDbActions();
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Per-role idle timeout (PRD §4.2), falling back to the tenant default; re-read when rules change.
   const rulesVersion = useRulesStore((s) => s.values);
@@ -83,9 +84,8 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const myNotifications: AppNotification[] = useMemo(
     () =>
       notifications
-        .filter((n) => n.roleIds.length === 0 || (role && n.roleIds.includes(role.id)))
         .map((n) => ({ id: n.id, title: n.title, body: n.body, tone: n.tone, read: n.read, href: n.href, time: ago(n.createdAt) })),
-    [notifications, role],
+    [notifications],
   );
 
   const commands: CommandItem[] = useMemo(() => {
@@ -168,10 +168,10 @@ export function AppFrame({ children }: { children: ReactNode }) {
             notifications={
               <NotificationCenter
                 notifications={myNotifications}
-                onMarkRead={(id) => update("notifications", id, { read: true })}
-                onMarkAllRead={() => myNotifications.forEach((n) => update("notifications", n.id, { read: true }))}
+                onMarkRead={(id) => markNotificationsRead([id])}
+                onMarkAllRead={() => markNotificationsRead(myNotifications.map((n) => n.id))}
                 onNotificationClick={(n) => {
-                  update("notifications", n.id, { read: true });
+                  markNotificationsRead([n.id]);
                   if (n.href) router.push(n.href);
                 }}
                 linkComponent={Link}
