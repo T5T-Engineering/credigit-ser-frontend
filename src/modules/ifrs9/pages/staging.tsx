@@ -5,7 +5,7 @@ import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, DataT
 import { ModulePage } from "@/components/module-page";
 import type { CbnClass, Ifrs9Stage } from "@/lib/data/types";
 import { date, pct } from "@/lib/format";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { CalcRegister, sum, type CalcSpec, ms } from "../common";
 import { cbnDpdBands, cbnSpecificRate, generalProvisionRate, reportingPeriod, sicrTriggers, stageTransfers, type EclRow, type SicrTrigger, type StageTransfer } from "../data";
 import { RulesPanel } from "../governance";
@@ -30,7 +30,8 @@ const EXPECTED: Record<CbnClass, Ifrs9Stage> = { Performing: 1, Watchlist: 2, Su
 
 export function Ifrs9StagingPage() {
   const { input, rows } = useEcl();
-  const canEdit = useCan("ifrs9", "edit");
+  const canRequestRuleChange = useCan("rules.rules.request-change");
+  const canExport = useCan("ifrs9.data.export");
   const CLASSES = cbnClasses();
   const [open, setOpen] = useState<EclRow | null>(null);
   const [cell, setCell] = useState<{ row: string; column: string } | null>(null);
@@ -197,7 +198,7 @@ export function Ifrs9StagingPage() {
           </CardContent>
         </Card>
 
-        <RulesPanel title="Staging triggers (business rules)" keys={IFRS9_RULE_GROUPS.staging} canRequest={canEdit} />
+        <RulesPanel title="Staging triggers (business rules)" keys={IFRS9_RULE_GROUPS.staging} canRequest={canRequestRuleChange} />
 
         <Card variant="outlined">
           <CardHeader>
@@ -214,7 +215,7 @@ export function Ifrs9StagingPage() {
               getRowId={(t) => t.id}
               searchable
               defaultSort={{ id: "date", direction: "desc" }}
-              exportFilename="ifrs9-stage-transfers"
+              exportFilename={canExport ? "ifrs9-stage-transfers" : undefined}
               filters={[{ id: "move", label: "Migration", columnId: "move" }]}
               emptyState={<Text tone="muted">No stage transfers this quarter.</Text>}
               mobileCard={(t) => (

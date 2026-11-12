@@ -6,6 +6,7 @@ import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitl
 import { useOperationsStore, type OperationInstance } from "@/lib/platform/operations";
 import { ago } from "@/lib/format";
 import { useMemo } from "react";
+import type { ApiUser } from "@/lib/iam/api";
 import { operationHref } from "./operation-ui";
 import { roleName } from "./rule-keys";
 
@@ -15,9 +16,10 @@ type AccessPayload = { email: string; name: string; roleId: string };
  * Self-registered people waiting for access (PRD §4: admin-controlled named users). Access requests are
  * "access.request" operations: they're approved or rejected — and the role confirmed — in Operations, not here.
  */
-export function AccessRequests({ canEdit }: { canEdit: boolean }) {
+export function AccessRequests({ canEdit, apiRequests }: { canEdit: boolean; /** API mode: `GET /identity/access-requests`. */ apiRequests?: ApiUser[] }) {
   const instances = useOperationsStore((s) => s.instances);
   const pending = useMemo(() => instances.filter((i) => i.operationType === "access.request" && (i.status === "Pending" || i.status === "In progress")), [instances]);
+  if (apiRequests) return <ApiAccessRequests requests={apiRequests} />;
   if (pending.length === 0) return null;
 
   const payload = (i: OperationInstance) => i.payload as AccessPayload;
@@ -73,6 +75,37 @@ export function AccessRequests({ canEdit }: { canEdit: boolean }) {
                 </Button>
               ),
             },
+          ]}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+/** API mode list (newest first, as served). Decisions happen in Operations (`access.request`). */
+function ApiAccessRequests({ requests }: { requests: ApiUser[] }) {
+  if (requests.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          <span className="inline-flex items-center gap-2">
+            <UserCheck aria-hidden className="size-5" /> Access requests <Badge tone="warning">{requests.length}</Badge>
+          </span>
+        </CardTitle>
+        <CardDescription>Pending self-registrations. Approve or reject each one — and confirm the role — in Operations.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <DataTable
+          label="Access requests"
+          data={requests}
+          getRowId={(u) => u.id}
+          paginate={false}
+          columns={[
+            { id: "name", header: "Name", accessor: (u) => u.name },
+            { id: "email", header: "Email", accessor: (u) => u.email ?? "" },
+            { id: "requested", header: "Requested role", accessor: (u) => (u.requestedRoleIds ?? u.roles).map(roleName).join(", ") },
+            { id: "when", header: "Requested", accessor: (u) => u.createdAt ?? "", cell: (u) => (u.createdAt ? ago(u.createdAt) : "—") },
           ]}
         />
       </CardContent>

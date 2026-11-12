@@ -20,7 +20,7 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { publish } from "@/lib/platform/events";
 import { runHooks } from "@/lib/platform/hooks";
 import { getRule } from "@/lib/platform/rules";
@@ -70,7 +70,9 @@ type GuidanceRow = {
 
 export function AnnualPlanPage() {
   const { facilities, obligors, sectors, sectorRows, totals } = usePortfolioModel();
-  const canEdit = useCan("portfolio", "edit");
+  const canUpload = useCan("portfolio.plans.upload");
+  const canSubmitPlan = useCan("portfolio.plans.submit");
+  const canExport = useCan("portfolio.data.export");
   const actor = useActor();
   const { actor: me } = useScope();
   const { toast } = useToast();
@@ -138,7 +140,7 @@ export function AnnualPlanPage() {
 
   const ingest = async (files: File[]) => {
     const file = files[0];
-    if (!file || !canEdit) return;
+    if (!file || !canUpload) return;
     const hook = await runHooks("portfolio.plan.upload.before", { fileName: file.name, size: file.size, actor: me });
     if (!hook.ok) {
       toast({ title: "Plan not ingested", description: `${hook.vetoedBy}: ${hook.reason}`, tone: "danger" });
@@ -224,7 +226,7 @@ export function AnnualPlanPage() {
               actions={
                 <>
                   <Select aria-label="Plan version shown" size="small" value={plan.id} onChange={(e) => setActive(e.target.value)} options={versions.map((v) => ({ value: v.id, label: `v${v.version} — ${v.name}` }))} />
-                  {canEdit && SUBMITTABLE.includes(statusOf(plan)) ? (
+                  {canSubmitPlan && SUBMITTABLE.includes(statusOf(plan)) ? (
                     <Button size="small" variant="primary" iconBefore={<Send size={14} aria-hidden />} onClick={() => void submitPlan(plan)}>
                       Submit v{plan.version} for approval
                     </Button>
@@ -252,7 +254,7 @@ export function AnnualPlanPage() {
             </Panel>
           </div>
           <Panel title="Ingest a plan" description="Upload the Board-approved or rolling plan (sector, product, region and tenor targets; budgeted disbursement; pricing; funding mix).">
-            {canEdit ? (
+            {canUpload ? (
               <Stack gap="small">
                 <FileUpload accept=".xlsx,.xls,.csv" maxSizeMb={10} onFilesChange={(f) => void ingest(f)} disabled={ingesting} />
                 <Text variant="caption">{ingesting ? "Validating template and mapping sectors…" : "Simulated ingestion: the file is validated against the plan template and saved as a draft version. Submit it for approval to make it operative."}</Text>
@@ -291,7 +293,7 @@ export function AnnualPlanPage() {
         </Panel>
 
         <Panel title="Variance report" description={`Actual vs ${plan.name} (v${plan.version}) vs cycle-adjusted guidance — produced on the configured MIS cadence (§6.6.6). Operative plan: v${operative.version}; original plan v${original.version} retained.`}>
-          <DataTable label="Plan variance report" data={rows} columns={columns} getRowId={(r) => r.sectorId} paginate={false} exportFilename={`plan-variance-v${plan.version}.csv`} filters={[{ id: "flag", label: "Flag" }]} defaultSort={{ id: "flag", direction: "asc" }} />
+          <DataTable label="Plan variance report" data={rows} columns={columns} getRowId={(r) => r.sectorId} paginate={false} exportFilename={canExport ? `plan-variance-v${plan.version}.csv` : undefined} filters={[{ id: "flag", label: "Flag" }]} defaultSort={{ id: "flag", direction: "asc" }} />
         </Panel>
 
         <Panel title="Budgeted disbursement progress" description="Year-to-date new disbursement against the budget, by largest sectors (demo budget split).">

@@ -38,7 +38,7 @@ import {
   type DecisionSubmission,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { useApplications, useObligors } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { newId } from "@/lib/data/store";
@@ -71,13 +71,15 @@ export function DisbursementPage() {
   const requests = useDisbursements();
   const apps = useApplications();
   const obligors = useObligors();
-  const canEdit = useCan("disbursement", "edit");
+  const canPrepare = useCan("disbursement.disbursements.prepare");
+  const canAuthorise = useCan("disbursement.disbursements.authorise");
+  const canExport = useCan("disbursement.queue.export");
   const { actor } = useScope();
   const stepUpThreshold = useRule<number>("approvals.stepUpThresholdNgn");
   const makerRoles = useRule<RoleId[]>("disbursement.makerRoles");
   const instances = useOperationsStore((s) => s.instances);
-  const isMaker = canEdit && makerRoles.includes(actor.roleId);
-  const isChecker = canEdit && checkerRoles().includes(actor.roleId);
+  const isMaker = canPrepare && makerRoles.includes(actor.roleId);
+  const isChecker = canAuthorise && checkerRoles().includes(actor.roleId);
   const [tab, setTab] = useState("queue");
   // `?facility=FAC-…` opens the workspace directly (deep link from other modules).
   const [openId, setOpenId] = useState<string | null>(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("facility")));
@@ -187,7 +189,7 @@ export function DisbursementPage() {
   return (
     <ModulePage module="disbursement" description="Domestic Operations maker-checker: a Maker prepares the disbursement within the approved amount; a different Checker authorises it.">
       <Stack gap="large">
-        {!canEdit ? (
+        {!canPrepare && !canAuthorise ? (
           <Alert tone="info" title="Read-only view">
             Only the Disbursement Maker and Disbursement Checker roles can prepare or authorise disbursements. You can follow the queue and history.
           </Alert>
@@ -218,7 +220,7 @@ export function DisbursementPage() {
                     onRowClick={(q) => setOpenId(q.row.facility.id)}
                     searchable
                     searchPlaceholder="Search facility or obligor"
-                    exportFilename="disbursement-queue.csv"
+                    exportFilename={canExport ? "disbursement-queue.csv" : undefined}
                     emptyState={<EmptyState icon={<Inbox aria-hidden />} title="Nothing pending disbursement" description="Facilities appear here once the offer letter is accepted and Credit Administration has the file." />}
                     mobileCard={(q) => (
                       <Stack gap="xsmall">
@@ -315,7 +317,7 @@ export function DisbursementPage() {
                     { id: "stepUp", label: "Step-up" },
                   ]}
                   defaultSort={{ id: "prepared", direction: "desc" }}
-                  exportFilename="disbursement-history.csv"
+                  exportFilename={canExport ? "disbursement-history.csv" : undefined}
                   emptyState={<EmptyState title="No disbursements yet" />}
                   mobileCard={requestCard}
                 />
@@ -362,14 +364,16 @@ function SodPanel({ title, checks }: { title: string; checks: SodCheck[] }) {
 function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Disbursement[]; onClose: () => void }) {
   const { facility, obligor, app } = row;
   const { actor } = useScope();
-  const canEdit = useCan("disbursement", "edit");
+  const mayPrepare = useCan("disbursement.disbursements.prepare");
+  const mayAuthorise = useCan("disbursement.disbursements.authorise");
+  const canWithdraw = useCan("disbursement.disbursements.withdraw");
   const stepUpThreshold = useRule<number>("approvals.stepUpThresholdNgn");
   const accountLength = useRule<number>("disbursement.accountNumberLength");
   const makerRoles = useRule<RoleId[]>("disbursement.makerRoles");
   const userId = actor.id;
   const roleId = actor.roleId;
-  const isMakerRole = canEdit && makerRoles.includes(roleId);
-  const isCheckerRole = canEdit && checkerRoles().includes(roleId);
+  const isMakerRole = mayPrepare && makerRoles.includes(roleId);
+  const isCheckerRole = mayAuthorise && checkerRoles().includes(roleId);
   const latest = requests[0];
   const awaiting = latest?.status === "Awaiting authorisation" ? latest : undefined;
   const pendingOp = usePendingFor("Disbursement", awaiting?.id ?? "-");
@@ -577,9 +581,11 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
                       )}
                     </Alert>
                   ) : pendingOp.requestedBy.id === userId ? (
-                    <Button variant="secondary" onClick={() => void withdrawDisbursement(pendingOp.id, "Withdrawn by the Maker").then((r) => setDone(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.reason }))}>
-                      Withdraw request
-                    </Button>
+                    canWithdraw ? (
+                      <Button variant="secondary" onClick={() => void withdrawDisbursement(pendingOp.id, "Withdrawn by the Maker").then((r) => setDone(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.reason }))}>
+                        Withdraw request
+                      </Button>
+                    ) : null
                   ) : isCheckerRole ? (
                     <DecisionPanel
                       title="Checker decision"

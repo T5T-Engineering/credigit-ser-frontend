@@ -23,7 +23,7 @@ import {
   type Tone,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { useFacilities, useLookups, useObligors } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { date, money, moneyShort, number } from "@/lib/format";
@@ -61,7 +61,11 @@ export function GuaranteesPage() {
   const facilities = useFacilities();
   const obligors = useObligors();
   const { obligor } = useLookups();
-  const canEdit = useCan("monitoring", "edit");
+  // Guarantee and temporary-overdraft status updates share the guarantees update key.
+  const canUpdate = useCan("monitoring.guarantees.update");
+  const canRequestRelease = useCan("monitoring.guarantees.request-release");
+  const canRaise = useCan("monitoring.exceptions.create");
+  const canExport = useCan("monitoring.registers.export");
   const apgActions = useMonitoring((s) => s.apgActions);
   const todActions = useMonitoring((s) => s.todActions);
   const exceptions = useMonitoring((s) => s.exceptions);
@@ -108,19 +112,29 @@ export function GuaranteesPage() {
       header: <span className="sr-only">Actions</span>,
       exportable: false,
       cell: (a) =>
-        canEdit ? (
+        canUpdate || canRequestRelease || canRaise ? (
           <Menu
             align="end"
             triggerLabel={`Actions for ${a.id}`}
             trigger={<MoreHorizontal aria-hidden className="size-4" />}
             items={[
-              { label: "Confirm advance received (crystallise)", disabled: a.status !== "Awaiting advance", onSelect: () => setAction({ kind: "apg", row: a, status: "Crystallised", label: "Confirm advance payment received" }) },
-              { label: "Record call / claim", onSelect: () => setAction({ kind: "apg", row: a, status: "Called", label: "Record call on guarantee" }) },
-              { label: "Request release (approval)", disabled: a.status === "Released", onSelect: () => setAction({ kind: "apg", row: a, status: "Released", label: "Request guarantee release" }) },
-              {
-                label: "Raise exception",
-                onSelect: () => setRaiseTarget({ obligorId: a.obligorId, obligorName: a.name, facilityId: a.facilityId, amount: a.amount, type: "APG expiry", title: `APG ${a.id} — ${a.status}`, detail: `${a.name}: APG ${a.id} in favour of ${a.beneficiary} (${money(a.amount)}) expires ${date(a.expiryAt)}.` }),
-              },
+              ...(canUpdate
+                ? [
+                    { label: "Confirm advance received (crystallise)", disabled: a.status !== "Awaiting advance", onSelect: () => setAction({ kind: "apg", row: a, status: "Crystallised", label: "Confirm advance payment received" }) },
+                    { label: "Record call / claim", onSelect: () => setAction({ kind: "apg", row: a, status: "Called", label: "Record call on guarantee" }) },
+                  ]
+                : []),
+              ...(canRequestRelease
+                ? [{ label: "Request release (approval)", disabled: a.status === "Released", onSelect: () => setAction({ kind: "apg", row: a, status: "Released", label: "Request guarantee release" }) }]
+                : []),
+              ...(canRaise
+                ? [
+                    {
+                      label: "Raise exception",
+                      onSelect: () => setRaiseTarget({ obligorId: a.obligorId, obligorName: a.name, facilityId: a.facilityId, amount: a.amount, type: "APG expiry", title: `APG ${a.id} — ${a.status}`, detail: `${a.name}: APG ${a.id} in favour of ${a.beneficiary} (${money(a.amount)}) expires ${date(a.expiryAt)}.` }),
+                    },
+                  ]
+                : []),
             ]}
           />
         ) : null,
@@ -141,14 +155,20 @@ export function GuaranteesPage() {
       header: <span className="sr-only">Actions</span>,
       exportable: false,
       cell: (t) =>
-        canEdit && t.status !== "Regularised" && t.status !== "Converted to facility" ? (
+        (canUpdate || canRaise) && t.status !== "Regularised" && t.status !== "Converted to facility" ? (
           <Menu
             align="end"
             triggerLabel={`Actions for ${t.id}`}
             trigger={<MoreHorizontal aria-hidden className="size-4" />}
             items={[
-              { label: "Mark regularised", onSelect: () => setAction({ kind: "tod", row: t, status: "Regularised", label: "Mark TOD regularised" }) },
-              { label: "Converted to approved facility", onSelect: () => setAction({ kind: "tod", row: t, status: "Converted to facility", label: "Record conversion to an approved facility" }) },
+              ...(canUpdate
+                ? [
+                    { label: "Mark regularised", onSelect: () => setAction({ kind: "tod", row: t, status: "Regularised", label: "Mark TOD regularised" }) },
+                    { label: "Converted to approved facility", onSelect: () => setAction({ kind: "tod", row: t, status: "Converted to facility", label: "Record conversion to an approved facility" }) },
+                  ]
+                : []),
+              ...(canRaise
+                ? [
               {
                 label: openExceptionFor(exceptions, { facilityId: t.facilityId, type: "Temporary overdraft not regularised" }) ? "Exception already open" : "Raise exception",
                 disabled: !!openExceptionFor(exceptions, { facilityId: t.facilityId, type: "Temporary overdraft not regularised" }),
@@ -163,6 +183,8 @@ export function GuaranteesPage() {
                     detail: `${t.name}: ${t.id} (${money(t.amount)}) granted ${date(t.grantedAt)} — regularisation deadline ${date(t.regulariseBy)} passed.`,
                   }),
               },
+                  ]
+                : []),
             ]}
           />
         ) : null,
@@ -180,7 +202,7 @@ export function GuaranteesPage() {
       header: <span className="sr-only">Actions</span>,
       exportable: false,
       cell: (a) =>
-        canEdit ? (
+        canRaise ? (
           openExceptionFor(exceptions, { collateralId: a.collateralId }) ? (
             <Text variant="caption" tone="subtle">Exception open</Text>
           ) : (
@@ -228,7 +250,7 @@ export function GuaranteesPage() {
                   <Text variant="small" tone="muted">
                     Tracks issuance, crystallisation (activated when the advance payment is received per the offer letter’s post-conditions) and expiry, per the APG Policy.
                   </Text>
-                  <DataTable label="Advance payment guarantees" data={apgs} columns={apgCols} getRowId={(a) => a.id} searchable density="compact" defaultSort={{ id: "expiry", direction: "asc" }} filters={[{ id: "status", label: "Status", columnId: "status" }]} exportFilename="apg-register.csv" emptyState={<EmptyState title="No guarantees" />} />
+                  <DataTable label="Advance payment guarantees" data={apgs} columns={apgCols} getRowId={(a) => a.id} searchable density="compact" defaultSort={{ id: "expiry", direction: "asc" }} filters={[{ id: "status", label: "Status", columnId: "status" }]} exportFilename={canExport ? "apg-register.csv" : undefined} emptyState={<EmptyState title="No guarantees" />} />
                 </Stack>
               ),
             },
@@ -242,7 +264,7 @@ export function GuaranteesPage() {
                     Excess-over-limit, matured-loan-without-renewal and undocumented facilities not regularised within {todNpl} days are classified and provisioned as non-performing. Regularisation window for
                     TODs: {todWindow} days (business rule — tenant parameter).
                   </Alert>
-                  <DataTable label="Temporary overdrafts" data={tods} columns={todCols} getRowId={(t) => t.id} searchable density="compact" defaultSort={{ id: "age", direction: "desc" }} filters={[{ id: "type", label: "Type", columnId: "type" }, { id: "status", label: "Status", columnId: "status" }]} exportFilename="tod-register.csv" />
+                  <DataTable label="Temporary overdrafts" data={tods} columns={todCols} getRowId={(t) => t.id} searchable density="compact" defaultSort={{ id: "age", direction: "desc" }} filters={[{ id: "type", label: "Type", columnId: "type" }, { id: "status", label: "Status", columnId: "status" }]} exportFilename={canExport ? "tod-register.csv" : undefined} />
                 </Stack>
               ),
             },
@@ -256,7 +278,7 @@ export function GuaranteesPage() {
                     Perfection status, revaluation due-dates and insurance currency for every collateral securing a live facility. Share-backed collateral is tracked on its SEC/CSCS mark-to-market
                     value and lien status, not a periodic manual revaluation (PRD §5.7). Fixed-asset revaluation rules per CBN 3.11 apply to the bank’s own premises.
                   </Text>
-                  <DataTable label="Collateral monitoring alerts" data={alerts} columns={alertCols} getRowId={(a) => a.id} searchable density="compact" filters={[{ id: "kind", label: "Alert", columnId: "kind" }]} exportFilename="collateral-alerts.csv" emptyState={<EmptyState title="No collateral alerts" />} />
+                  <DataTable label="Collateral monitoring alerts" data={alerts} columns={alertCols} getRowId={(a) => a.id} searchable density="compact" filters={[{ id: "kind", label: "Alert", columnId: "kind" }]} exportFilename={canExport ? "collateral-alerts.csv" : undefined} emptyState={<EmptyState title="No collateral alerts" />} />
                 </Stack>
               ),
             },

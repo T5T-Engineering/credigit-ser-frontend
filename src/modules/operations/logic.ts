@@ -40,8 +40,7 @@ const statusMap: Record<OperationStatus, UiOperationStatus> = {
   Rejected: "rejected",
   Returned: "returned",
   Cancelled: "cancelled",
-  // TD-960: the library has no "failed" status yet; the item page badge shows "Failed".
-  Failed: "rejected",
+  Failed: "failed",
 };
 export const uiStatus = (s: OperationStatus) => statusMap[s];
 

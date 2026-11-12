@@ -202,7 +202,7 @@ export function usePendingChanges(): OperationInstance[] {
 }
 
 /** Open operations raised from the admin module (users, roles, rules, sector limits). */
-export const adminOperationTypes = ["rule.change", "user.invite", "user.role-change", "user.deactivate", "user.reactivate", "role.custom-change", "admin.sector-limits.change", "access.request"];
+export const adminOperationTypes = ["rule.change", "user.invite", "user.role-change", "user.deactivate", "user.reactivate", "user.mfa-reset", "role.custom-change", "role.permissions-change", "admin.sector-limits.change", "access.request"];
 export function useOpenAdminOperations(): OperationInstance[] {
   const instances = useOperationsStore((s) => s.instances);
   return useMemo(() => instances.filter((i) => adminOperationTypes.includes(i.operationType) && open(i)), [instances]);

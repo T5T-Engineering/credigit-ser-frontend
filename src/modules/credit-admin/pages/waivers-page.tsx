@@ -30,7 +30,7 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { newId } from "@/lib/data/store";
 import { date, dateTime } from "@/lib/format";
@@ -89,8 +89,12 @@ function Waivers() {
   const instances = useOperationsStore((s) => s.instances);
   const requesterRoles = useRule<RoleId[]>("credit-admin.requesterRoles");
   const reminderDays = useRule<number>("credit-admin.waiverReminderDays");
-  const canEdit = useCan("credit-admin", "edit");
-  const isRequester = canEdit && requesterRoles.includes(actor.roleId);
+  const inRequesterRoles = requesterRoles.includes(actor.roleId);
+  // Raising (or re-routing) a request covers both waivers/deferrals and sanctions for breach.
+  const isRequester = useCan(["credit-admin.waivers.request", "credit-admin.sanctions.request"]) && inRequesterRoles;
+  const canRemind = useCan("credit-admin.waivers.send-reminders") && inRequesterRoles;
+  const canCloseWaivers = useCan("credit-admin.waivers.close") && inRequesterRoles;
+  const canExport = useCan("credit-admin.registers.export");
   const [newOpen, setNewOpen] = useState(params.get("new") === "1" && isRequester);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [scope, setScope] = useState<Scope>("all");
@@ -190,14 +194,18 @@ function Waivers() {
       module="credit-admin"
       description="Waivers and deferrals of approved conditions, and sanctions for credit-policy breaches (PRD §6.3.2). Every decision runs through the Operations workflow."
       actions={
-        isRequester ? (
+        isRequester || canRemind ? (
           <Stack direction="horizontal" gap="small" wrap>
-            <Button variant="tertiary" iconBefore={<BellRing aria-hidden className="size-4" />} onClick={() => setNotice(sendExpiryReminders(waivers))}>
-              Send expiry reminders
-            </Button>
-            <Button iconBefore={<FilePlus2 aria-hidden className="size-4" />} onClick={() => setNewOpen(true)}>
-              New request
-            </Button>
+            {canRemind ? (
+              <Button variant="tertiary" iconBefore={<BellRing aria-hidden className="size-4" />} onClick={() => setNotice(sendExpiryReminders(waivers))}>
+                Send expiry reminders
+              </Button>
+            ) : null}
+            {isRequester ? (
+              <Button iconBefore={<FilePlus2 aria-hidden className="size-4" />} onClick={() => setNewOpen(true)}>
+                New request
+              </Button>
+            ) : null}
           </Stack>
         ) : undefined
       }
@@ -261,7 +269,7 @@ function Waivers() {
             { id: "status", label: "Status" },
           ]}
           defaultSort={{ id: "requested", direction: "desc" }}
-          exportFilename="waivers-deferrals.csv"
+          exportFilename={canExport ? "waivers-deferrals.csv" : undefined}
           emptyState={<EmptyState icon={<Gavel aria-hidden />} title="No requests" description={scope === "awaiting" ? "Nothing is waiting for your decision." : "No waivers, deferrals or sanctions match the current filters."} />}
           mobileCard={(r) => (
             <Stack gap="small">
@@ -281,7 +289,7 @@ function Waivers() {
       </Stack>
 
       <NewRequestModal open={newOpen} onOpenChange={setNewOpen} defaultFacility={prefillFacility} onCreated={(id) => setSelectedId(id)} />
-      {selected ? <RequestDrawer row={selected} isRequester={isRequester} onClose={() => setSelectedId(null)} /> : null}
+      {selected ? <RequestDrawer row={selected} isRequester={isRequester} canCloseWaivers={canCloseWaivers} onClose={() => setSelectedId(null)} /> : null}
     </ModulePage>
   );
 }
@@ -296,14 +304,14 @@ function strip(row: Row): WaiverRequest {
   return base;
 }
 
-function RequestDrawer({ row, isRequester, onClose }: { row: Row; isRequester: boolean; onClose: () => void }) {
+function RequestDrawer({ row, isRequester, canCloseWaivers, onClose }: { row: Row; isRequester: boolean; canCloseWaivers: boolean; onClose: () => void }) {
   const { actor } = useScope();
   const pending = usePendingFor("Waiver", row.id);
   const [result, setResult] = useState<ActionResult | null>(null);
   const approvers = approversOf(row);
   const isSanction = row.kind === "Sanction for breach";
   const mayDecide = canActOn(row, pending, actor);
-  const canClose = isRequester && row.effective === "Approved" && !isSanction;
+  const canClose = canCloseWaivers && row.effective === "Approved" && !isSanction;
   const canResubmit = isRequester && !pending && (row.effective === "Returned to requester" || row.effective === "Withdrawn" || row.effective === "Pending approval");
 
   const decide = async (decision: string, comment: string) => {

@@ -32,7 +32,8 @@ import {
   type KeyValuePair,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan, useSession } from "@/lib/auth/session";
+import { useSession } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { useDb } from "@/lib/data/store";
 import { useUsers } from "@/lib/data/hooks";
 import { dateTime } from "@/lib/format";
@@ -107,7 +108,8 @@ function TemplateDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   const template = base ? { ...base, ...override } : undefined;
   const { actor } = useScope();
   const { toast } = useToast();
-  const canEdit = useCan("operations", "edit");
+  const canEdit = useCan("notifications.templates.request-change");
+  const canSendTest = useCan("notifications.templates.test");
   const testRoles = useRule<string[]>("operations.testSendRoles");
   const minComment = useRule<number>("operations.minCommentLength");
   const pending = usePendingFor("NotificationTemplate", id);
@@ -123,7 +125,8 @@ function TemplateDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   const draft: NotificationTemplate = { ...template, subject, body, inApp };
   const preview = renderEmail(draft, data);
   const dirty = subject !== template.subject || body !== template.body || inApp !== template.inApp;
-  const canTest = testRoles.includes(actor.roleId);
+  // Permission gate plus the tenant business rule that lists roles allowed to send template tests.
+  const canTest = canSendTest && testRoles.includes(actor.roleId);
 
   async function sendTest() {
     const hook = await runHooks("operations.template.test.before", { templateId: id, data, actor });
@@ -248,7 +251,8 @@ function TemplateDrawer({ id, onClose }: { id: string; onClose: () => void }) {
 
 function OutboxTab() {
   const outbox = useNotificationStore((s) => s.outbox);
-  const canSeeAll = useCan("operations", "edit");
+  const canSeeAll = useCan("notifications.outbox.view");
+  const canExport = useCan("notifications.outbox.export");
   const user = useSession((s) => s.user);
   const users = useUsers();
   const [open, setOpen] = useState<OutboxItem | null>(null);
@@ -280,7 +284,7 @@ function OutboxTab() {
         ]}
         defaultSort={{ id: "createdAt", direction: "desc" }}
         onRowClick={(o) => setOpen(o)}
-        exportFilename="outbox.csv"
+        exportFilename={canExport ? "outbox.csv" : undefined}
         exportLabel="Export CSV"
         emptyState={<EmptyState icon={<Mail aria-hidden />} title="Outbox is empty" description="Notifications sent by approvals, rule changes and tests appear here." />}
         mobileCard={(o) => (

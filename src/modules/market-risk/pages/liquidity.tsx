@@ -25,7 +25,7 @@ import {
   useToast,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { pct } from "@/lib/format";
 import { CalcPopover, CalcRegister, DemoNote, sum, type CalcSpec, ms } from "../../ifrs9/common";
 import { raiseBreach, rasValues } from "../actions";
@@ -48,7 +48,8 @@ import { useMarketBase } from "../use-market";
 
 export function LiquidityPage() {
   const { bs, liq, rules } = useMarketBase();
-  const canEdit = useCan("market-risk", "edit");
+  const canRaiseWarning = useCan("market-risk.early-warnings.raise");
+  const canExport = useCan("market-risk.data.export");
   const { toast } = useToast();
   const breaches = useMarketRisk((s) => s.breaches);
   const p = useMemo(() => {
@@ -287,7 +288,7 @@ export function LiquidityPage() {
                   defaultPageSize={10}
                   pageSizeOptions={[]}
                   searchable
-                  exportFilename={`top-${cutoff}-depositors`}
+                  exportFilename={canExport ? `top-${cutoff}-depositors` : undefined}
                   columns={[
                     { id: "rank", header: "#", accessor: "rank", numeric: true, width: "3rem" },
                     { id: "name", header: "Depositor", accessor: "name", searchable: true },
@@ -343,7 +344,7 @@ export function LiquidityPage() {
                       <Text variant="caption" tone="muted">
                         Trigger: {e.threshold} · current: {e.current} {e.unit}
                       </Text>
-                      {canEdit && e.status !== "green" && !ewLogged(e) && (
+                      {canRaiseWarning && e.status !== "green" && !ewLogged(e) && (
                         <Button size="small" variant="secondary" onClick={() => raiseEw(e)}>
                           Raise &amp; escalate
                         </Button>

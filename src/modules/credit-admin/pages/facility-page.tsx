@@ -36,7 +36,7 @@ import {
   type ChecklistStatus,
   type DataTableColumn,
 } from "@credigit/web-ui";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { useAudit, useCollateral, useDocuments, useSectors, useUsers } from "@/lib/data/hooks";
 import { usePendingFor } from "@/lib/platform/operations";
 import { useRule } from "@/lib/platform/rules";
@@ -64,13 +64,14 @@ export function FacilityPage() {
 function FacilityRecord() {
   const id = useSearchParams().get("id");
   const row = useFacilityRow(id);
-  const allowed = useCan("credit-admin");
-  const canEdit = useCan("credit-admin", "edit");
+  const allowed = useCan("credit-admin.facilities.view");
   const { actor } = useScope();
   const confirmerRoles = useRule<RoleId[]>("credit-admin.cpConfirmerRoles");
   const requesterRoles = useRule<RoleId[]>("credit-admin.requesterRoles");
-  const isCad = canEdit && confirmerRoles.includes(actor.roleId);
-  const canRaise = canEdit && requesterRoles.includes(actor.roleId);
+  const isConfirmer = confirmerRoles.includes(actor.roleId);
+  const canConfirm = useCan("credit-admin.conditions.confirm") && isConfirmer;
+  const isCad = useCan("credit-admin.facilities.request-release") && isConfirmer;
+  const canRaise = useCan("credit-admin.waivers.request") && requesterRoles.includes(actor.roleId);
   const pendingRelease = usePendingFor("Facility", id ?? "-");
   const [tab, setTab] = useState("overview");
   const [confirm, setConfirm] = useState(false);
@@ -171,7 +172,7 @@ function FacilityRecord() {
         label="Facility record"
         items={[
           { id: "overview", label: "Overview", content: <OverviewTab row={row} onPrint={() => setPrintOpen(true)} /> },
-          { id: "conditions", label: "Conditions precedent", badge: `${row.cleared}/${row.cps.length}`, content: <ConditionsTab row={row} editable={isCad} /> },
+          { id: "conditions", label: "Conditions precedent", badge: `${row.cleared}/${row.cps.length}`, content: <ConditionsTab row={row} editable={canConfirm} /> },
           { id: "covenants", label: "Covenants", content: <CovenantsTab row={row} /> },
           { id: "collateral", label: "Collateral", content: <CollateralTab row={row} /> },
           { id: "documents", label: "Documents", content: <DocumentsTab row={row} /> },

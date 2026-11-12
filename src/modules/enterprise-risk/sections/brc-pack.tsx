@@ -23,7 +23,7 @@ import {
   Steps,
   Text,
 } from "@credigit/web-ui";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { date, dateTime } from "@/lib/format";
 import { publish } from "@/lib/platform/events";
@@ -45,7 +45,9 @@ const estimatePages = (sections: number) => 6 + sections * 4;
 const packTones = { Draft: "neutral", "Submitted to CRO": "info", "Approved for BRC": "success" } as const;
 
 export function BrcPackSection() {
-  const canEdit = useCan("enterprise-risk", "edit");
+  const canCompile = useCan("enterprise-risk.brc-pack.compile");
+  const canSubmit = useCan("enterprise-risk.brc-pack.submit");
+  const canSignOff = useCan("enterprise-risk.brc-summary.sign-off");
   const { actor } = useScope();
   const narrativeModel = useRule<string>(aiKeys.narrativeModel);
   const needsAdoptedSummary = useRule<boolean>(ermKeys.brcRequiresAdoptedSummary);
@@ -153,22 +155,22 @@ export function BrcPackSection() {
         <CardContent>
           <Stack gap="medium">
             <Field label="Committee meeting date" htmlFor="brc-date">
-              <Input id="brc-date" type="date" value={meeting} min={DEMO_NOW.toISOString().slice(0, 10)} onChange={(e) => setMeeting(e.target.value)} disabled={!canEdit} />
+              <Input id="brc-date" type="date" value={meeting} min={DEMO_NOW.toISOString().slice(0, 10)} onChange={(e) => setMeeting(e.target.value)} disabled={!canCompile} />
             </Field>
             <fieldset className="space-y-2">
               <legend className="mb-2 text-sm font-semibold text-fg">Sections</legend>
               {packSections.map((s) => (
-                <Checkbox key={s.id} label={s.title} description={s.source} checked={selected.includes(s.id)} onChange={() => toggle(s.id)} disabled={!canEdit || progress !== null} />
+                <Checkbox key={s.id} label={s.title} description={s.source} checked={selected.includes(s.id)} onChange={() => toggle(s.id)} disabled={!canCompile || progress !== null} />
               ))}
             </fieldset>
             {progress !== null ? (
               <ProgressBar value={progress / Math.max(1, selected.length)} label={`Compiling ${packSections.find((s) => s.id === selected[Math.min(progress, selected.length - 1)])?.title ?? ""}…`} tone="accent" showValue />
             ) : (
-              <Button iconBefore={<FileStack aria-hidden />} disabled={!canEdit || selected.length === 0} onClick={compile} fullWidth>
+              <Button iconBefore={<FileStack aria-hidden />} disabled={!canCompile || selected.length === 0} onClick={compile} fullWidth>
                 Compile pack ({selected.length} sections)
               </Button>
             )}
-            {!canEdit && <Text variant="small" tone="muted">Your role can view packs but not compile them.</Text>}
+            {!canCompile && <Text variant="small" tone="muted">Your role can view packs but not compile them.</Text>}
           </Stack>
         </CardContent>
       </Card>
@@ -220,7 +222,7 @@ export function BrcPackSection() {
                     </Alert>
                   )}
                   <div className="flex flex-wrap justify-end gap-2">
-                    {active.status === "Draft" && canEdit && (
+                    {active.status === "Draft" && canSubmit && (
                       <Button iconBefore={<Send aria-hidden />} disabled={needsAdoptedSummary && !active.summaryAdoptedBy} onClick={() => void submit(active)}>Submit to CRO</Button>
                     )}
                     {active.status === "Submitted to CRO" && pendingOp?.subject.id === active.id && mayDecide && (
@@ -243,7 +245,7 @@ export function BrcPackSection() {
               draft={active.summary}
               sources={[{ label: "Risk appetite scorecard", detail: `${metrics.length} metrics` }, { label: "Operational Risk KRIs", detail: `${readings.length} KRIs` }]}
               onAccept={
-                canEdit && active.status === "Draft" && !active.summaryAdoptedBy
+                canSignOff && active.status === "Draft" && !active.summaryAdoptedBy
                   ? async (text) => {
                       const r = await submitAiSignOff({ activityId: `AIA-BRC-${active.id}`, item: `BRC executive summary (${active.id})`, module: "Enterprise risk", href: "/enterprise-risk/brc-pack", decision: "Signed off", accountable: "head-of-risk", text });
                       setOutcome(r);

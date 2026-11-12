@@ -1,15 +1,18 @@
 import { expect, test } from "./fixtures";
-import { DEMO_PASSWORD, NAV, enterDemoCode, fillCredentials, passwordSignIn, sampleEmail } from "./auth-helpers";
+import { TEST_PASSWORD, NAV, enterDemoCode, fillCredentials, gotoHydrated, passwordSignIn, sampleEmail, setPasswordViaReset } from "./auth-helpers";
 
 test.describe("email + password sign-in", () => {
   test("seeded user signs in with password and one-time code @mobile", async ({ page }) => {
     const email = await sampleEmail(page);
-    await passwordSignIn(page, email, DEMO_PASSWORD);
+    await setPasswordViaReset(page, email, TEST_PASSWORD);
+    await passwordSignIn(page, email, TEST_PASSWORD);
     await expect(page.getByRole("heading", { level: 1 })).toContainText(/good (morning|afternoon|evening)/i);
   });
 
   test("wrong password N times locks the account; reset unlocks it", async ({ page }) => {
     const email = await sampleEmail(page);
+    await setPasswordViaReset(page, email, TEST_PASSWORD);
+    await gotoHydrated(page, "/login/");
     const max = 5; // default of rule auth.passwordMaxAttempts
     for (let i = 1; i <= max; i++) {
       await page.getByLabel(/work email/i).fill(email);
@@ -19,11 +22,11 @@ test.describe("email + password sign-in", () => {
     }
     await expect(page.getByText(/account is now locked/i)).toBeVisible();
     // Even the right password is refused now.
-    await fillCredentials(page, email, DEMO_PASSWORD);
+    await fillCredentials(page, email, TEST_PASSWORD);
     await expect(page.getByText(/this account is locked/i)).toBeVisible();
 
     // Forgot password → code → new password.
-    await page.getByRole("link", { name: /forgot password/i }).click();
+    await page.getByRole("link", { name: /set or reset your password/i }).click();
     await expect(page).toHaveURL(/forgot-password/, NAV);
     await page.getByLabel(/work email/i).fill(email);
     await page.getByRole("button", { name: /send code/i }).click();
@@ -39,7 +42,7 @@ test.describe("email + password sign-in", () => {
     await expect(page.getByText(/password updated/i)).toBeVisible();
 
     // Old password no longer works, new one does (account unlocked).
-    await fillCredentials(page, email, DEMO_PASSWORD);
+    await fillCredentials(page, email, TEST_PASSWORD);
     await expect(page.getByText(/email or password is incorrect/i)).toBeVisible();
     await passwordSignIn(page, email, fresh);
   });

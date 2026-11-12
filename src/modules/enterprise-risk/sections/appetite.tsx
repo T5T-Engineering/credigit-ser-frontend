@@ -28,7 +28,7 @@ import {
   Textarea,
   type DataTableColumn,
 } from "@credigit/web-ui";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { date, dateTime } from "@/lib/format";
 import { publish } from "@/lib/platform/events";
@@ -54,7 +54,9 @@ function utilisation(m: Row) {
 
 export function AppetiteSection() {
   const { metrics } = useAppetite();
-  const canEdit = useCan("enterprise-risk", "edit");
+  const canRequestChange = useCan("enterprise-risk.appetite-limits.request-change");
+  const canEscalate = useCan("enterprise-risk.appetite-breaches.escalate");
+  const canExport = useCan("enterprise-risk.data.export");
   const escalations = useErm((s) => s.appetiteEscalations);
   const escalateStore = useErm((s) => s.escalateAppetite);
   const audit = useAuditLog();
@@ -149,7 +151,7 @@ export function AppetiteSection() {
         filters={[{ id: "type", label: "Risk type" }, { id: "rag", label: "Status" }]}
         defaultSort={{ id: "rag", direction: "asc" }}
         onRowClick={(m) => setOpenId(m.id)}
-        exportFilename="risk-appetite-scorecard.csv"
+        exportFilename={canExport ? "risk-appetite-scorecard.csv" : undefined}
         paginate={false}
       />
       <Text variant="caption" tone="subtle">Limits and early-warning bands are business rules (enterprise-risk.ras.*); regulatory floors are cited from the PRD (CBN 3.2, §6.8.3, §9.1), the rest are illustrative Board RAS values. Changes route through Operations (CRO → Board). CAR, liquidity and NOP actuals are simulated feeds until the Phase 2 engines publish to the spine.</Text>
@@ -160,12 +162,14 @@ export function AppetiteSection() {
         title={selected?.name ?? ""}
         description={selected ? `${selected.id} · ${selected.type} risk` : undefined}
         footer={
-          selected && canEdit ? (
+          selected && (canRequestChange || canEscalate) ? (
             <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="tertiary" iconBefore={<SlidersHorizontal aria-hidden />} onClick={() => setChanging(selected)}>
-                Propose limit change
-              </Button>
-              {selected.rag !== "green" && !escalations[selected.id] && (
+              {canRequestChange && (
+                <Button variant="tertiary" iconBefore={<SlidersHorizontal aria-hidden />} onClick={() => setChanging(selected)}>
+                  Propose limit change
+                </Button>
+              )}
+              {canEscalate && selected.rag !== "green" && !escalations[selected.id] && (
                 <Button iconBefore={<ArrowUpRight aria-hidden />} onClick={() => void escalate(selected)}>
                   Escalate to {roleNames(escalationRoles(selected))}
                 </Button>

@@ -23,6 +23,7 @@ import {
 import { ModulePage } from "@/components/module-page";
 import { demoAccessEnabled } from "@/components/auth-guard";
 import { useRole, useSession } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { msalConfigured } from "@/lib/auth/msal";
 import { signOut as endSession } from "@/lib/auth/service";
 import { useDbActions, useTenant, useUsers } from "@/lib/data/hooks";
@@ -44,6 +45,7 @@ export function ProfilePage() {
   const security = useRoleSecurity(role.id);
   const limit = useRoleLimit(role.id);
   const { resetDemo } = useDbActions();
+  const canResetDemo = useCan("settings.demo-data.reset");
   const warningSeconds = useRule<number>("session.warningSeconds");
   const shellTimeout = useRule<number>("session.idleTimeoutMinutes");
   const stepUp = useRule<number>("approvals.stepUpThresholdNgn");
@@ -138,7 +140,7 @@ export function ProfilePage() {
           </Card>
         </Grid>
 
-        {demoAccessEnabled ? (
+        {demoAccessEnabled && canResetDemo ? (
           <Card variant="filled">
             <CardContent>
               <div className="flex flex-wrap items-center justify-between gap-4">

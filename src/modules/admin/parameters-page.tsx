@@ -25,7 +25,7 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { useSectors, useUsers } from "@/lib/data/hooks";
 import type { Sector } from "@/lib/data/types";
 import { chartFlow } from "@/lib/workflow";
@@ -88,7 +88,8 @@ export function ParametersPage() {
 }
 
 function Parameters() {
-  const canEdit = useCan("admin", "edit");
+  const canEdit = useCan("rules.rules.request-change");
+  const canChangeSectorLimits = useCan("platform.sector-limits.request-change");
   const params = useSearchParams();
   const router = useRouter();
   const all = ruleDefinitions();
@@ -112,7 +113,7 @@ function Parameters() {
           items={[
             { id: "approvals", label: "Approvals & thresholds", content: <Stack gap="large"><RuleGroup group={groups[0]!} rules={all} canEdit={canEdit} /><ChartFlowSection /></Stack> },
             ...groups.slice(1, 4).map((g) => ({ id: g.id, label: g.label, content: <RuleGroup group={g} rules={all} canEdit={canEdit} /> })),
-            { id: "sectors", label: "Sector limits", content: <SectorLimitsSection canEdit={canEdit} /> },
+            { id: "sectors", label: "Sector limits", content: <SectorLimitsSection canEdit={canChangeSectorLimits} /> },
             ...groups.slice(4).map((g) => ({ id: g.id, label: g.label, content: <RuleGroup group={g} rules={all} canEdit={canEdit} /> })),
           ]}
         />

@@ -41,7 +41,7 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { useApplications, useCollateral, useDbActions, useFacilities, useObligors, useSectors, useUsers } from "@/lib/data/hooks";
 import { branches } from "@/lib/data/seed";
 import { newId } from "@/lib/data/store";
@@ -88,10 +88,10 @@ function guessKind(name: string): DocumentRecord["kind"] {
 }
 
 export function NewApplicationPage() {
-  const canEdit = useCan("origination", "edit");
+  const canCreate = useCan("origination.applications.create");
   const { user: me, roleId } = useMe();
   useRulesVersion();
-  const allowed = canEdit && inGroup("initiators", roleId);
+  const allowed = canCreate && inGroup("initiators", roleId);
   return (
     <ModulePage module="origination" description="Initiate a credit request: obligor, facility, documents with OCR, financial-statement validation, bureau / CRMS checks, collateral and the chart-flow route.">
       {allowed ? (

@@ -19,7 +19,10 @@ import { registerOperation, type WorkflowStep } from "@/lib/platform/operations"
 import { defineRules, type RuleDefinition } from "@/lib/platform/rules";
 import { currentActor } from "@/lib/platform/scope";
 import { allProducts, productSlug, roleName } from "./rule-keys";
-import { addCustomRole, removeCustomRole, updateCustomRole, type CustomRole } from "./store";
+import { addCustomRole, removeCustomRole, updateCustomRole, useAdminStore, type CustomRole } from "./store";
+import { applyRolePermissionChange } from "@/lib/iam/grants-store";
+import { permissionFor, type PermissionKey } from "@/lib/iam/catalogue";
+import { roleById as staticRoleById } from "@/lib/rbac/roles";
 
 const DEMO = "Tenant parameter (demo value)";
 
@@ -223,6 +226,50 @@ registerOperation<CustomRolePayload>({
   },
 });
 
+/** Body of `POST /identity/roles/{id}/permission-changes` (+ role name for display). */
+export type RolePermissionChangePayload = { roleId: string; roleName: string; grant: PermissionKey[]; revoke: PermissionKey[]; reason: string };
+registerOperation<RolePermissionChangePayload>({
+  type: "role.permissions-change",
+  name: "Role permission change",
+  module: "admin",
+  description: "Grant or revoke catalogue permissions of a role (invariant 12). Same approvers as custom role changes; the requester can't approve.",
+  defaultSteps: confirm(48),
+  apply: ({ roleId, roleName: name, grant, revoke, reason }) => {
+    const custom = useAdminStore.getState().customRoles.find((c) => c.id === roleId);
+    // A cloned role defaults to its source role's areas (TD-805).
+    const modules = staticRoleById[(custom?.clonedFrom ?? roleId) as RoleId]?.modules;
+    applyRolePermissionChange(roleId, grant, revoke, modules);
+    const label = (k: PermissionKey) => permissionFor(k)?.label ?? k;
+    log("Changed role permissions (approved)", "Role", roleId, revoke.length ? `Revoked: ${revoke.join(", ")}` : undefined, grant.length ? `Granted: ${grant.join(", ")}` : undefined);
+    publish("identity.role.permissions-changed", { module: "admin", subject: { type: "Role", id: roleId, title: name, href: `/admin/permissions?role=${encodeURIComponent(roleId)}` }, payload: { grant, revoke } });
+    const holders = db().users.filter((u) => u.roleId === roleId && u.status === "Active").map((u) => u.id);
+    notify({
+      templateId: "admin.role-permissions-changed",
+      toRoles: ["system-admin", "head-of-risk"],
+      toUserIds: holders,
+      href: "/admin/permissions",
+      data: { role: name, granted: grant.map(label).join("; ") || "none", revoked: revoke.map(label).join("; ") || "none", count: grant.length + revoke.length, reason },
+    });
+  },
+});
+
+export type UserMfaResetPayload = { userId: string; reason: string };
+registerOperation<UserMfaResetPayload>({
+  type: "user.mfa-reset",
+  name: "MFA reset",
+  module: "admin",
+  description: "Reset a user's MFA enrolment so they enrol again at the next sign-in (demo mode; the backend endpoint is BE-31 / TD-036).",
+  defaultSteps: confirm(),
+  apply: ({ userId, reason }, { actor }) => {
+    const u = db().users.find((x) => x.id === userId);
+    if (!u) return;
+    db().update("users", userId, { mfa: false });
+    log("Reset MFA enrolment (approved)", "User", userId, "Enrolled", "Re-enrolment required");
+    publish("admin.user.mfa-reset", { module: "admin", subject: { type: "User", id: userId, title: u.name, href: userHref(userId) }, payload: { reason } });
+    notify({ templateId: "admin.user-mfa-reset", toUserIds: [userId], href: "/settings", data: { name: u.name, by: actor.name } });
+  },
+});
+
 export type SectorLimitPayload = { changes: { id: string; name: string; before: number; after: number }[]; reason: string };
 registerOperation<SectorLimitPayload>({
   type: "admin.sector-limits.change",
@@ -341,6 +388,23 @@ defineTemplates([
     ],
   }),
   tpl({
+    id: "admin.role-permissions-changed",
+    name: "Role permissions changed",
+    module: "admin",
+    trigger: "identity.role.permissions-changed",
+    subject: "Permissions changed for {{role}}",
+    inApp: "{{count}} permission change(s) for {{role}} were approved.",
+    body: "<p>The permissions of the role <strong>{{role}}</strong> changed after second-person approval.</p><ul><li>Granted: {{granted}}</li><li>Revoked: {{revoked}}</li></ul><p>Reason: {{reason}}</p><p>The new permissions apply at the next sign-in (or page refresh).</p>",
+    tone: "info",
+    variables: [
+      { name: "role", description: "Role name", example: "Credit Analyst" },
+      { name: "granted", description: "Permissions granted", example: "Export portfolio data" },
+      { name: "revoked", description: "Permissions revoked", example: "none" },
+      { name: "count", description: "Number of changes", example: "1" },
+      { name: "reason", description: "Reason given", example: "Analysts prepare the monthly MIS pack" },
+    ],
+  }),
+  tpl({
     id: "admin.sector-limits-changed",
     name: "Sector limits changed",
     module: "admin",
@@ -368,11 +432,16 @@ defineEvents([
   { name: "admin.role.updated", module: "admin", description: "A custom role was changed (after approval)." },
   { name: "admin.role.deleted", module: "admin", description: "A custom role was deleted (after approval)." },
   { name: "admin.sector-limits.changed", module: "admin", description: "Sector concentration limits changed (after approval)." },
+  { name: "identity.role.permissions-changed", module: "admin", description: "A role's permissions changed (after approval).", payloadExample: { grant: ["portfolio.data.export"], revoke: [] } },
+  { name: "admin.users.exported", module: "admin", description: "The user list was exported (CSV).", payloadExample: { rows: 42 } },
+  { name: "admin.roles.exported", module: "admin", description: "Roles and limits were exported (CSV).", payloadExample: { rows: 25 } },
 ]);
 
 defineHookPoints([
-  { point: "admin.user.change.before", module: "admin", kind: "before", description: "Before a user invite / role change / deactivation / reactivation / MFA reset is submitted. Veto to block; enrich the payload." },
+  { point: "admin.user.change.before", module: "admin", kind: "before", description: "Before a user invite / role change / deactivation / reactivation / lock / unlock / MFA reset is submitted. Veto to block; enrich the payload." },
   { point: "admin.user.change.after", module: "admin", kind: "after", description: "After a user change was submitted (or applied)." },
   { point: "admin.config.change.before", module: "admin", kind: "before", description: "Before a rule, role or sector-limit change is submitted from Admin. Veto to block." },
   { point: "admin.config.change.after", module: "admin", kind: "after", description: "After a configuration change was submitted to Operations." },
+  { point: "identity.role.permissions-change.before", module: "admin", kind: "before", description: "Before a role permission change is submitted. Veto to block; enrich grant / revoke." },
+  { point: "identity.role.permissions-change.after", module: "admin", kind: "after", description: "After a role permission change was submitted to Operations." },
 ]);

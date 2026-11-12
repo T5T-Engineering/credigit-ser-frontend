@@ -29,7 +29,7 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { newId } from "@/lib/data/store";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { date } from "@/lib/format";
@@ -51,7 +51,9 @@ const currencyTones = { Current: "success", "Due for review": "warning", Overdue
 const resultTones = { Passed: "success", "Passed with issues": "warning", Failed: "danger", "Not tested": "neutral" } as const;
 
 export function BcmPage() {
-  const canEdit = useCan("operational-risk", "edit");
+  const canSubmitPlan = useCan("operational-risk.bcm-plans.submit");
+  const canRecordExercise = useCan("operational-risk.bcm-exercises.create");
+  const canExport = useCan("operational-risk.registers.export");
   const { actor } = useScope();
   useRuleValues(); // re-render when RTO/RPO targets or BCM rules change
   const storedPlans = useOpRisk((s) => s.bcmPlans);
@@ -100,7 +102,7 @@ export function BcmPage() {
       header: "",
       exportable: false,
       cell: (p) =>
-        canEdit ? (
+        canSubmitPlan ? (
           <Button size="small" variant="tertiary" onClick={() => setReviewing(p)}>
             {currencyOf(p) === "Current" ? "Review plan" : "Submit review"}
           </Button>
@@ -112,7 +114,7 @@ export function BcmPage() {
     <ModulePage
       module="operational-risk"
       description="Business Continuity Management — BCM plan currency, crisis-management readiness and fire-drill/evacuation compliance per the Crisis Management Policy, Fire Drill & Evacuation Framework and BCM Framework (ISO 22301)."
-      actions={canEdit ? <Button iconBefore={<PlusCircle aria-hidden />} onClick={() => setRecordOpen(true)}>Record test / exercise</Button> : undefined}
+      actions={canRecordExercise ? <Button iconBefore={<PlusCircle aria-hidden />} onClick={() => setRecordOpen(true)}>Record test / exercise</Button> : undefined}
     >
       <Stack gap="large">
         <SubmitOutcome result={outcome} />
@@ -148,7 +150,7 @@ export function BcmPage() {
             <CardDescription>Recovery Time and Recovery Point Objectives are business rules per process; plan reviews and target changes are approved through Operations</CardDescription>
           </CardHeader>
           <CardContent className="p-2 sm:p-4">
-            <DataTable label="BCM plans" columns={columns} data={plans} getRowId={(p) => p.id} filters={[{ id: "tier", label: "Criticality" }, { id: "currency", label: "Currency" }, { id: "result", label: "Last test" }]} defaultSort={{ id: "tier", direction: "asc" }} exportFilename="bcm-plans.csv" defaultPageSize={20} />
+            <DataTable label="BCM plans" columns={columns} data={plans} getRowId={(p) => p.id} filters={[{ id: "tier", label: "Criticality" }, { id: "currency", label: "Currency" }, { id: "result", label: "Last test" }]} defaultSort={{ id: "tier", direction: "asc" }} exportFilename={canExport ? "bcm-plans.csv" : undefined} defaultPageSize={20} />
           </CardContent>
         </Card>
 

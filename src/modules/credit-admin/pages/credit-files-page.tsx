@@ -24,7 +24,7 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { useDocuments, useSectors, useUsers } from "@/lib/data/hooks";
 import { date, moneyShort, pct } from "@/lib/format";
 import { useRule } from "@/lib/platform/rules";
@@ -40,6 +40,7 @@ function band(r: CreditFileRow) {
 }
 
 export function CreditFilesPage() {
+  const canExport = useCan("credit-admin.registers.export");
   const rows = useFacilityRows();
   const files = useCreditFiles(rows);
   const users = useUsers();
@@ -129,7 +130,7 @@ export function CreditFilesPage() {
             { id: "sector", label: "Sector" },
           ]}
           defaultSort={{ id: "completeness", direction: "asc" }}
-          exportFilename="credit-file-completeness.csv"
+          exportFilename={canExport ? "credit-file-completeness.csv" : undefined}
           emptyState={<EmptyState icon={<FolderOpen aria-hidden />} title="No credit files match" description="Adjust the filters to see credit files." />}
           mobileCard={(r) => (
             <Stack gap="small">
@@ -153,7 +154,7 @@ export function CreditFilesPage() {
 function CreditFileDrawer({ file, onClose }: { file: CreditFileRow; onClose: () => void }) {
   const { actor } = useScope();
   const deskRoles = useRule<RoleId[]>("credit-admin.cpConfirmerRoles");
-  const canEdit = useCan("credit-admin", "edit") && deskRoles.includes(actor.roleId);
+  const canEdit = useCan("credit-admin.credit-files.update") && deskRoles.includes(actor.roleId);
   const documents = useDocuments();
   const users = useUsers();
   const [error, setError] = useState<string | null>(null);

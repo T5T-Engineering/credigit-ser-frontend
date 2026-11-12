@@ -32,7 +32,7 @@ import {
   type MatrixCell,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { date } from "@/lib/format";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { publish } from "@/lib/platform/events";
@@ -50,9 +50,24 @@ const effTones = { Effective: "success", "Partially effective": "warning", Ineff
 const statusTones = { Reviewed: "success", Submitted: "info", "In progress": "warning", "Not started": "neutral" } as const;
 const actionTones = { Open: "info", "In progress": "warning", Completed: "success", Overdue: "danger" } as const;
 
-function RcsaActions({ risk, onStart, onSubmit }: { risk: RcsaRisk; onStart: (r: RcsaRisk) => void; onSubmit: (r: RcsaRisk) => Promise<void> }) {
+function RcsaActions({
+  risk,
+  onStart,
+  onSubmit,
+  canStart,
+  canSubmit,
+}: {
+  risk: RcsaRisk;
+  onStart: (r: RcsaRisk) => void;
+  onSubmit: (r: RcsaRisk) => Promise<void>;
+  /** Holds operational-risk.rcsa.update (starts the self-assessment). */
+  canStart: boolean;
+  /** Holds operational-risk.rcsa.submit (routes the assessment for second-line sign-off). */
+  canSubmit: boolean;
+}) {
   const pending = usePendingFor("RcsaRisk", risk.id);
   if (pending) return <Alert tone="info">Second-line sign-off is with the approvers in Operations ({pending.id}).</Alert>;
+  if (risk.status === "Not started" ? !canStart : !canSubmit) return null;
   return (
     <div className="flex justify-end">
       {risk.status === "Not started" ? (
@@ -65,7 +80,9 @@ function RcsaActions({ risk, onStart, onSubmit }: { risk: RcsaRisk; onStart: (r:
 }
 
 export function RcsaPage() {
-  const canEdit = useCan("operational-risk", "edit");
+  const canUpdate = useCan("operational-risk.rcsa.update");
+  const canSubmit = useCan("operational-risk.rcsa.submit");
+  const canExport = useCan("operational-risk.registers.export");
   const { actor } = useScope();
   const rules = useRuleValues();
   const cycleMonths = useRule<number>(orKeys.rcsaCycleMonths);
@@ -250,7 +267,7 @@ export function RcsaPage() {
           filters={[{ id: "category", label: "Category" }, { id: "status", label: "Assessment" }, { id: "effectiveness", label: "Effectiveness" }]}
           defaultSort={{ id: "residual", direction: "desc" }}
           onRowClick={(r) => setOpenId(r.id)}
-          exportFilename="rcsa-register.csv"
+          exportFilename={canExport ? "rcsa-register.csv" : undefined}
           defaultPageSize={20}
         />
       </Stack>
@@ -260,7 +277,7 @@ export function RcsaPage() {
         onOpenChange={(o) => !o && setOpenId(null)}
         title={selected?.title ?? ""}
         description={selected ? `${selected.id} · ${selected.category}` : undefined}
-        footer={selected && canEdit && selected.status !== "Reviewed" ? <RcsaActions risk={selected} onStart={start} onSubmit={submitForSignOff} /> : undefined}
+        footer={selected && (canUpdate || canSubmit) && selected.status !== "Reviewed" ? <RcsaActions risk={selected} onStart={start} onSubmit={submitForSignOff} canStart={canUpdate} canSubmit={canSubmit} /> : undefined}
       >
         {selected && (
           <Stack gap="large">
@@ -314,7 +331,7 @@ export function RcsaPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <StatusBadge status={a.status} tones={actionTones} />
-                      {canEdit && a.status !== "Completed" && <Button size="small" variant="tertiary" onClick={() => completeAction(selected, a.id)}>Mark complete</Button>}
+                      {canUpdate && a.status !== "Completed" && <Button size="small" variant="tertiary" onClick={() => completeAction(selected, a.id)}>Mark complete</Button>}
                     </div>
                   </div>
                 ))}

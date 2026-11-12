@@ -35,7 +35,7 @@ import {
 } from "@credigit/web-ui";
 import Link from "next/link";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { dateTime, number, pct } from "@/lib/format";
 import { useOperationsStore } from "@/lib/platform/operations";
 import { useRule } from "@/lib/platform/rules";
@@ -71,7 +71,10 @@ const breachTones = { Open: "danger", Escalated: "warning", Closed: "success" } 
 
 export function MarketRiskPage() {
   const { rows, capital, bs, rules } = useMarketBase();
-  const canEdit = useCan("market-risk", "edit");
+  const canRaiseBreach = useCan("market-risk.breaches.create");
+  const canEscalate = useCan("market-risk.breaches.escalate");
+  const canRequestClose = useCan("market-risk.breaches.request-close");
+  const canExport = useCan("market-risk.data.export");
   const { actor } = useScope();
   const { toast } = useToast();
   const breaches = useMarketRisk((s) => s.breaches);
@@ -151,17 +154,19 @@ export function MarketRiskPage() {
           Closure awaiting approval
         </Button>
       );
-    if (!canEdit) return null;
+    if (!canEscalate && !canRequestClose) return null;
     return (
       <Stack direction="horizontal" gap="xsmall">
-        {b.levelRole !== topRole && (
+        {canEscalate && b.levelRole !== topRole && (
           <Button size="small" variant="secondary" onClick={() => escalate(b)}>
             Escalate
           </Button>
         )}
-        <Button size="small" variant="tertiary" onClick={() => setClosing(b)}>
-          Request close
-        </Button>
+        {canRequestClose && (
+          <Button size="small" variant="tertiary" onClick={() => setClosing(b)}>
+            Request close
+          </Button>
+        )}
       </Stack>
     );
   };
@@ -565,7 +570,7 @@ export function MarketRiskPage() {
                   <Text variant="small">
                     <span className="font-semibold">{d.metric}</span> · {d.desk}: <span className="font-mono">{d.actual}</span> vs {d.limit}
                   </Text>
-                  {canEdit && (
+                  {canRaiseBreach && (
                     <Button size="small" variant="secondary" onClick={() => raise(d)}>
                       Raise breach
                     </Button>
@@ -603,7 +608,7 @@ export function MarketRiskPage() {
               getRowId={(b) => b.id}
               filters={[{ id: "status", label: "Status", columnId: "status" }]}
               defaultSort={{ id: "at", direction: "desc" }}
-              exportFilename="market-risk-breach-log"
+              exportFilename={canExport ? "market-risk-breach-log" : undefined}
               mobileCard={(b) => (
                 <Stack gap="xsmall">
                   <Stack direction="horizontal" justify="between" align="center">

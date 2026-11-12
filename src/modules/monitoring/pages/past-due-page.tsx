@@ -38,7 +38,7 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { useFacilities, useLookups, useUsers } from "@/lib/data/hooks";
 import type { Facility } from "@/lib/data/types";
 import { date, dateTime, money, moneyShort, number, pct } from "@/lib/format";
@@ -60,7 +60,10 @@ export function PastDuePage() {
   const facilities = useFacilities();
   const { obligor, sector, user } = useLookups();
   const users = useUsers();
-  const canEdit = useCan("monitoring", "edit");
+  const canRaise = useCan("monitoring.exceptions.create");
+  const canAssign = useCan("monitoring.facilities.assign");
+  const canNote = useCan("monitoring.facility-notes.create");
+  const canExport = useCan("monitoring.registers.export");
   const exceptions = useMonitoring((s) => s.exceptions);
   const notes = useMonitoring((s) => s.notes);
   const assignments = useMonitoring((s) => s.assignments);
@@ -210,13 +213,9 @@ export function PastDuePage() {
           trigger={<MoreHorizontal aria-hidden className="size-4" />}
           items={[
             { label: "View monitoring detail", onSelect: () => setDetail(r) },
-            ...(canEdit
-              ? [
-                  { label: r.exceptionId ? "Exception already open" : "Raise exception", icon: <AlertTriangle aria-hidden className="size-4" />, onSelect: () => raiseFor(r), disabled: !!r.exceptionId },
-                  { label: "Assign officer", icon: <UserPlus aria-hidden className="size-4" />, onSelect: () => setAssignFor(r) },
-                  { label: "Add note", icon: <StickyNote aria-hidden className="size-4" />, onSelect: () => setNoteFor(r) },
-                ]
-              : []),
+            ...(canRaise ? [{ label: r.exceptionId ? "Exception already open" : "Raise exception", icon: <AlertTriangle aria-hidden className="size-4" />, onSelect: () => raiseFor(r), disabled: !!r.exceptionId }] : []),
+            ...(canAssign ? [{ label: "Assign officer", icon: <UserPlus aria-hidden className="size-4" />, onSelect: () => setAssignFor(r) }] : []),
+            ...(canNote ? [{ label: "Add note", icon: <StickyNote aria-hidden className="size-4" />, onSelect: () => setNoteFor(r) }] : []),
             ...(r.collateralIds[0] ? [{ label: "View collateral", href: `/collateral/item?id=${r.collateralIds[0]}` }] : []),
           ]}
           linkComponent={Link}
@@ -332,7 +331,7 @@ export function PastDuePage() {
           ]}
           onRowClick={(r) => setDetail(r)}
           density="compact"
-          exportFilename="past-due-obligations.csv"
+          exportFilename={canExport ? "past-due-obligations.csv" : undefined}
           emptyState={<EmptyState title="No past-due obligations" description="Every facility in this view is up to date." />}
           mobileCard={(r) => (
             <Stack gap="xsmall">
@@ -353,7 +352,7 @@ export function PastDuePage() {
       <RaiseExceptionModal target={raiseTarget} onClose={() => setRaiseTarget(null)} />
       {assignFor && <AssignModal row={assignFor} users={users.filter((u) => u.status === "Active" && assignableRoles.includes(u.roleId))} onClose={() => setAssignFor(null)} />}
       {noteFor && <NoteModal row={noteFor} onClose={() => setNoteFor(null)} />}
-      <FacilityDrawer row={detail} onClose={() => setDetail(null)} canEdit={canEdit} onRaise={(r) => (setDetail(null), raiseFor(r))} />
+      <FacilityDrawer row={detail} onClose={() => setDetail(null)} canEdit={canRaise} onRaise={(r) => (setDetail(null), raiseFor(r))} />
     </ModulePage>
   );
 }

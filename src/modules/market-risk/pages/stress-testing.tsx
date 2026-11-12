@@ -27,7 +27,7 @@ import {
 } from "@credigit/web-ui";
 import Link from "next/link";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { dateTime, pct } from "@/lib/format";
 import { useOperationsStore } from "@/lib/platform/operations";
 import { getRule, useRule } from "@/lib/platform/rules";
@@ -54,7 +54,9 @@ import { useMarketBase } from "../use-market";
 
 export function StressTestingPage() {
   const { bs, liq, rows, rules } = useMarketBase();
-  const canEdit = useCan("market-risk", "edit");
+  const canRun = useCan("market-risk.stress-runs.run");
+  const canSubmitRun = useCan("market-risk.stress-runs.submit");
+  const canExport = useCan("market-risk.data.export");
   const { actor } = useScope();
   const { toast } = useToast();
   const storedDraft = useMarketRisk((s) => s.draft);
@@ -151,7 +153,7 @@ export function StressTestingPage() {
           <Button as={Link} href={operationHref(pendingRuns.get(r.id)!)} size="small" variant="text">
             Awaiting approval
           </Button>
-        ) : canEdit && r.byId === actor.id ? (
+        ) : canSubmitRun && r.byId === actor.id ? (
           <Button size="small" variant="secondary" onClick={() => submit(r)}>
             Submit for approval
           </Button>
@@ -222,13 +224,13 @@ export function StressTestingPage() {
                   label="Severity band"
                   value={draft.band}
                   onChange={(v) => pickBand(v as BandName)}
-                  options={STRESS_BANDS.map((b) => ({ value: b.label, label: b.label, disabled: !canEdit }))}
+                  options={STRESS_BANDS.map((b) => ({ value: b.label, label: b.label, disabled: !canRun }))}
                   size="small"
                 />
                 <Grid columns={{ base: 1, sm: 2 }} gap="medium">
                   {STRESS_FIELDS.map((f) => (
                     <Field key={f.key} label={f.label} description={f.hint}>
-                      <Input type="number" suffix={f.suffix} value={draft[f.key]} disabled={!canEdit} onChange={(e) => set({ [f.key]: Number(e.target.value) })} />
+                      <Input type="number" suffix={f.suffix} value={draft[f.key]} disabled={!canRun} onChange={(e) => set({ [f.key]: Number(e.target.value) })} />
                     </Field>
                   ))}
                 </Grid>
@@ -238,7 +240,7 @@ export function StressTestingPage() {
                       label="Dynamic, forward-looking adjustment (§6.8.4)"
                       description="Widen run-off and haircut assumptions automatically when the sector-cycle engine detects a contraction in a sector the bank is exposed to."
                       checked={draft.dynamic}
-                      disabled={!canEdit}
+                      disabled={!canRun}
                       onCheckedChange={(c) => set({ dynamic: c })}
                     />
                     {draft.dynamic && (
@@ -248,20 +250,20 @@ export function StressTestingPage() {
                         </Alert>
                         <Grid columns={{ base: 1, sm: 3 }} gap="medium">
                           <Field label="Retail run-off add-on">
-                            <Input type="number" suffix="pp" value={draft.dynRetailAdd} disabled={!canEdit} onChange={(e) => set({ dynRetailAdd: Number(e.target.value) })} />
+                            <Input type="number" suffix="pp" value={draft.dynRetailAdd} disabled={!canRun} onChange={(e) => set({ dynRetailAdd: Number(e.target.value) })} />
                           </Field>
                           <Field label="Corporate run-off add-on">
-                            <Input type="number" suffix="pp" value={draft.dynCorporateAdd} disabled={!canEdit} onChange={(e) => set({ dynCorporateAdd: Number(e.target.value) })} />
+                            <Input type="number" suffix="pp" value={draft.dynCorporateAdd} disabled={!canRun} onChange={(e) => set({ dynCorporateAdd: Number(e.target.value) })} />
                           </Field>
                           <Field label="HQLA haircut add-on">
-                            <Input type="number" suffix="pp" value={draft.dynHaircutAdd} disabled={!canEdit} onChange={(e) => set({ dynHaircutAdd: Number(e.target.value) })} />
+                            <Input type="number" suffix="pp" value={draft.dynHaircutAdd} disabled={!canRun} onChange={(e) => set({ dynHaircutAdd: Number(e.target.value) })} />
                           </Field>
                         </Grid>
                       </Stack>
                     )}
                   </Stack>
                 </Card>
-                {canEdit && (
+                {canRun && (
                   <Grid columns={{ base: 1, sm: 3 }} gap="medium">
                     <div className="sm:col-span-2">
                       <Field label="Run name" optional>
@@ -362,7 +364,7 @@ export function StressTestingPage() {
               columns={runCols}
               data={runs}
               getRowId={(r) => r.id}
-              exportFilename="liquidity-stress-runs"
+              exportFilename={canExport ? "liquidity-stress-runs" : undefined}
               emptyState={<Text tone="muted">No saved runs yet. Configure a scenario and select “Run &amp; save”.</Text>}
               mobileCard={(r) => (
                 <Stack gap="xsmall">

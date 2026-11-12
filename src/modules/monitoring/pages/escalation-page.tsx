@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { Button, Card, CardDescription, CardHeader, CardTitle, Grid, Stack, StatusBadge, Table, TableBody, TableCell, TableHead, TableHeaderCell, TableRow, Text } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { moneyShort } from "@/lib/format";
 import { ruleDefinitions, useRulesStore } from "@/lib/platform/rules";
 import { useDpdLadder, useLadder } from "../hooks";
@@ -14,7 +14,7 @@ export function EscalationPage() {
   const ladder = useLadder();
   const { buckets } = useDpdLadder();
   const values = useRulesStore((s) => s.values);
-  const canRequest = useCan("operations", "edit");
+  const canRequest = useCan("rules.rules.request-change");
   const rules = ruleDefinitions().filter((d) => d.module === "monitoring");
   const show = (key: string) => {
     const d = rules.find((r) => r.key === key)!;

@@ -24,7 +24,7 @@ import {
   type DataTableColumn,
   type MatrixCell,
 } from "@credigit/web-ui";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { date } from "@/lib/format";
 import { publish } from "@/lib/platform/events";
@@ -78,7 +78,9 @@ function AcceptanceModal({ risk, onClose, onSubmit }: { risk: EnterpriseRisk | n
 export function RegisterSection() {
   const allRisks = useErm((s) => s.risks);
   const updateRisk = useErm((s) => s.updateRisk);
-  const canEdit = useCan("enterprise-risk", "edit");
+  const canRequestAcceptance = useCan("enterprise-risk.risks.request-acceptance");
+  const canReview = useCan("enterprise-risk.risks.review");
+  const canExport = useCan("enterprise-risk.data.export");
   const audit = useAuditLog();
   const { actor } = useScope();
   const rules = useRuleValues();
@@ -184,7 +186,7 @@ export function RegisterSection() {
         filters={[{ id: "category", label: "Category" }, { id: "response", label: "Response" }, { id: "stage", label: "COSO stage" }]}
         defaultSort={{ id: "residual", direction: "desc" }}
         onRowClick={(r) => setOpenId(r.id)}
-        exportFilename="enterprise-risk-register.csv"
+        exportFilename={canExport ? "enterprise-risk-register.csv" : undefined}
         defaultPageSize={20}
       />
       <Text variant="caption" tone="subtle">Responses follow ISO 31000 treatment options; stages follow COSO ERM’s identify-assess-respond-monitor cycle (§9.2).</Text>
@@ -195,18 +197,20 @@ export function RegisterSection() {
         title={selected?.title ?? ""}
         description={selected ? `${selected.id} · ${selected.category}` : undefined}
         footer={
-          selected && canEdit ? (
+          selected && (canRequestAcceptance || canReview) ? (
             <div className="flex flex-wrap justify-end gap-2">
-              {!selected.acceptedBy && <AcceptButton risk={selected} onClick={() => setAccepting(selected)} />}
-              <Button
-                onClick={() => {
-                  updateRisk(selected.id, { lastReviewed: DEMO_NOW.toISOString() });
-                  audit("Reviewed enterprise risk", "Enterprise risk", selected.id, `Last reviewed ${date(selected.lastReviewed)}`, `Reviewed ${date(DEMO_NOW)}`);
-                  publish("enterprise-risk.risk.reviewed", { module: ERM, subject: { type: "EnterpriseRisk", id: selected.id, title: selected.title, href: "/enterprise-risk/register" } });
-                }}
-              >
-                Record review
-              </Button>
+              {canRequestAcceptance && !selected.acceptedBy && <AcceptButton risk={selected} onClick={() => setAccepting(selected)} />}
+              {canReview && (
+                <Button
+                  onClick={() => {
+                    updateRisk(selected.id, { lastReviewed: DEMO_NOW.toISOString() });
+                    audit("Reviewed enterprise risk", "Enterprise risk", selected.id, `Last reviewed ${date(selected.lastReviewed)}`, `Reviewed ${date(DEMO_NOW)}`);
+                    publish("enterprise-risk.risk.reviewed", { module: ERM, subject: { type: "EnterpriseRisk", id: selected.id, title: selected.title, href: "/enterprise-risk/register" } });
+                  }}
+                >
+                  Record review
+                </Button>
+              )}
             </div>
           ) : undefined
         }

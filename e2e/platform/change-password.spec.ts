@@ -1,11 +1,17 @@
 import { expect, test } from "./fixtures";
 import { signInAs } from "../helpers";
-import { DEMO_PASSWORD, NAV, fillCredentials, gotoHydrated, passwordSignIn } from "./auth-helpers";
+import { TEST_PASSWORD, NAV, fillCredentials, gotoHydrated, passwordSignIn, setPasswordViaReset } from "./auth-helpers";
 
 test("change password in Settings → Password, then sign in with the new one", async ({ page }) => {
   test.setTimeout(150_000);
   await signInAs(page, "credit-analyst", "/settings/password/");
   const email = await page.evaluate(() => JSON.parse(sessionStorage.getItem("credigit.ser.session") ?? "{}").state.user.email as string);
+  await expect(page.getByLabel(/current password/i)).toBeVisible(NAV);
+  // Seeded users have no password until they set one; set it, then come back signed in.
+  await page.evaluate(() => sessionStorage.removeItem("credigit.ser.session"));
+  await setPasswordViaReset(page, email, TEST_PASSWORD);
+  await passwordSignIn(page, email, TEST_PASSWORD);
+  await gotoHydrated(page, "/settings/password/");
   await expect(page.getByLabel(/current password/i)).toBeVisible(NAV);
 
   // Wrong current password is refused.
@@ -16,7 +22,7 @@ test("change password in Settings → Password, then sign in with the new one", 
   await page.getByRole("button", { name: /change password/i }).click();
   await expect(page.getByText(/current password is incorrect/i)).toBeVisible();
 
-  await page.getByLabel(/current password/i).fill(DEMO_PASSWORD);
+  await page.getByLabel(/current password/i).fill(TEST_PASSWORD);
   await page.getByRole("button", { name: /change password/i }).click();
   await expect(page.getByText(/password changed/i).first()).toBeVisible();
 
@@ -27,7 +33,7 @@ test("change password in Settings → Password, then sign in with the new one", 
   // Sign out → old password fails, new password works.
   await page.evaluate(() => sessionStorage.removeItem("credigit.ser.session"));
   await gotoHydrated(page, "/login/");
-  await fillCredentials(page, email, DEMO_PASSWORD);
+  await fillCredentials(page, email, TEST_PASSWORD);
   await expect(page.getByText(/email or password is incorrect/i)).toBeVisible();
   await passwordSignIn(page, email, next);
   const roleId = await page.evaluate(() => JSON.parse(sessionStorage.getItem("credigit.ser.session") ?? "{}").state.roleId);

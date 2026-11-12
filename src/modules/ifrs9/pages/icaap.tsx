@@ -28,7 +28,7 @@ import {
 import { ModulePage } from "@/components/module-page";
 import { newId } from "@/lib/data/store";
 import { DEMO_NOW } from "@/lib/data/seed";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { dateTime, money, pct } from "@/lib/format";
 import { publish } from "@/lib/platform/events";
 import { runHooks } from "@/lib/platform/hooks";
@@ -62,7 +62,10 @@ const GAUGE_MAX_CAR = 30;
 
 export function IcaapPage() {
   const { input, rows, rules } = useEcl();
-  const canEdit = useCan("ifrs9", "edit");
+  const canProposeScenarios = useCan("ifrs9.icaap-scenarios.request-change");
+  const canRunStress = useCan("ifrs9.stress-tests.run");
+  const canSubmitIcaap = useCan("ifrs9.icaap.submit");
+  const canRequestRuleChange = useCan("rules.rules.request-change");
   const audit = useAuditLog();
   const actor = useActorName();
   const { toast } = useToast();
@@ -397,14 +400,14 @@ export function IcaapPage() {
               <CardTitle>Stress-testing workspace</CardTitle>
               <CardDescription>Macro shock scenarios (external data feed, §5.5) applied to portfolio PD / LGD / EAD to project CAR impact. Severities are approved business rules.</CardDescription>
             </Stack>
-            {canEdit && (
+            {(canProposeScenarios || canRunStress) && (
               <Stack direction="horizontal" gap="small" wrap>
-                {!pendingScenarios && (
+                {canProposeScenarios && !pendingScenarios && (
                   <Button variant="secondary" onClick={() => (proposing ? (setProposing(false), setDraft({})) : setProposing(true))}>
                     {proposing ? "Cancel changes" : "Propose scenario changes"}
                   </Button>
                 )}
-                <Button onClick={() => void runAll()}>Run stress test</Button>
+                {canRunStress && <Button onClick={() => void runAll()}>Run stress test</Button>}
               </Stack>
             )}
           </CardHeader>
@@ -474,7 +477,7 @@ export function IcaapPage() {
               <CardTitle>ICAAP report sign-off</CardTitle>
               <CardDescription>Head of Risk review → CRO endorsement → Board approval, routed through Operations.</CardDescription>
             </Stack>
-            {canEdit && !pendingIcaap && <Button onClick={() => void submitIcaap()}>Submit ICAAP for sign-off</Button>}
+            {canSubmitIcaap && !pendingIcaap && <Button onClick={() => void submitIcaap()}>Submit ICAAP for sign-off</Button>}
           </CardHeader>
           <CardContent>
             <Stack gap="medium">
@@ -495,8 +498,8 @@ export function IcaapPage() {
         </Card>
 
         <Grid columns={{ base: 1, lg: 2 }} gap="large">
-          <RulesPanel title="Capital adequacy rules" keys={IFRS9_RULE_GROUPS.capital} canRequest={canEdit} />
-          <RulesPanel title="Capital base calibration (demo)" keys={IFRS9_RULE_GROUPS.capitalBase} canRequest={canEdit} />
+          <RulesPanel title="Capital adequacy rules" keys={IFRS9_RULE_GROUPS.capital} canRequest={canRequestRuleChange} />
+          <RulesPanel title="Capital base calibration (demo)" keys={IFRS9_RULE_GROUPS.capitalBase} canRequest={canRequestRuleChange} />
         </Grid>
 
         <CalcRegister specs={specs} />

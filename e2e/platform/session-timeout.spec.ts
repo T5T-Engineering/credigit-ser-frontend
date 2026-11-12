@@ -35,7 +35,7 @@ test("signing out from a ?demoRole link stays signed out", async ({ page }) => {
   await expect(page.getByRole("menuitem", { name: /sign out/i })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/login\//, NAV);
-  await expect(page.getByRole("button", { name: /sign in with microsoft/i })).toBeVisible();
+  await expect(page.getByLabel(/work email/i)).toBeVisible();
   await page.waitForTimeout(1000);
   await expect(page).toHaveURL(/\/login\//);
   const user = await page.evaluate(() => JSON.parse(sessionStorage.getItem("credigit.ser.session") ?? "{}").state?.user ?? null);

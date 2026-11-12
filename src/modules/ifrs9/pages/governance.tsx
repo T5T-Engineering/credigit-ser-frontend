@@ -2,7 +2,7 @@
 
 import { Grid, Stack } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { ModuleApprovals, RulesPanel } from "../governance";
 import { IFRS9_RULE_GROUPS } from "../platform";
 
@@ -24,14 +24,14 @@ const PANELS: { title: string; keys: string[]; description?: string }[] = [
 
 /** IFRS 9 & ICAAP — every business rule the module reads, and its approvals routed through Operations. */
 export function Ifrs9GovernancePage() {
-  const canEdit = useCan("ifrs9", "edit");
+  const canRequestRuleChange = useCan("rules.rules.request-change");
   return (
     <ModulePage module="ifrs9" title="Rules & approvals" description="Every IFRS 9 / ICAAP parameter with its PRD source, and the approvals routed through the Operations workflow.">
       <Stack gap="large">
         <ModuleApprovals modules={["ifrs9"]} limit={10} />
         <Grid columns={{ base: 1 }} gap="large">
           {PANELS.map((p) => (
-            <RulesPanel key={p.title} title={p.title} description={p.description} keys={p.keys} canRequest={canEdit} />
+            <RulesPanel key={p.title} title={p.title} description={p.description} keys={p.keys} canRequest={canRequestRuleChange} />
           ))}
         </Grid>
       </Stack>

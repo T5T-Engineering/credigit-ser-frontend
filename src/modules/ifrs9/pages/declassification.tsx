@@ -26,7 +26,7 @@ import {
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { newId } from "@/lib/data/store";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { dateTime, money } from "@/lib/format";
 import { publish } from "@/lib/platform/events";
 import { runHooks } from "@/lib/platform/hooks";
@@ -46,7 +46,9 @@ const decTones = { "Pending approval": "warning", Approved: "success", Rejected:
 
 export function DeclassificationPage() {
   const { input, rows, rules } = useEcl();
-  const canEdit = useCan("ifrs9", "edit");
+  const canPropose = useCan("ifrs9.declassification.propose");
+  const canRequestRuleChange = useCan("rules.rules.request-change");
+  const canExport = useCan("ifrs9.data.export");
   const actor = useActorName();
   const audit = useAuditLog();
   const { toast } = useToast();
@@ -194,7 +196,7 @@ export function DeclassificationPage() {
               <Badge tone="warning">Awaiting approval</Badge>
             </Button>
           );
-        return canEdit && c.elig.status === "Eligible" ? (
+        return canPropose && c.elig.status === "Eligible" ? (
           <Button size="small" variant="secondary" onClick={() => openProposal(c)}>
             Propose
           </Button>
@@ -246,7 +248,7 @@ export function DeclassificationPage() {
           title="Trigger parameters"
           description="Business rules (Rules & Parameters Engine). One engine governs both directions of migration; changes are approved in Operations before they apply."
           keys={IFRS9_RULE_GROUPS.cure}
-          canRequest={canEdit}
+          canRequest={canRequestRuleChange}
         />
 
         {pending.length > 0 && (
@@ -312,7 +314,7 @@ export function DeclassificationPage() {
                 { id: "restructured", label: "Restructured", columnId: "restructured" },
               ]}
               defaultSort={{ id: "status", direction: "asc" }}
-              exportFilename="ifrs9-declassification-candidates"
+              exportFilename={canExport ? "ifrs9-declassification-candidates" : undefined}
               mobileCard={(c) => (
                 <Stack gap="xsmall">
                   <Stack direction="horizontal" justify="between" align="center">
@@ -325,7 +327,7 @@ export function DeclassificationPage() {
                     {c.id} · Stage {c.stage}
                     {c.elig.target ? ` → ${c.elig.target}` : ""} · {c.elig.reason}
                   </Text>
-                  {canEdit && c.elig.status === "Eligible" && !pendingByFacility.has(c.id) && (
+                  {canPropose && c.elig.status === "Eligible" && !pendingByFacility.has(c.id) && (
                     <div>
                       <Button size="small" variant="secondary" onClick={() => openProposal(c)}>
                         Propose
@@ -360,7 +362,7 @@ export function DeclassificationPage() {
               label="Declassification history"
               data={history}
               getRowId={(d) => d.id}
-              exportFilename="ifrs9-declassification-history"
+              exportFilename={canExport ? "ifrs9-declassification-history" : undefined}
               emptyState={<Text tone="muted">{scope === "mine" ? "You haven't proposed any declassifications yet." : "No decisions yet. Approved and rejected proposals appear here."}</Text>}
               columns={[
                 { id: "at", header: "Decided", accessor: (d) => d.decidedAt ?? "", cell: (d) => (d.decidedAt ? dateTime(d.decidedAt) : "—") },
