@@ -10,7 +10,8 @@
  * BACKEND SEAM: values come from the Rules & Parameters Engine API.
  */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type RuleType = "number" | "percent" | "money" | "duration" | "boolean" | "enum" | "text" | "url" | "list" | "roles";
 
@@ -43,7 +44,7 @@ export type RuleChange = { key: string; before: RuleValue; after: RuleValue; byI
 type RulesState = { values: Record<string, RuleValue>; history: RuleChange[] };
 
 export const useRulesStore = create<RulesState>()(
-  persist((): RulesState => ({ values: {}, history: [] }), { name: "credigit.ser.rules", storage: createJSONStorage(() => localStorage) }),
+  persist((): RulesState => ({ values: {}, history: [] }), { name: "credigit.ser.rules", storage: dataStorage() }),
 );
 
 const definitions = new Map<string, RuleDefinition>();
@@ -101,3 +102,5 @@ export function applyRuleValue(key: string, value: RuleValue, by: { id: string; 
 export function resetRules() {
   useRulesStore.setState({ values: {}, history: [] });
 }
+
+registerDatabaseStore(useRulesStore);

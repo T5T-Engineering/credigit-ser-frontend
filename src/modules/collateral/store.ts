@@ -7,13 +7,14 @@
  */
 import { useMemo } from "react";
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { useCollateral, useFacilities } from "@/lib/data/hooks";
 import { useRulesStore } from "@/lib/platform/rules";
 import type { Collateral } from "@/lib/data/types";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { legalSeed, lienSeed, moSeed, type LegalRecord, type LienStatus, type MoVerification, type ValuationEntry } from "./data";
 import { adjustedValue, facilityExposure, pledgedUnits, referencePrices } from "./logic";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 type State = {
   verifications: Record<string, MoVerification>;
@@ -59,7 +60,7 @@ export const useCollateralStore = create<State>()(
         set((s) => (s.marginCalls[id] ? { marginCalls: { ...s.marginCalls, [id]: { ...s.marginCalls[id]!, releasedAt: new Date().toISOString(), releasedBy: v.by, operationId: v.operationId } } } : s)),
       markReminders: (ids) => set((s) => ({ reminders: { ...s.reminders, ...Object.fromEntries(ids.map((i) => [i, new Date().toISOString()])) } })),
     }),
-    { name: "credigit.ser.collateral", version: 1, storage: createJSONStorage(() => localStorage), partialize: ({ verifications, legal, valuations, liens, prices, pricesAt, marginCalls, insurance, reminders }) => ({ verifications, legal, valuations, liens, prices, pricesAt, marginCalls, insurance, reminders }) },
+    { name: "credigit.ser.collateral", version: 1, storage: dataStorage(), partialize: ({ verifications, legal, valuations, liens, prices, pricesAt, marginCalls, insurance, reminders }) => ({ verifications, legal, valuations, liens, prices, pricesAt, marginCalls, insurance, reminders }) },
   ),
 );
 
@@ -135,3 +136,5 @@ export function useCollateralView(): CollateralView[] {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collateral, facilities, prices, verifications, legal, liens, insurance, ruleValues]);
 }
+
+registerDatabaseStore(useCollateralStore);

@@ -4,7 +4,7 @@
  * Microsoft Entra ID (Azure AD) single sign-on via MSAL.js.
  *
  * Enabled when NEXT_PUBLIC_AZURE_AD_CLIENT_ID is set. Register a Single-page application in Entra ID with
- * redirect URI = <site>/login/ (and http://localhost:3000/login/ for local dev). Optional app roles whose
+ * redirect URI = <site>/login/ (and http://localhost:3100/login/ for local dev). Optional app roles whose
  * values match our role ids (e.g. "credit-analyst", "cro") are read from the ID token to assign the role.
  */
 import { PublicClientApplication, type AccountInfo, type Configuration } from "@azure/msal-browser";

@@ -9,6 +9,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { roleById, type ModuleKey, type Access, type RoleId, canAccess } from "../rbac/roles";
 import { useDb } from "../data/store";
+import { onSignedIn } from "../data/workspace-storage";
 import { signOutOfBackend } from "./backend-sso";
 import { signOutOfMicrosoft } from "./msal";
 
@@ -44,6 +45,8 @@ export const useSession = create<SessionState>()(
           entityType: "Session",
           entityId: "-",
         });
+        // Database-backed stores that waited for an identity load now (ADR-0015).
+        onSignedIn();
       },
       switchRole: (roleId) => {
         const { user, roleId: before } = get();
