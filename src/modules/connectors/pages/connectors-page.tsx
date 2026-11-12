@@ -58,7 +58,7 @@ export function ConnectorsPage() {
   };
 
   return (
-    <ModulePage module="connectors" description="Health of the connectors feeding the Risk Data Spine through the staging / reconciliation layer — status, freshness, throughput, latency and errors (PRD §5, §4.6). All telemetry here is simulated.">
+    <ModulePage module="connectors" description="Health of the connectors feeding the Risk Data Spine through the staging / reconciliation layer — status, freshness, throughput, latency and errors. All telemetry here is simulated.">
       <Stack gap="large">
         {notice && (
           <Alert tone={notice.tone} action={<Button size="small" variant="tertiary" onClick={() => setNotice(null)}>Dismiss</Button>}>
@@ -87,7 +87,7 @@ export function ConnectorsPage() {
                       {v.name}
                     </Text>
                     <Text variant="caption" tone="subtle">
-                      PRD {v.prd} · {v.category}
+                      {v.category}
                     </Text>
                   </Stack>
                   <Stack gap="xsmall" align="end">
@@ -195,7 +195,7 @@ function ConfigDrawer({ v, canEdit, onClose, onSubmitted }: { v: ConnectorView; 
       open
       onOpenChange={(o) => !o && onClose()}
       title={v.name}
-      description={`PRD ${v.prd} · ${v.category}`}
+      description={v.category}
       size="medium"
       footer={
         canEdit ? (

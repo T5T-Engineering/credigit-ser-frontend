@@ -326,7 +326,7 @@ export function LiquidityPage() {
             <CardHeader>
               <Stack gap="xsmall">
                 <CardTitle>Illiquidity early-warning triggers</CardTitle>
-                <CardDescription>CBN 3.13(c) — thresholds are business rules; raising an indicator escalates it via §6.4.4 and notifies the alert recipients.</CardDescription>
+                <CardDescription>CBN 3.13(c) — thresholds are business rules; raising an indicator escalates it via and notifies the alert recipients.</CardDescription>
               </Stack>
             </CardHeader>
             <CardContent>

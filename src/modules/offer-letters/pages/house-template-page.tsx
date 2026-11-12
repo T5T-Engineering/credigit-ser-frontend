@@ -101,7 +101,7 @@ export function HouseTemplatePage() {
   };
 
   return (
-    <ModulePage module="offer-letters" description="The tenant's own house style — letterhead, section order, standing wording and signature/witness block — versioned and approved by Legal (PRD §7.0).">
+    <ModulePage module="offer-letters" description="The tenant's own house style — letterhead, section order, standing wording and signature/witness block — versioned and approved by Legal.">
       <Stack gap="large">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <Field label="Product line" htmlFor="tpl-line" description="Tenants may keep separate templates per product line.">

@@ -72,7 +72,7 @@ function c(
     text,
     at: i + 1 === version ? approvedAt : new Date(new Date(approvedAt).getTime() - (version - i - 1) * 120 * 86_400_000).toISOString(),
     byName: LEGAL,
-    note: i === 0 ? "Initial library build (PRD §7)" : "Wording aligned to house style",
+    note: i === 0 ? "Initial library build" : "Wording aligned to house style",
   }));
   return { id, library, category, title, text, loanTypes, rule, ...approved(version, approvedAt), history };
 }
@@ -325,9 +325,9 @@ export const mergeFields: Array<{ token: string; label: string; source: string }
   { token: "facility.rate", label: "Interest rate", source: "Approved pricing" },
   { token: "facility.repayment", label: "Repayment", source: "Product catalogue" },
   { token: "request.type", label: "Request type", source: "Credit application (New / Renewal / …)" },
-  { token: "collateral.summary", label: "Security", source: "Collateral register (§6.5)" },
-  { token: "validity.days", label: "Validity period (days)", source: "Letter setting — PRD §7.3 'commonly 7'" },
-  { token: "notice.days", label: "Cure notice (days)", source: "Events of default clause (PRD §7.3: 10 days)" },
+  { token: "collateral.summary", label: "Security", source: "Collateral register" },
+  { token: "validity.days", label: "Validity period (days)", source: "Letter setting — 'commonly 7'" },
+  { token: "notice.days", label: "Cure notice (days)", source: "Events of default clause (10 days)" },
   { token: "default.rate", label: "Default charge", source: "Parameter — set by tenant" },
   { token: "turnover.commitment", label: "Turnover commitment", source: "Parameter — set at approval" },
   { token: "ao.name", label: "Account officer", source: "Relationship manager on the obligor" },

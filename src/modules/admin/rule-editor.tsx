@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 /**
- * Rules editor composition for Admin → Rules & parameters and Roles & limits: a filtered list of business rules
+ * Rules editor composition for Admin â†’ Rules & parameters and Roles & limits: a filtered list of business rules
  * (RuleRow from the library) whose "Request change" opens a dialog that submits `requestRuleChange()` to the
- * Operations workflow. Nothing is applied here — the rule changes when the operation is approved.
+ * Operations workflow. Nothing is applied here â€” the rule changes when the operation is approved.
  */
 import { useState } from "react";
 import Link from "next/link";
@@ -28,13 +28,13 @@ import { useRule, type RuleDefinition, type RuleValue } from "@/lib/platform/rul
 import { ago } from "@/lib/format";
 import { operationHref, submitWithHooks, SubmitOutcome } from "./operation-ui";
 
-/** App rule value → library display/input value. */
+/** App rule value â†’ library display/input value. */
 export function toUiValue(def: RuleDefinition, value: RuleValue): UiRuleValue {
   if (def.type === "duration" && typeof value === "number") return { amount: value, unit: def.durationUnit ?? "minutes" };
   return value;
 }
 
-/** Library value → app rule value. */
+/** Library value â†’ app rule value. */
 export function fromUiValue(def: RuleDefinition, value: UiRuleValue): RuleValue | null {
   if (value === null) return null;
   if (typeof value === "object" && !Array.isArray(value)) return value.amount;
@@ -57,12 +57,12 @@ function RuleItem({ def, canEdit, onEdit }: { def: RuleDefinition; canEdit: bool
     defaultValue: toUiValue(def, def.default),
     unit: def.unit,
     options: def.options,
-    source: def.source,
     pending: pending ? { value: proposed === undefined ? undefined : toUiValue(def, proposed), requestedBy: pending.requestedBy.name, requestedAt: ago(pending.requestedAt), href: operationHref(pending.id) } : undefined,
   };
   return (
     <RuleRow
       rule={rule}
+      showKey={false}
       linkComponent={Link}
       actions={
         canEdit && def.requiresApproval !== false ? (
@@ -137,7 +137,7 @@ export function RuleChangeDialog({ def, onClose, initial }: { def: RuleDefinitio
     >
       <Stack gap="medium">
         <Text variant="small" tone="muted">
-          {def.description} Source: {def.source}.
+          {def.description}
         </Text>
         <RuleValueInput
           type={inputType(def)}

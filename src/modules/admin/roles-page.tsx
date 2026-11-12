@@ -98,7 +98,7 @@ export function RolesPage() {
   ];
 
   return (
-    <ModulePage module="admin" description="The default role set is an illustrative configuration (PRD §4.1). Names, sign-on limits and per-role session rules are business rules; every change is approved in Operations.">
+    <ModulePage module="admin" description="The default role set is an illustrative configuration. Names, sign-on limits and per-role session rules are business rules; every change is approved in Operations.">
       <Stack gap="large">
         <ConfigNotice canEdit={canEdit} />
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
@@ -132,7 +132,7 @@ export function RolesPage() {
               )}
             />
             <Text variant="caption" tone="subtle" className="mt-4 block">
-              Limits are business rules <span className="font-mono">rbac.limit.*</span> (PRD §4.1–4.2, illustrative NGN values); session rules are <span className="font-mono">session.*.&lt;role&gt;</span> with tighter defaults for Disbursement Maker/Checker and Legal (PRD §4.2).
+              Limits are business rules <span className="font-mono">rbac.limit.*</span>; session rules are <span className="font-mono">session.*.&lt;role&gt;</span> with tighter defaults for Disbursement Maker/Checker and Legal.
             </Text>
           </CardContent>
         </Card>
@@ -294,21 +294,21 @@ function RoleDrawer({ role, canEdit, onClose, tiered }: { role: ConfiguredRole; 
             </ul>
           </Alert>
         ) : null}
-        <Field label="Role name" htmlFor="role-name" description="Rename to match your organogram (PRD §4.0).">
+        <Field label="Role name" htmlFor="role-name" description="Rename to match your organogram.">
           <Input id="role-name" value={name} disabled={!canEdit} onChange={(e) => setName(e.target.value)} />
         </Field>
         {!role.custom ? pendingKey(ruleKeys.roleName(role.id)) : null}
         <Field
           label="Sign-on (approval) limit"
           htmlFor="role-limit"
-          description={apex ? "Apex tier — statutory single-obligor ceiling and above." : hasLimit ? `Rule rbac.limit.${role.custom?.clonedFrom ?? role.id} — mapped 1:1 to this tier in the chart-flow (PRD §4.2).` : "This role has no credit approval authority."}
+          description={apex ? "Apex tier — statutory single-obligor ceiling and above." : hasLimit ? `Rule rbac.limit.${role.custom?.clonedFrom ?? role.id} — mapped 1:1 to this tier in the chart-flow.` : "This role has no credit approval authority."}
         >
           <Input id="role-limit" prefix="₦" inputMode="numeric" value={apex ? "No ceiling" : hasLimit ? limit : "Not applicable"} disabled={!canEdit || !hasLimit} onChange={(e) => setLimit(e.target.value)} />
         </Field>
         {!role.custom ? pendingKey(ruleKeys.limit(role.id)) : null}
         <Stack gap="medium">
           <Text variant="eyebrow" tone="muted">
-            Session & sign-on rules (PRD §4.2)
+            Session & sign-on rules
           </Text>
           <Field label="Idle session timeout" htmlFor="role-timeout" description={`${timeoutDef?.min}–${timeoutDef?.max} minutes.`}>
             <Input id="role-timeout" type="number" suffix="min" value={timeout} disabled={!canEdit} onChange={(e) => setTimeoutMin(e.target.value)} />
@@ -320,7 +320,7 @@ function RoleDrawer({ role, canEdit, onClose, tiered }: { role: ConfiguredRole; 
             <ChipInput inputId="role-ip" label="IP allow-list" value={ips} onChange={setIps} disabled={!canEdit} mono placeholder="e.g. 10.20.0.0/16" />
           </Field>
           {!role.custom ? pendingKey(ruleKeys.ipAllowList(role.id)) : null}
-          <Switch label="Multi-factor authentication" description="Mandatory for every role (PRD §4, §10.1)." checked disabled />
+          <Switch label="Multi-factor authentication" description="Mandatory for every role." checked disabled />
         </Stack>
         {canEdit ? (
           <Field label="Reason for the change" htmlFor="role-reason" required description="Shown to approvers in Operations and kept in the audit log.">
@@ -338,7 +338,7 @@ function RoleDrawer({ role, canEdit, onClose, tiered }: { role: ConfiguredRole; 
               </Chip>
             ))}
           </ChipList>
-          {role.id === "system-admin" ? <Text variant="small" tone="muted">System Admin has configuration, not credit, authority — it can&apos;t approve credit (PRD §4.1).</Text> : null}
+          {role.id === "system-admin" ? <Text variant="small" tone="muted">System Admin has configuration, not credit, authority — it can&apos;t approve credit.</Text> : null}
         </Stack>
       </Stack>
     </Drawer>

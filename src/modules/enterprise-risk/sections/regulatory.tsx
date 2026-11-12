@@ -79,7 +79,7 @@ export function RegulatorySection() {
   return (
     <Stack gap="large">
       <Grid columns={{ base: 1, sm: 3 }} gap="medium">
-        <StatCard label="Circulars awaiting action" value={<span className="font-mono">{circulars.filter((c) => c.status === "New" || c.status === "Under assessment").length}</span>} hint="CBN circulars feed (§5.5) — simulated" tone="accent" />
+        <StatCard label="Circulars awaiting action" value={<span className="font-mono">{circulars.filter((c) => c.status === "New" || c.status === "Under assessment").length}</span>} hint="CBN circulars feed — simulated" tone="accent" />
         <StatCard label="Mandated policies current" value={<span className="font-mono">{required.filter((p) => policyStatus(p).label !== "Overdue").length}/{required.length}</span>} hint={`Credit, project-finance, real-estate, SME, agriculture, retail — ${cycleYears}-year cycle`} tone={overdue.some((p) => p.required) ? "danger" : "success"} />
         <StatCard label="Open regulatory breaches" value={<span className="font-mono">{breaches.filter((b) => b.status !== "Closed").length}</span>} hint="Feeds Operational Risk KRI-REG-01 and the loss-event register" tone="warning" />
       </Grid>
@@ -89,7 +89,7 @@ export function RegulatorySection() {
       </Card>
       <Grid columns={{ base: 1, xl: 2 }} gap="large">
         <Card padding="none">
-          <CardHeader className="px-6 pt-6"><CardTitle>Policy-currency tracker</CardTitle><CardDescription>Evidence that policies are reviewed at least every {cycleYears} years (§6.10)</CardDescription></CardHeader>
+          <CardHeader className="px-6 pt-6"><CardTitle>Policy-currency tracker</CardTitle><CardDescription>Evidence that policies are reviewed at least every {cycleYears} years</CardDescription></CardHeader>
           <CardContent className="p-2 sm:p-4"><DataTable label="Policy currency" columns={polCols} data={policies} getRowId={(p) => p.id} paginate={false} defaultSort={{ id: "due", direction: "asc" }} /></CardContent>
         </Card>
         <Card padding="none">

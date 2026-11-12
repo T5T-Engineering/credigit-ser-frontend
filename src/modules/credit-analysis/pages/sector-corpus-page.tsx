@@ -124,7 +124,7 @@ export function SectorCorpusPage() {
   return (
     <ModulePage
       module="credit-analysis"
-      description="NGX Historical Sector Financials Corpus (§6.2.8): 10–15 years of listed-company audited financials per sector — the benchmark behind Internal Risk and Operating Industry scoring."
+      description="NGX Historical Sector Financials Corpus: 10–15 years of listed-company audited financials per sector — the benchmark behind Internal Risk and Operating Industry scoring."
     >
       <Stack gap="large">
         <div className="flex flex-wrap items-center gap-3">
@@ -275,7 +275,7 @@ export function SectorCorpusPage() {
               <div>
                 <CardTitle>Tenant sector → NGX mapping</CardTitle>
                 <CardDescription>
-                  Every tenant sector code (CBN-aligned taxonomy, §6.6.1) carries its nearest NGX classification(s) so the right benchmark is selected.
+                  Every tenant sector code (CBN-aligned taxonomy) carries its nearest NGX classification(s) so the right benchmark is selected.
                 </CardDescription>
               </div>
             </CardHeader>

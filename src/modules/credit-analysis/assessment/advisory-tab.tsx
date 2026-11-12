@@ -124,7 +124,7 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
           <CardHeader>
             <div>
               <CardTitle>Recommended outcome</CardTitle>
-              <CardDescription>Base posture stance with intensity and axis-dominance overlays (§6.2.6)</CardDescription>
+              <CardDescription>Base posture stance with intensity and axis-dominance overlays</CardDescription>
             </div>
             {p.neutral ? (
               <Badge>Neutral / Transitional</Badge>
@@ -192,7 +192,7 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
             <div>
               <CardTitle>36-cell interpretive layer</CardTitle>
               <CardDescription>
-                {cardinalByKey[t.rows].short} (rows) × {cardinalByKey[t.columns].short} (columns), banded Low {bandRange("Low")} · Medium {bandRange("Medium")} · High {bandRange("High")} · PRD {t.prd}
+                {cardinalByKey[t.rows].short} (rows) × {cardinalByKey[t.columns].short} (columns), banded Low {bandRange("Low")} · Medium {bandRange("Medium")} · High {bandRange("High")}
               </CardDescription>
             </div>
           </CardHeader>
@@ -243,7 +243,7 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
           <CardHeader>
             <div>
               <CardTitle>Industry Life-Cycle credit gating</CardTitle>
-              <CardDescription>Open requests cross-checked against the sector’s life-cycle stage (mandatory system control, §6.2.6)</CardDescription>
+              <CardDescription>Open requests cross-checked against the sector’s life-cycle stage (mandatory system control)</CardDescription>
             </div>
           </CardHeader>
           <CardContent>
@@ -302,11 +302,11 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
           },
           {
             label: "COP Ratio & Share of Business Wallet",
-            detail: "CBA + other-bank statements (§5.1, §5.3), bureau/CRMS (§5.2)",
+            detail: "CBA + other-bank statements, bureau/CRMS",
           },
           {
             label: "Posture & interpretive tables",
-            detail: "PRD §6.2.5, §6.2.6, §6.2.12",
+            detail: "Platform default",
           },
         ]}
       />

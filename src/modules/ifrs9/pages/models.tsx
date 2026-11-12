@@ -184,7 +184,7 @@ export function Ifrs9ModelsPage() {
         <Card variant="outlined">
           <CardHeader>
             <Stack gap="xsmall">
-              <CardTitle>Model inputs — source mapping (§6.7.2)</CardTitle>
+              <CardTitle>Model inputs — source mapping</CardTitle>
               <CardDescription>Where each ECL input comes from in the Risk Data Spine.</CardDescription>
             </Stack>
           </CardHeader>
@@ -245,7 +245,7 @@ export function Ifrs9ModelsPage() {
             <CardHeader>
               <Stack gap="xsmall">
                 <CardTitle>Model change log</CardTitle>
-                <CardDescription>Every version, validation and approval decision, retained for audit (§10.3).</CardDescription>
+                <CardDescription>Every version, validation and approval decision, retained for audit.</CardDescription>
               </Stack>
             </CardHeader>
             <CardContent>

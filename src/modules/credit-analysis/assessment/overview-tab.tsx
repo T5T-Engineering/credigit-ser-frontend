@@ -190,7 +190,7 @@ export function OverviewTab({ a, history, peers, wallet, onOpenTab }: Props) {
           <CardHeader>
             <div>
               <CardTitle>Posture</CardTitle>
-              <CardDescription>Base posture, intensity band and axis-dominance (§6.2.5)</CardDescription>
+              <CardDescription>Base posture, intensity band and axis-dominance</CardDescription>
             </div>
           </CardHeader>
           <CardContent>
@@ -276,7 +276,7 @@ export function OverviewTab({ a, history, peers, wallet, onOpenTab }: Props) {
           <CardHeader>
             <div>
               <CardTitle>Confidence Overlay</CardTitle>
-              <CardDescription>COP Ratio dampens the Internal Risk score (§6.1.4, §6.2.1)</CardDescription>
+              <CardDescription>COP Ratio dampens the Internal Risk score</CardDescription>
             </div>
           </CardHeader>
           <CardContent>
@@ -315,7 +315,7 @@ export function OverviewTab({ a, history, peers, wallet, onOpenTab }: Props) {
                 ]}
               />
               <Text variant="small" tone="muted">
-                Bands (tenant-configurable; PRD example):{" "}
+                Bands (tenant-configurable; example):{" "}
                 {copBands()
                   .map((b, i, all) => `${b.band.replace(" Confidence", "")} ${b.from ? `≥ ${b.from.toFixed(2)}` : `< ${all[i - 1]!.from.toFixed(2)}`} → −${b.penalty.toFixed(1)}`)
                   .join(" · ")}
@@ -332,7 +332,7 @@ export function OverviewTab({ a, history, peers, wallet, onOpenTab }: Props) {
           <CardHeader>
             <div>
               <CardTitle>Share of Business Wallet</CardTitle>
-              <CardDescription>Relationship depth across banks (§6.2.9)</CardDescription>
+              <CardDescription>Relationship depth across banks</CardDescription>
             </div>
           </CardHeader>
           <CardContent>
@@ -353,7 +353,7 @@ export function OverviewTab({ a, history, peers, wallet, onOpenTab }: Props) {
               </Stack>
             ) : (
               <Text tone="muted">
-                No other-bank statements or bureau per-bank breakdown on file. Request statements through the other-bank connector (§5.3) to compute wallet share.
+                No other-bank statements or bureau per-bank breakdown on file. Request statements through the other-bank connector to compute wallet share.
               </Text>
             )}
           </CardContent>

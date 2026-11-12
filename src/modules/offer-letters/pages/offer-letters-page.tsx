@@ -109,13 +109,13 @@ export function OfferLettersPage() {
           <StatCard label="Draft & in Legal review" value={String(inReview.length)} icon={<Scale aria-hidden />} hint={`${count("Draft")} draft · ${count("Legal review")} with Legal`} />
           <StatCard label="Issued — awaiting acceptance" value={String(issued.length)} icon={<FileClock aria-hidden />} tone="info" hint={issued.length ? `${moneyShort(issued.reduce((s, r) => s + (r.app?.amount ?? 0), 0))} on offer` : "None outstanding"} />
           <StatCard label={`Accepted (${recentDays} days)`} value={String(accepted30.length)} icon={<CheckCircle2 aria-hidden />} tone="success" hint={`${count("Accepted")} accepted in total`} />
-          <StatCard label="Expired offers" value={String(count("Expired"))} icon={<CalendarClock aria-hidden />} tone="danger" hint="Validity lapsed before acceptance (§7.3)" />
+          <StatCard label="Expired offers" value={String(count("Expired"))} icon={<CalendarClock aria-hidden />} tone="danger" hint="Validity lapsed before acceptance" />
         </Grid>
 
         <Card padding="medium">
           <Stack gap="medium">
             <Stack gap="xsmall">
-              <Text variant="eyebrow">Offer letter lifecycle · PRD §6.1.1 steps 13–14, §7</Text>
+              <Text variant="eyebrow">Offer letter lifecycle · steps 13–14,</Text>
               <Text tone="muted" variant="small">
                 The letter is generated automatically when an application reaches the customer-presentation step. Legal reviews, adds, removes or edits clauses (every change tracked) and signs off before release.
               </Text>
@@ -123,7 +123,7 @@ export function OfferLettersPage() {
             <Steps
               orientation="horizontal"
               items={[
-                { title: "Auto-generated", description: "House template + auto-tagged clauses (§6.1.5)", meta: `${count("Draft")} draft` },
+                { title: "Auto-generated", description: "House template + auto-tagged clauses", meta: `${count("Draft")} draft` },
                 { title: "Legal review", description: "Clause-level review & sign-off", meta: `${count("Legal review")} in review` },
                 { title: "Issued", description: "Presented by the Account Officer", meta: `${issued.length} issued` },
                 { title: "Accepted", description: "Signed duplicate & acceptance under seal", meta: `${count("Accepted")} accepted` },
@@ -183,7 +183,7 @@ export function OfferLettersPage() {
         />
         <div className="flex items-start gap-2 text-sm text-fg-muted">
           <FileSignature aria-hidden className="mt-0.5 size-4 shrink-0" />
-          <span>Letters use the tenant&apos;s currently-approved house template; previously-issued letters keep the template version they were issued on (PRD §7.0).</span>
+          <span>Letters use the tenant&apos;s currently-approved house template; previously-issued letters keep the template version they were issued on.</span>
         </div>
       </Stack>
     </ModulePage>

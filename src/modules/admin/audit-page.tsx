@@ -23,9 +23,17 @@ import { useRole } from "@/lib/auth/session";
 import { useAudit } from "@/lib/data/hooks";
 import type { AuditEvent } from "@/lib/data/types";
 import { roleById } from "@/lib/rbac/roles";
+import { ruleDefinition } from "@/lib/platform/rules";
 import { dateTime } from "@/lib/format";
 import { useAuditLog } from "@/modules/workspace/use-audit-log";
 import { DAY, nowMs } from "@/modules/workspace/data";
+
+/** What an audit entry is about, in words: rules show their label, not the technical key. */
+function entityText(e: AuditEvent): string {
+  if (e.entityId === "-") return e.entityType;
+  const name = e.entityType === "Rule" ? (ruleDefinition(e.entityId)?.label ?? e.entityId) : e.entityId;
+  return `${e.entityType} · ${name}`;
+}
 
 const typeOf = (a: string) =>
   /sign(ed)? (in|out)|switched/i.test(a) ? "session" : /approv|recommend|declin|adjudic|confirm/i.test(a) ? "decision" : /parameter|limit|role|haircut|adjudicator|product|sector|branding|session timeout|device|allow-list/i.test(a) ? "configuration" : /view|generated/i.test(a) ? "read" : "update";
@@ -110,7 +118,7 @@ export function AuditPage() {
         </span>
       ),
     },
-    { id: "entity", header: "Entity", accessor: (e) => `${e.entityType} ${e.entityId === "-" ? "" : e.entityId}`.trim(), sortable: true, cell: (e) => <span className="font-mono text-sm">{e.entityType}{e.entityId !== "-" ? ` · ${e.entityId}` : ""}</span> },
+    { id: "entity", header: "Entity", accessor: (e) => entityText(e), sortable: true, cell: (e) => <span className="text-sm">{entityText(e)}</span> },
     {
       id: "change",
       header: "Before → after",
@@ -133,7 +141,7 @@ export function AuditPage() {
     id: e.id,
     actor: { name: e.actorName, role: roleById[e.roleId]?.name },
     action: e.action,
-    target: e.entityId !== "-" ? `${e.entityType} ${e.entityId}` : e.entityType,
+    target: entityText(e),
     type: typeOf(e.action),
     timestamp: e.at,
     changes: e.before || e.after ? [{ field: "Value", before: e.before, after: e.after }] : undefined,
@@ -156,7 +164,7 @@ export function AuditPage() {
     <ModulePage module="audit" description="Every create, read, update, approve and override action — who, what, before/after value, timestamp, IP and device.">
       <Stack gap="large">
         <Alert tone="info" title="Append-only">
-          Audit entries can&apos;t be edited or deleted by any role, including System Admin. Every AI-assisted output is logged with its model and version (PRD §10.1, §10.3).
+          Audit entries can&apos;t be edited or deleted by any role, including System Admin. Every AI-assisted output is logged with its model and version.
         </Alert>
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
           <StatCard label="Events" value={audit.length} hint="In this tenant (demo)" icon={<ScrollText aria-hidden className="size-5" />} tone="accent" />
@@ -207,7 +215,7 @@ export function AuditPage() {
                         {e.actorName} · {e.action}
                       </span>
                       <span className="text-sm">
-                        {e.entityType} {e.entityId !== "-" ? e.entityId : ""}
+                        {entityText(e)}
                         {e.before || e.after ? ` · ${e.before ?? "—"} → ${e.after ?? "—"}` : ""}
                       </span>
                       <span className="text-sm text-fg-muted">

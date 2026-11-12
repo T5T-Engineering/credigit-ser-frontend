@@ -31,16 +31,16 @@ const MODULE = "credit-admin";
 
 // ---------------------------------------------------------------- business rules
 defineRules([
-  { key: "credit-admin.delegatedMaxDeferralDays", label: "Delegated tolerance — max deferral", description: "Deferrals up to this many days on the delegated condition categories may be approved by Credit Administration.", module: MODULE, category: "Waivers & deferrals", type: "duration", durationUnit: "days", default: 30, min: 0, max: 365, source: "PRD §4.1 (CAD: waivers/deferrals within delegated tolerance) — demo value" },
-  { key: "credit-admin.delegatedCategories", label: "Delegated tolerance — condition categories", description: "Condition categories Credit Administration may defer within its delegated tolerance.", module: MODULE, category: "Waivers & deferrals", type: "list", default: ["Documentation", "Fees", "Corporate authorisation"], source: "PRD §4.1 — demo value" },
-  { key: "credit-admin.delegatedApproverRoles", label: "Delegated tolerance — approvers", description: "Roles that may approve a request that is within the delegated tolerance.", module: MODULE, category: "Waivers & deferrals", type: "roles", default: ["credit-admin-officer"], source: "PRD §4.1" },
-  { key: "credit-admin.waiverReminderDays", label: "Waiver / deferral reminder window", description: "Reminders go out this many days before a waiver or deferral lapses.", module: MODULE, category: "Waivers & deferrals", type: "duration", durationUnit: "days", default: 7, min: 1, max: 90, source: "PRD §6.3.2 (auto-reminds before lapse) — demo value" },
+  { key: "credit-admin.delegatedMaxDeferralDays", label: "Delegated tolerance — max deferral", description: "Deferrals up to this many days on the delegated condition categories may be approved by Credit Administration.", module: MODULE, category: "Waivers & deferrals", type: "duration", durationUnit: "days", default: 30, min: 0, max: 365, source: "(CAD: waivers/deferrals within delegated tolerance) — demo value" },
+  { key: "credit-admin.delegatedCategories", label: "Delegated tolerance — condition categories", description: "Condition categories Credit Administration may defer within its delegated tolerance.", module: MODULE, category: "Waivers & deferrals", type: "list", default: ["Documentation", "Fees", "Corporate authorisation"], source: "demo value" },
+  { key: "credit-admin.delegatedApproverRoles", label: "Delegated tolerance — approvers", description: "Roles that may approve a request that is within the delegated tolerance.", module: MODULE, category: "Waivers & deferrals", type: "roles", default: ["credit-admin-officer"], source: "Platform default" },
+  { key: "credit-admin.waiverReminderDays", label: "Waiver / deferral reminder window", description: "Reminders go out this many days before a waiver or deferral lapses.", module: MODULE, category: "Waivers & deferrals", type: "duration", durationUnit: "days", default: 7, min: 1, max: 90, source: "(auto-reminds before lapse) — demo value" },
   { key: "credit-admin.defaultDeferralDays", label: "Default deferral period", description: "Pre-filled expiry / deferred-to date on a new request.", module: MODULE, category: "Waivers & deferrals", type: "duration", durationUnit: "days", default: 14, min: 1, max: 365, source: DEMO },
   { key: "credit-admin.minReasonLength", label: "Minimum request reason", description: "Characters required in the reason for a waiver, deferral or sanction.", module: MODULE, category: "Waivers & deferrals", type: "number", unit: "characters", default: 10, min: 1, max: 500, source: DEMO },
-  { key: "credit-admin.requesterRoles", label: "Who raises waivers, deferrals and sanctions", description: "Roles that may raise a request against an approved condition.", module: MODULE, category: "Roles", type: "roles", default: ["credit-admin-officer"], source: "PRD §6.3.2 (Credit Administration raises)" },
-  { key: "credit-admin.cpConfirmerRoles", label: "Who confirms conditions precedent and releases files", description: "Roles that confirm CPs, request release for disbursement and maintain credit files.", module: MODULE, category: "Roles", type: "roles", default: ["credit-admin-officer"], source: "PRD §4.1 Credit Administration Officer" },
+  { key: "credit-admin.requesterRoles", label: "Who raises waivers, deferrals and sanctions", description: "Roles that may raise a request against an approved condition.", module: MODULE, category: "Roles", type: "roles", default: ["credit-admin-officer"], source: "(Credit Administration raises)" },
+  { key: "credit-admin.cpConfirmerRoles", label: "Who confirms conditions precedent and releases files", description: "Roles that confirm CPs, request release for disbursement and maintain credit files.", module: MODULE, category: "Roles", type: "roles", default: ["credit-admin-officer"], source: "Credit Administration Officer" },
   { key: "credit-admin.crmsRecentWindowDays", label: "CRMS search KPI window", description: "Window for the “searches” and “adverse findings” KPIs on the CRMS desk.", module: MODULE, category: "CRMS", type: "duration", durationUnit: "days", default: 30, min: 1, max: 365, source: DEMO },
-  { key: "credit-admin.crmsReportingCadence", label: "CRMS reporting cadence", description: "How often facilities are reported to the CBN CRMS.", module: MODULE, category: "CRMS", type: "enum", default: "monthly", options: [{ value: "daily", label: "Daily" }, { value: "weekly", label: "Weekly" }, { value: "monthly", label: "Month-end" }], source: "PRD §6.3.3 — cadence not stated; demo value (see OPEN-QUESTIONS CA-OPS-3)" },
+  { key: "credit-admin.crmsReportingCadence", label: "CRMS reporting cadence", description: "How often facilities are reported to the CBN CRMS.", module: MODULE, category: "CRMS", type: "enum", default: "monthly", options: [{ value: "daily", label: "Daily" }, { value: "weekly", label: "Weekly" }, { value: "monthly", label: "Month-end" }], source: "cadence not stated; demo value (see OPEN-QUESTIONS CA-OPS-3)" },
   { key: "credit-admin.rarStalenessDays", label: "360 RAR staleness (credit file)", description: "Credit file flags the analysis item when the 360 RAR is older than this.", module: MODULE, category: "Credit files", type: "duration", durationUnit: "days", default: 180, min: 1, max: 730, source: DEMO },
   { key: "credit-admin.callReportStalenessDays", label: "Call report staleness (credit file)", description: "Credit file flags call reports / site visits older than this.", module: MODULE, category: "Credit files", type: "duration", durationUnit: "days", default: 180, min: 1, max: 730, source: DEMO },
 ]);
@@ -80,7 +80,7 @@ registerOperation<WaiverPayload>({
   type: "credit-admin.waiver",
   name: "Waiver / deferral of a condition",
   module: MODULE,
-  description: "Waive or defer an approved condition. Approved at the tier that approved the original facility or higher; Credit Administration may approve within its delegated tolerance (PRD §6.3.2, §4.1).",
+  description: "Waive or defer an approved condition. Approved at the tier that approved the original facility or higher; Credit Administration may approve within its delegated tolerance.",
   defaultSteps: [step("tier", "Approving tier (or delegated tolerance)", [...tierRoles, "credit-admin-officer"], 48)],
   apply: (p, { instance, actor }) => {
     const w = useCreditAdminStore.getState().waivers[p.waiverId] ?? p.snapshot;
@@ -102,7 +102,7 @@ registerOperation<WaiverPayload>({
   type: "credit-admin.sanction",
   name: "Sanction for breach",
   module: MODULE,
-  description: "Credit-policy breach (e.g. disbursed with an open CP) routed to the disciplinary / escalation workflow; on approval it is logged as an Operational Risk loss event (PRD §6.3.2, §6.9).",
+  description: "Credit-policy breach (e.g. disbursed with an open CP) routed to the disciplinary / escalation workflow; on approval it is logged as an Operational Risk loss event.",
   defaultSteps: [step("escalation", "Escalation decision", ["head-of-risk", "cro"], 72)],
   apply: (p, { instance, actor }) => {
     const w = useCreditAdminStore.getState().waivers[p.waiverId] ?? p.snapshot;
@@ -132,7 +132,7 @@ registerOperation<ReleasePayload>({
   type: "credit-admin.release",
   name: "Release file for disbursement",
   module: MODULE,
-  description: "Credit Administration confirms every condition precedent is met, waived or deferred and releases the file to Domestic Operations (PRD §6.1.1 step 15). Second-person confirmation by default (see OPEN-QUESTIONS CA-OPS-2).",
+  description: "Credit Administration confirms every condition precedent is met, waived or deferred and releases the file to Domestic Operations. Second-person confirmation by default (see OPEN-QUESTIONS CA-OPS-2).",
   defaultSteps: [step("confirm", "Release confirmation", ["credit-admin-officer", "head-of-risk"], 24)],
   apply: (p, { instance, actor }) => {
     const at = demoNowIso();
@@ -156,7 +156,7 @@ registerOperation<CrmsBatchPayload>({
   type: "credit-admin.crms-batch",
   name: "CRMS reporting batch",
   module: MODULE,
-  description: "Submit a batch of facilities to the CBN CRMS (simulated connector). No approval step by default — add one in Workflows if the tenant requires review before submission (PRD §6.3.3).",
+  description: "Submit a batch of facilities to the CBN CRMS (simulated connector). No approval step by default — add one in Workflows if the tenant requires review before submission.",
   defaultSteps: [],
   apply: (p, { instance, actor }) => {
     const b = { ...p.batch, submittedAt: demoNowIso(), submittedByName: actor.name };
@@ -170,7 +170,7 @@ registerOperation<CrmsBatchPayload>({
 // Waiver approvals: the decider must sit at the facility's approving tier (or above), unless within delegated tolerance.
 registerHook<{ instance: OperationInstance; decision: string; actor: Actor }>({
   id: "credit-admin.waiver-tier-check",
-  name: "Credit Admin — waiver approved at the facility's approving tier (PRD §6.3.2)",
+  name: "Credit Admin — waiver approved at the facility's approving tier",
   point: "operations.decide.before",
   priority: 10,
   run: ({ instance, actor }) => {

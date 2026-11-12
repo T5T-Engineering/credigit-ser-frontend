@@ -189,7 +189,7 @@ export function BenchmarksPage() {
   return (
     <ModulePage
       module="credit-analysis"
-      description="Comparative & peer benchmarking (§6.2.10): sector 360 RAR aggregates from the tenant's own book, NGX corpus ratio distributions, and outlier discussion points."
+      description="Comparative & peer benchmarking: sector 360 RAR aggregates from the tenant's own book, NGX corpus ratio distributions, and outlier discussion points."
     >
       <Stack gap="large">
         <div className="flex flex-wrap items-center gap-3">

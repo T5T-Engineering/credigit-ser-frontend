@@ -347,7 +347,7 @@ export function dynamicSignal() {
     sector: "Oil & gas — upstream",
     phase: "Contraction",
     justification:
-      "Sector-cycle engine (§6.6.7) shows a contraction phase in Oil & gas — upstream, where the bank's corporate depositor base is concentrated (21% of corporate deposits).",
+      "Sector-cycle engine shows a contraction phase in Oil & gas — upstream, where the bank's corporate depositor base is concentrated (21% of corporate deposits).",
     retailAdd: num("dyn.retailAddPp"),
     corporateAdd: num("dyn.corporateAddPp"),
     haircutAdd: num("dyn.haircutAddPp"),

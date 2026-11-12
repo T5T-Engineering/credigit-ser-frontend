@@ -121,13 +121,13 @@ function Parameters() {
   );
 }
 
-function Section({ title, description, prd, action, children }: { title: string; description: ReactNode; prd: string; action?: ReactNode; children: ReactNode }) {
+function Section({ title, description, action, children }: { title: string; description: ReactNode; action?: ReactNode; children: ReactNode }) {
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <CardTitle className="flex flex-wrap items-center gap-2">
-            {title} <Badge variant="outline">PRD {prd}</Badge>
+            {title}
           </CardTitle>
           <Text variant="small" tone="muted">
             {description}
@@ -145,7 +145,6 @@ function RuleGroup({ group, rules, canEdit }: { group: (typeof groups)[number]; 
   return (
     <Section
       title={group.label}
-      prd={group.prd}
       description={group.description}
       action={
         group.ownerHref ? (
@@ -204,7 +203,6 @@ function ChartFlowSection() {
   return (
     <Section
       title="Co-signer / adjudicator matrix"
-      prd="§6.1.2, §4.2"
       description="Tiers run in order until the amount is within the pair's limit; dissent routes to the adjudicator. Tier limits are the sign-on limit rules (Roles & limits); the chart-flow itself is owned by origination."
       action={
         <TextLink href="/admin/roles" as={Link}>
@@ -289,7 +287,6 @@ function SectorLimitsSection({ canEdit }: { canEdit: boolean }) {
   return (
     <Section
       title="Sectoral concentration limits"
-      prd="§6.6.1, §10.4"
       description={`Sector limits as a share of the total loan book; "near limit" from ${nearPct}% of the limit (rule workspace.nearLimitPct). Changes need Risk approval in Operations.`}
       action={
         canEdit ? (

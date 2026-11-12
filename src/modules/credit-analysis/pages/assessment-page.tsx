@@ -222,7 +222,7 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
             { label: "NGX benchmark", value: a.ngx?.name ?? "No listed proxy" },
             { label: "Relationship manager", value: rm?.name ?? "—" },
             {
-              label: "Internal grade (§6.2.7)",
+              label: "Internal grade",
               value: `${obligor.riskGrade} / 10`,
               mono: true,
             },
@@ -287,7 +287,7 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
         )}
         {a.position.neutral && (
           <Alert tone="warning" title="Neutral / Transitional — mandatory analyst narrative">
-            Magnitude {a.position.magnitude.toFixed(2)} is below the neutral threshold, so no posture-driven stance is generated (§6.2.5). The advisory note needs a Credit Analyst
+            Magnitude {a.position.magnitude.toFixed(2)} is below the neutral threshold, so no posture-driven stance is generated. The advisory note needs a Credit Analyst
             narrative.
           </Alert>
         )}
@@ -302,7 +302,7 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
             }
           >
             {openExceptions.map((g) => g.applicationId).join(", ")}: long-tenor expansion request in a {openExceptions[0]!.stage}-stage industry. CCO/CRO override with documented
-            rationale is required before it passes the Credit Analyst tier (§6.2.6).
+            rationale is required before it passes the Credit Analyst tier.
           </Alert>
         )}
         {editing && (

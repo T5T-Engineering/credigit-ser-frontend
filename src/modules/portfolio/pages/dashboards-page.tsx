@@ -88,7 +88,7 @@ export function PortfolioDashboardsPage() {
           tone={breaks.length ? "warning" : "success"}
           title={breaks.length ? `CBA reconciliation: ${breaks.length} break under review` : "Reconciled to the CBA"}
         >
-          Spine totals were reconciled to the core banking ledger at {dateTime(DEMO_NOW)} (simulated CBA connector, §5.1).{" "}
+          Spine totals were reconciled to the core banking ledger at {dateTime(DEMO_NOW)} (simulated CBA connector).{" "}
           {breaks.length ? `Difference ${money(sum(breaks, (b) => b.difference))} on ${breaks[0]!.ledger.toLowerCase()} — see reconciliation below.` : "No differences."}
         </Alert>
 
@@ -101,7 +101,7 @@ export function PortfolioDashboardsPage() {
             calc={{
               metric: "gross loan book",
               formula: "Σ (current principal + accrued/unpaid interest) per funded facility",
-              source: "CBA facility ledger via the CBA connector (§5.1), refreshed daily. Active and restructured facilities.",
+              source: "CBA facility ledger via the CBA connector, refreshed daily. Active and restructured facilities.",
               prd: "§8",
               inputs: [
                 { label: "Facilities", value: number(totals.facilityCount) },
@@ -136,7 +136,7 @@ export function PortfolioDashboardsPage() {
             calc={{
               metric: "stage share",
               formula: "Σ outstanding in stage / Gross loans × 100",
-              source: "Facility stage from the IFRS 9 staging engine (§6.7.1), mapped to CBN classification.",
+              source: "Facility stage from the IFRS 9 staging engine, mapped to CBN classification.",
               prd: "§6.7.1",
               inputs: [
                 { label: "Stage 1", value: money(totals.byStage[1]) },
@@ -153,7 +153,7 @@ export function PortfolioDashboardsPage() {
             calc={{
               metric: "pipeline value",
               formula: "Σ requested amount of applications not yet booked, declined or withdrawn",
-              source: "Loan Origination application records (§6.1).",
+              source: "Loan Origination application records.",
               prd: "§6.6.1",
               inputs: [
                 { label: "Applications in process", value: number(pipeline.count) },
@@ -168,7 +168,7 @@ export function PortfolioDashboardsPage() {
             calc={{
               metric: "WARR",
               formula: "Σ (exposure × grade score) / Σ rated exposure",
-              source: "Grades: §6.2.7 internal rating. Exposure: outstanding + undrawn × CCF. Unrated and Stage 3 reported separately.",
+              source: "Grades: internal rating. Exposure: outstanding + undrawn × CCF. Unrated and Stage 3 reported separately.",
               prd: "§6.6.9",
               inputs: [
                 { label: "Rated exposure", value: moneyShort(warr.ratedExposure) },
@@ -237,13 +237,13 @@ export function PortfolioDashboardsPage() {
         </Panel>
 
         <Grid columns={{ base: 1, lg: 2 }} gap="medium">
-          <Panel title="Distribution by application type" description="Applications in process — volume and naira value (§6.6.1).">
+          <Panel title="Distribution by application type" description="Applications in process — volume and naira value.">
             <BarChart label="Value in process by application type" orientation="horizontal" data={byType.map((t) => ({ label: t.label, value: t.value, caption: `${t.count} apps` }))} valueFormatter={moneyShort} tone="accent" />
           </Panel>
           <Panel title="Distribution by processing stage" description="Pending volume and value at each configured workflow tier — bottlenecks in real time.">
             <BarChart label="Pending value by processing stage" orientation="horizontal" data={byStage.map((t) => ({ label: t.label, value: t.value, caption: `${t.count}` }))} valueFormatter={moneyShort} tone="info" />
           </Panel>
-          <Panel title="Distribution by product type" description="Overdraft, Contingent liability, Advance, Term loan, Lease — on the Total Approved Loans basis (§6.3.1).">
+          <Panel title="Distribution by product type" description="Overdraft, Contingent liability, Advance, Term loan, Lease — on the Total Approved Loans basis.">
             <DonutChart
               label="Book by product group"
               showLegend
@@ -253,7 +253,7 @@ export function PortfolioDashboardsPage() {
               valueFormatter={moneyShort}
             />
           </Panel>
-          <Panel title="Distribution by tenor range" description="Book value by original tenor band (§6.6.1).">
+          <Panel title="Distribution by tenor range" description="Book value by original tenor band.">
             <BarChart
               label="Book by tenor band"
               data={TENOR_BANDS.map((t) => byTenor.find((b) => b.key === t)).map((b, i) => ({ label: TENOR_BANDS[i]!, value: b?.value ?? 0, caption: b ? `${b.count}` : "0" }))}
@@ -313,7 +313,7 @@ export function PortfolioDashboardsPage() {
           <Panel
             title="Reconciliation to CBA"
             description="Spine vs core banking general ledger, by product ledger (simulated connector)."
-            calc={{ metric: "reconciliation", formula: "Difference = CBA GL balance − Σ spine outstanding (per ledger)", source: "CBA connector staging/reconciliation layer (§5) before promotion to the Risk Data Spine.", prd: "§5.1" }}
+            calc={{ metric: "reconciliation", formula: "Difference = CBA GL balance − Σ spine outstanding (per ledger)", source: "CBA connector staging/reconciliation layer before promotion to the Risk Data Spine.", prd: "§5.1" }}
           >
             <DataTable
               label="Reconciliation to CBA"

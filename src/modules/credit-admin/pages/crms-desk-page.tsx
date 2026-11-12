@@ -132,7 +132,7 @@ export function CrmsDeskPage() {
   return (
     <ModulePage
       module="credit-admin"
-      description="CBN Credit Risk Management System desk — search requests and results per obligor (CBN 3.7(d)) and facility reporting (PRD §6.3.3)."
+      description="CBN Credit Risk Management System desk — search requests and results per obligor (CBN 3.7(d)) and facility reporting."
       actions={
         canEdit ? (
           <Button iconBefore={<Search aria-hidden className="size-4" />} onClick={() => setSearchOpen(true)}>
@@ -150,7 +150,7 @@ export function CrmsDeskPage() {
         </Grid>
 
         <Alert tone="info" title="Simulated CRMS connector">
-          In production the CRMS desk calls the CBN CRMS through the Credit Bureau + CRMS connector (§5). In this prototype responses are simulated and labelled as such. Batch submissions are recorded as Operations requests (approval steps are optional per tenant).
+          In production the CRMS desk calls the CBN CRMS through the Credit Bureau + CRMS connector. In this prototype responses are simulated and labelled as such. Batch submissions are recorded as Operations requests (approval steps are optional per tenant).
         </Alert>
         {result ? (
           <Alert tone={result.ok ? "success" : "danger"} title={result.ok ? "Done" : "Not done"} action={<Button size="small" variant="text" onClick={() => setResult(null)}>Dismiss</Button>}>

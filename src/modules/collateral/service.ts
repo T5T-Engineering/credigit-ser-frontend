@@ -109,7 +109,7 @@ export async function recordValuation(
     valuer,
     basis: v.basis || getRule<string[]>("collateral.valuation.bases")[0] || "—",
     assumptions: v.assumptions || "As stated in the valuation report",
-    fsvMethod: shares ? "Haircut applied per PRD §6.7.3" : "Per valuer's report",
+    fsvMethod: shares ? "Haircut applied per collateral policy" : "Per valuer's report",
     reference: v.reference || "—",
     source: "Recorded in prototype",
   };

@@ -76,7 +76,7 @@ export function CalcPopover({ spec, label = "How this is calculated" }: { spec: 
               { label: "Formula", value: spec.formula, mono: true },
               { label: "Source of each variable", value: spec.sources },
               ...(spec.value ? [{ label: "Current value", value: spec.value, mono: true }] : []),
-              ...(spec.prd ? [{ label: "PRD reference", value: spec.prd }] : []),
+
             ]}
           />
         </div>
@@ -90,7 +90,7 @@ const calcColumns: DataTableColumn<CalcSpec>[] = [
   { id: "formula", header: "Formula", accessor: "formula", cell: (r) => <span className="font-mono text-sm">{r.formula}</span> },
   { id: "sources", header: "Source of each variable", accessor: "sources" },
   { id: "value", header: "Value", accessor: "value", numeric: true },
-  { id: "prd", header: "PRD", accessor: "prd", width: "6rem" },
+
 ];
 
 /** Collapsible metric register for a page: every computed figure with its formula and sources. */

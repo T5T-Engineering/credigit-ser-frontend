@@ -89,7 +89,7 @@ export function VerificationPage() {
   ];
 
   return (
-    <ModulePage module="collateral" description="Independent Middle Office verification of collateral valuations before they are relied on for haircut-adjusted cover (PRD §4.1). Approvals run through the Operations workflow — approve to verify, reject to query.">
+    <ModulePage module="collateral" description="Independent Middle Office verification of collateral valuations before they are relied on for haircut-adjusted cover. Approvals run through the Operations workflow — approve to verify, reject to query.">
       <Stack gap="large">
         {can.verify && mine > 0 && (
           <Alert tone="info" title={`${mine} valuation${mine === 1 ? "" : "s"} awaiting your verification`}>

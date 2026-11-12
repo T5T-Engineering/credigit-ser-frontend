@@ -123,7 +123,7 @@ export const connectors: Connector[] = [
     latencyMs: 14_500,
     errorRatePct: 2.6,
     errorSeries: [2.0, 3.1, 2.4, 2.8, 2.5, 2.2, 3.0, 2.7, 2.4, 2.9, 2.6, 2.6],
-    consumers: ["COP ratio (§6.1.4)", "360 RAR confidence layer", "Share of wallet (§6.2.9)"],
+    consumers: ["COP ratio", "360 RAR confidence layer", "Share of wallet"],
     dataFormat: "PDF → structured transactions",
   },
   {
@@ -142,7 +142,7 @@ export const connectors: Connector[] = [
     latencyMs: 38_000,
     errorRatePct: 1.4,
     errorSeries: [1.1, 1.6, 1.2, 1.5, 1.3, 1.4, 1.2, 1.8, 1.5, 1.3, 1.4, 1.4],
-    consumers: ["360 RAR parameter table (§6.2.1)", "Credit files", "Collateral documents"],
+    consumers: ["360 RAR parameter table", "Credit files", "Collateral documents"],
     dataFormat: "PDF / DOCX / image → JSON fields",
   },
   {
@@ -179,7 +179,7 @@ export const connectors: Connector[] = [
     latencyMs: 2_600,
     errorRatePct: 0,
     errorSeries: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    consumers: ["360 RAR Macro axis", "Projections (§6.6.7)", "Liquidity projection (§6.8.4)"],
+    consumers: ["360 RAR Macro axis", "Projections", "Liquidity projection"],
     dataFormat: "CSV / JSON",
   },
   {
@@ -234,7 +234,7 @@ export const connectors: Connector[] = [
     latencyMs: 0,
     errorRatePct: 0,
     errorSeries: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    consumers: ["Collateral register (§6.5)", "LGD model (§6.7.2)", "Haircut provisioning (§6.7.3)", "Margin calls (§6.4.4)"],
+    consumers: ["Collateral register", "LGD model", "Haircut provisioning", "Margin calls"],
     dataFormat: "CSCS statement (PDF / CSV)",
   },
   {
@@ -271,7 +271,7 @@ export const connectors: Connector[] = [
     latencyMs: 0,
     errorRatePct: 100,
     errorSeries: [0, 0, 0, 0, 0, 0, 0, 0, 0, 100, 100, 100],
-    consumers: ["Operational risk KRIs (§6.9.1)", "AI co-pilot correlations"],
+    consumers: ["Operational risk KRIs", "AI co-pilot correlations"],
     dataFormat: "CSV",
   },
 ];

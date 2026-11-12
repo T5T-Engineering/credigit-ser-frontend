@@ -47,18 +47,18 @@ const R = EXEC_RULES;
 
 // ---------------------------------------------------------------- business rules
 defineRules([
-  pctRule(R.stage2RedPct, "Stage 2 share of book — appetite", "Stage 2 share at or above this is Red.", "KRI thresholds", 12, "PRD §6.7.1 / §6.10 — tenant parameter (demo value)"),
-  pctRule(R.stage2AmberPct, "Stage 2 share of book — early warning", "Stage 2 share at or above this (below appetite) is Amber.", "KRI thresholds", 10, "PRD §6.10 — tenant parameter (demo value)"),
+  pctRule(R.stage2RedPct, "Stage 2 share of book — appetite", "Stage 2 share at or above this is Red.", "KRI thresholds", 12, "tenant parameter (demo value)"),
+  pctRule(R.stage2AmberPct, "Stage 2 share of book — early warning", "Stage 2 share at or above this (below appetite) is Amber.", "KRI thresholds", 10, "tenant parameter (demo value)"),
   pctRule(R.appetiteAmberPct, "Early-warning share of appetite", "A KRI at or above this share of its appetite (NPL, op-loss) is Amber.", "KRI thresholds", 80, DEMO),
   { key: R.carAmberBufferPp, label: "CAR early-warning buffer", description: "CAR within this many percentage points above the minimum is Amber.", module: MODULE, category: "KRI thresholds", type: "number", unit: "pp", default: 2.5, min: 0, max: 10, step: 0.1, source: DEMO },
-  pctRule(R.ldrMinPct, "Minimum loan-to-deposit ratio", "LDR below this is Red.", "KRI thresholds", 65, "PRD §9.1 — CBN minimum LDR"),
+  pctRule(R.ldrMinPct, "Minimum loan-to-deposit ratio", "LDR below this is Red.", "KRI thresholds", 65, "CBN minimum LDR"),
   { key: R.ldrAmberBufferPp, label: "LDR early-warning buffer", description: "LDR within this many percentage points above the minimum is Amber.", module: MODULE, category: "KRI thresholds", type: "number", unit: "pp", default: 3, min: 0, max: 20, step: 0.5, source: DEMO },
-  pctRule(R.liquidityRatioMinPct, "Minimum liquidity ratio", "Liquidity ratio below this is Red.", "KRI thresholds", 30, "PRD §6.8 — tenant parameter (demo value)"),
-  pctRule(R.nopLimitPct, "Net open position limit (% of capital)", "NOP / capital above this is a breach.", "KRI thresholds", 20, "PRD §6.8 — tenant parameter (demo value)"),
-  { key: R.varLimitNgn, label: "Trading VaR limit (1-day, 99%)", description: "VaR above this is a breach.", module: MODULE, category: "KRI thresholds", type: "money", default: 600e6, min: 0, source: "PRD §6.8.1 — tenant parameter (demo value)" },
-  pctRule(R.opLossAppetitePct, "Operational loss appetite (% of gross income)", "Loss rate at or above this is Red.", "KRI thresholds", 0.5, "PRD §6.9 — tenant parameter (demo value)", { step: 0.01 }),
-  pctRule(R.quotedEquityHaircutPct, "Quoted-equity collateral haircut", "Haircut applied to CSCS mark-to-market for share-margin status.", "Collateral", 20, "PRD §6.7.3 / §5.7 — quoted equity haircut"),
-  { key: R.packRequiresSignedSummary, label: "BRC pack needs a signed-off summary", description: "The Board Risk Committee pack can't be submitted until the executive summary is signed off.", module: MODULE, category: "Board reporting", type: "boolean", default: true, source: "PRD §6.12 — AI-drafted, human-approved (tenant choice, demo on)" },
+  pctRule(R.liquidityRatioMinPct, "Minimum liquidity ratio", "Liquidity ratio below this is Red.", "KRI thresholds", 30, "tenant parameter (demo value)"),
+  pctRule(R.nopLimitPct, "Net open position limit (% of capital)", "NOP / capital above this is a breach.", "KRI thresholds", 20, "tenant parameter (demo value)"),
+  { key: R.varLimitNgn, label: "Trading VaR limit (1-day, 99%)", description: "VaR above this is a breach.", module: MODULE, category: "KRI thresholds", type: "money", default: 600e6, min: 0, source: "tenant parameter (demo value)" },
+  pctRule(R.opLossAppetitePct, "Operational loss appetite (% of gross income)", "Loss rate at or above this is Red.", "KRI thresholds", 0.5, "tenant parameter (demo value)", { step: 0.01 }),
+  pctRule(R.quotedEquityHaircutPct, "Quoted-equity collateral haircut", "Haircut applied to CSCS mark-to-market for share-margin status.", "Collateral", 20, "quoted equity haircut"),
+  { key: R.packRequiresSignedSummary, label: "BRC pack needs a signed-off summary", description: "The Board Risk Committee pack can't be submitted until the executive summary is signed off.", module: MODULE, category: "Board reporting", type: "boolean", default: true, source: "AI-drafted, human-approved (tenant choice, demo on)" },
   { key: R.summaryNotifyRoles, label: "Executive summary sign-off — notify roles", description: "Roles notified when the executive summary is signed off.", module: MODULE, category: "Notifications", type: "roles", default: ["cro", "head-of-risk", "md"], source: DEMO },
   { key: R.packNotifyRoles, label: "BRC pack approval — notify roles", description: "Roles notified when the Board Risk Committee pack is approved.", module: MODULE, category: "Notifications", type: "roles", default: ["cro", "head-of-risk", "md", "board", "portfolio-mis-officer"], source: DEMO },
 ]);
@@ -79,7 +79,7 @@ registerOperation<SummarySignOffPayload>({
   type: "executive.summary.signoff",
   name: "Executive summary sign-off",
   module: MODULE,
-  description: "Sign off the AI-drafted executive risk summary before it is used in a Board pack (PRD §6.11, §6.12).",
+  description: "Sign off the AI-drafted executive risk summary before it is used in a Board pack.",
   defaultSteps: [step("signoff", "CRO / Head of Risk sign-off", ["cro", "head-of-risk"], 24)],
   apply: (p, { instance, actor }) => {
     usePortfolioStore.getState().signOff(p.key, { by: actor.name, role: actor.roleId, at: new Date().toISOString(), operationId: instance.id });
@@ -95,7 +95,7 @@ registerOperation<PackApprovalPayload>({
   type: "executive.brc-pack.approve",
   name: "Board Risk Committee pack approval",
   module: MODULE,
-  description: "Approve the Board Risk Committee pack for issue to the committee (PRD §6.6.6, §6.11).",
+  description: "Approve the Board Risk Committee pack for issue to the committee.",
   defaultSteps: [step("approve", "CRO / Head of Risk approval", ["cro", "head-of-risk"], 48)],
   apply: (p, { instance, actor }) => {
     const store = usePortfolioStore.getState();

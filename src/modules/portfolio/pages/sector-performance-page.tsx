@@ -85,10 +85,10 @@ export function SectorPerformancePage() {
   ];
 
   return (
-    <ModulePage module="portfolio" description="Sector performance analysis (§6.6.5) and multi-dimensional segment profitability (§6.6.4): capital consumption, RAROC and NIM read together with NPL and WARR.">
+    <ModulePage module="portfolio" description="Sector performance analysis and multi-dimensional segment profitability: capital consumption, RAROC and NIM read together with NPL and WARR.">
       <Stack gap="large">
         <Alert tone="info" title={<span className="inline-flex items-center gap-2">Phase 2 capability <PhaseBadge phase={2} /></span>}>
-          Formulas are the PRD&apos;s. Until the GL, cost-allocation and IFRS 9 feeds are live, income, cost, risk-weight and ECL inputs use the demo parameters listed below. A segment with improving RAROC on a deteriorating WARR is earning its return by taking more risk — read it as a warning.
+          Until the GL, cost-allocation and IFRS 9 feeds are live, income, cost, risk-weight and ECL inputs use the demo parameters listed below. A segment with improving RAROC on a deteriorating WARR is earning its return by taking more risk — read it as a warning.
         </Alert>
 
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
@@ -100,7 +100,7 @@ export function SectorPerformancePage() {
             calc={{
               metric: "RAROC",
               formula: "RAROC = (Net interest income + Fee income − Operating cost allocation − Expected credit loss) / Capital consumption",
-              source: "NII & fees: CBA GL / product sub-ledger. Opex: cost-allocation key. ECL: IFRS 9 engine (§6.7) — demo proxy here. Capital: as below.",
+              source: "NII & fees: CBA GL / product sub-ledger. Opex: cost-allocation key. ECL: IFRS 9 engine — demo proxy here. Capital: as below.",
               prd: "§6.6.5, §8",
               demo: true,
               inputs: [
@@ -117,7 +117,7 @@ export function SectorPerformancePage() {
             value={moneyShort(bank.capital)}
             hint={`RWA ${moneyShort(bank.rwa)} × ${p.minCarPct.value}% min CAR`}
             tone="warning"
-            calc={{ metric: "capital consumption", formula: "Capital consumption = Sector RWA × Minimum capital adequacy ratio", source: `RWA: exposure (off-balance at CCF) × risk weight per the tenant Basel/CBN table (demo weights). Min CAR ${p.minCarPct.value}% (business rule, §9.1: national authorisation; 15% international or SIB).`, prd: "§6.6.5", demo: true }}
+            calc={{ metric: "capital consumption", formula: "Capital consumption = Sector RWA × Minimum capital adequacy ratio", source: `RWA: exposure (off-balance at CCF) × risk weight per the tenant Basel/CBN table (demo weights). Min CAR ${p.minCarPct.value}% (business rule,: national authorisation; 15% international or SIB).`, prd: "§6.6.5", demo: true }}
           />
           <KpiCard
             label="Net interest margin"
@@ -171,7 +171,7 @@ export function SectorPerformancePage() {
 
         <Panel
           title="Segment profitability & performance"
-          description="Each §6.6.4 dimension is independently reportable; WARR (§6.6.9) shown on every row."
+          description="Each dimension is independently reportable; WARR shown on every row."
           actions={<Select aria-label="Segment dimension" size="small" value={dim} onChange={(e) => setDim(e.target.value as Dim)} options={dims} />}
         >
           <DataTable label="Segment profitability" data={rows} columns={columns} getRowId={(r) => r.key} paginate={rows.length > 15} exportFilename={`raroc-by-${dim}.csv`} defaultSort={{ id: "raroc", direction: "desc" }} />

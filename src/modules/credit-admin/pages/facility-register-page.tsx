@@ -140,7 +140,7 @@ export function FacilityRegisterPage() {
             value={moneyShort(kpis.outstanding)}
             icon={<Banknote aria-hidden />}
             tone="accent"
-            hint={<Tooltip content="Current principal + accrued/unpaid interest per facility. Source: CBA facility ledger, refreshed daily via the CBA connector (§5.1).">{<span className="underline decoration-dotted">Principal + interest in arrears</span>}</Tooltip>}
+            hint={<Tooltip content="Current principal + accrued/unpaid interest per facility. Source: CBA facility ledger, refreshed daily via the CBA connector.">{<span className="underline decoration-dotted">Principal + interest in arrears</span>}</Tooltip>}
           />
           <StatCard label="Utilisation" value={pct(kpis.utilisation)} icon={<GaugeIcon aria-hidden />} tone="info" hint={`Outstanding ÷ approved · undisbursed ${moneyShort(kpis.undisbursed)}`}>
             <ProgressBar value={kpis.utilisation / 100} size="small" ariaLabel="Book utilisation" />
@@ -153,7 +153,7 @@ export function FacilityRegisterPage() {
             <CardHeader>
               <div>
                 <CardTitle>Approved amount by facility class</CardTitle>
-                <CardDescription>On- and off-balance-sheet classes (PRD §6.3.1). Contingent liabilities carry no drawn balance until called.</CardDescription>
+                <CardDescription>On- and off-balance-sheet classes. Contingent liabilities carry no drawn balance until called.</CardDescription>
               </div>
             </CardHeader>
             <CardContent>
@@ -176,7 +176,7 @@ export function FacilityRegisterPage() {
             <CardHeader>
               <div>
                 <CardTitle>Application-type register</CardTitle>
-                <CardDescription>Volume and Naira value in process by request type — Lending Support Update structure (PRD §6.3.1).</CardDescription>
+                <CardDescription>Volume and Naira value in process by request type — Lending Support Update structure.</CardDescription>
               </div>
             </CardHeader>
             <CardContent>

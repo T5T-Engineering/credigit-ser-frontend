@@ -145,7 +145,7 @@ function FacilityRecord() {
       {pendingRelease ? <PendingOperationNotice instance={pendingRelease} title="Release for disbursement awaiting confirmation" /> : null}
       {pending ? (
         row.released ? (
-          <Alert tone="success" title="File released for disbursement (PRD §6.1.1 step 15)">
+          <Alert tone="success" title="File released for disbursement">
             Released by {row.released.byName} on {dateTime(row.released.at)}. Domestic Operations can now prepare the disbursement (maker-checker).{" "}
             <TextLink as={Link} href="/disbursement/">
               Open disbursement queue
@@ -183,7 +183,7 @@ function FacilityRecord() {
         open={confirm}
         onOpenChange={setConfirm}
         title="Release file for disbursement?"
-        description="Confirms the customer meets all approved terms and conditions (PRD §6.1.1 step 15). The release is confirmed through the Operations workflow; the facility then moves to the Domestic Operations maker-checker queue."
+        description="Confirms the customer meets all approved terms and conditions. The release is confirmed through the Operations workflow; the facility then moves to the Domestic Operations maker-checker queue."
         footer={
           <>
             <Button variant="tertiary" onClick={() => setConfirm(false)}>
@@ -362,7 +362,7 @@ function ConditionsTab({ row, editable }: { row: FacilityRow; editable: boolean 
         ) : (
           <ChecklistPanel
             title="Conditions precedent to drawdown"
-            description={row.letter ? `From offer letter ${row.letter.ref} (PRD §7.1 library clauses).` : "Default conditions for the product from the §7.1 library (facility booked before go-live)."}
+            description={row.letter ? `From offer letter ${row.letter.ref} (library clauses).` : "Default conditions for the product from the library (facility booked before go-live)."}
             items={items}
             labels={{ owner: "Category", due: "Confirmed" }}
             // Library typing intersects the native <section> onToggle; cast to the checklist handler (library request).
@@ -378,7 +378,7 @@ function ConditionsTab({ row, editable }: { row: FacilityRow; editable: boolean 
         ) : null}
         <Alert tone="info" title="What clears drawdown">
 
-          A condition is cleared when it is <strong>met</strong>, <strong>waived</strong>, or <strong>deferred</strong> under an approved deferral (PRD §6.3.2). Waivers and deferrals are approved at the tier that approved the facility.
+          A condition is cleared when it is <strong>met</strong>, <strong>waived</strong>, or <strong>deferred</strong> under an approved deferral. Waivers and deferrals are approved at the tier that approved the facility.
         </Alert>
         {!editable ? (
           <Text variant="small" tone="muted">
@@ -440,7 +440,7 @@ function CovenantsTab({ row }: { row: FacilityRow }) {
     <Stack gap="medium">
       <DataTable label="Covenants" columns={columns} data={data} getRowId={(r) => r.id} paginate={false} emptyState={<EmptyState title="No covenants" description="No covenants are recorded for this facility." />} />
       <Text variant="caption" tone="muted">
-        Covenants come from the offer letter (§7.3 library) and the special covenants tagged at origination (§6.1.5). Ongoing monitoring sits in{" "}
+        Covenants come from the offer letter (covenant library) and the special covenants tagged at origination. Ongoing monitoring sits in{" "}
         <TextLink as={Link} href="/monitoring/covenants/">
           Loan review → Covenants & inflows
         </TextLink>

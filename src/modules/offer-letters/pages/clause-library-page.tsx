@@ -99,11 +99,11 @@ export function ClauseLibraryPage() {
   ];
 
   return (
-    <ModulePage module="offer-letters" description="Configurable, reusable, parameterised clauses — tagged by applicable loan type and versioned under Legal approval (PRD §7.1–7.3).">
+    <ModulePage module="offer-letters" description="Configurable, reusable, parameterised clauses — tagged by applicable loan type and versioned under Legal approval.">
       <Stack gap="large">
         <Grid columns={{ base: 1, sm: 2, lg: 4 }} gap="medium">
           <StatCard label="Library clauses" value={String(clauses.filter((c) => c.status !== "Retired").length)} icon={<Library aria-hidden />} hint="Across four libraries" />
-          <StatCard label="Conditions precedent" value={String(clauses.filter((c) => c.library === "pre" && c.status !== "Retired").length)} icon={<BookMarked aria-hidden />} tone="info" hint="§7.1 — feed the CP checklist" />
+          <StatCard label="Conditions precedent" value={String(clauses.filter((c) => c.library === "pre" && c.status !== "Retired").length)} icon={<BookMarked aria-hidden />} tone="info" hint="Feed the CP checklist" />
           <StatCard label="Legal-approved" value={String(clauses.filter((c) => c.status === "Legal-approved").length)} icon={<BadgeCheck aria-hidden />} tone="success" hint="Current version used in new letters" />
           <StatCard label="Pending Legal approval" value={String(pending.length)} icon={<CircleDashed aria-hidden />} tone="warning" hint={pending.length ? "Previous approved text stays in use" : "Nothing waiting"} />
         </Grid>
@@ -158,7 +158,7 @@ export function ClauseLibraryPage() {
           )}
         />
         <Text variant="small" tone="muted">
-          Build note (PRD §7.3): each clause is a parameterised template, so Legal composes a letter by selecting clauses rather than drafting free text, and every generated letter uses the version Legal most recently approved.
+          Build note: each clause is a parameterised template, so Legal composes a letter by selecting clauses rather than drafting free text, and every generated letter uses the version Legal most recently approved.
         </Text>
       </Stack>
       {open ? <ClauseDrawer clause={open} usage={usage.get(open.id) ?? 0} canEdit={canEdit} onClose={() => setOpenId(null)} /> : null}
@@ -236,7 +236,7 @@ function ClauseDrawer({ clause, usage, canEdit, onClose }: { clause: Clause; usa
             { label: "Version", value: `v${clause.version}`, mono: true },
             { label: "Category", value: clause.category },
             { label: "Applicable loan types", value: clause.loanTypes },
-            { label: "Auto-tagging (§6.1.5)", value: describeRule(clause.rule), span: 2 },
+            { label: "Auto-tagging", value: describeRule(clause.rule), span: 2 },
             { label: "Legal approval", value: clause.approvedAt ? `${clause.approvedByName} · ${date(clause.approvedAt)}` : "Awaiting first approval" },
             { label: "Used in letters", value: String(usage), mono: true },
           ]}

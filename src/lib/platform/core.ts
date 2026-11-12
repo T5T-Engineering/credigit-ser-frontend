@@ -17,22 +17,22 @@ const DEMO = "Tenant parameter (demo value)";
 
 // ---------------------------------------------------------------- business rules
 defineRules([
-  { key: "session.idleTimeoutMinutes", label: "Idle session timeout", description: "Sign users out after this much inactivity.", module: "platform", category: "Sessions", type: "duration", durationUnit: "minutes", default: 15, min: 1, max: 240, source: "PRD §4.2 (configurable per role) — demo default" },
+  { key: "session.idleTimeoutMinutes", label: "Idle session timeout", description: "Sign users out after this much inactivity.", module: "platform", category: "Sessions", type: "duration", durationUnit: "minutes", default: 15, min: 1, max: 240, source: "(configurable per role) — demo default" },
   { key: "session.warningSeconds", label: "Timeout warning", description: "Seconds of warning before an idle sign-out.", module: "platform", category: "Sessions", type: "number", unit: "seconds", default: 60, min: 10, max: 600, source: DEMO },
   { key: "auth.otpTtlMinutes", label: "One-time code lifetime", description: "Minutes before a sign-in, registration or reset code expires.", module: "platform", category: "Authentication", type: "duration", durationUnit: "minutes", default: 10, min: 1, max: 60, source: DEMO },
   { key: "auth.otpMaxAttempts", label: "One-time code attempts", description: "Wrong codes allowed before a new code is needed.", module: "platform", category: "Authentication", type: "number", default: 5, min: 1, max: 10, source: DEMO },
   { key: "auth.passwordMaxAttempts", label: "Password attempts before lockout", description: "Consecutive wrong passwords before the account locks.", module: "platform", category: "Authentication", type: "number", default: 5, min: 3, max: 10, source: DEMO },
   { key: "auth.passwordMinLength", label: "Minimum password length", description: "Characters required in a new password.", module: "platform", category: "Authentication", type: "number", default: 12, min: 8, max: 64, source: DEMO },
   { key: "auth.passwordRequireMixed", label: "Require mixed character types", description: "New passwords need upper case, lower case, a number and a symbol.", module: "platform", category: "Authentication", type: "boolean", default: true, source: DEMO },
-  { key: "approvals.stepUpThresholdNgn", label: "Step-up authentication threshold", description: "Approvals above this amount need re-authentication (OTP / transaction PIN).", module: "platform", category: "Approvals", type: "money", default: 100_000_000, min: 0, source: "PRD §4.2 — tenant-configurable high-value threshold (demo value)" },
+  { key: "approvals.stepUpThresholdNgn", label: "Step-up authentication threshold", description: "Approvals above this amount need re-authentication (OTP / transaction PIN).", module: "platform", category: "Approvals", type: "money", default: 100_000_000, min: 0, source: "tenant-configurable high-value threshold (demo value)" },
   { key: "operations.minCommentLength", label: "Minimum decision comment", description: "Characters required when rejecting or returning an operation.", module: "operations", category: "Workflow", type: "number", default: 10, min: 0, max: 500, source: DEMO },
   { key: "operations.commentAlwaysRequired", label: "Comment required on approval too", description: "Approvers must also comment when approving.", module: "operations", category: "Workflow", type: "boolean", default: false, source: DEMO },
   { key: "operations.defaultSlaHours", label: "Default step SLA", description: "SLA used for new workflow steps.", module: "operations", category: "Workflow", type: "duration", durationUnit: "hours", default: 24, min: 1, max: 720, source: DEMO },
-  { key: "platform.shareholdersFundsNgn", label: "Shareholders' funds (unimpaired)", description: "Base for single-obligor (20%) and large-exposure (10%) limits.", module: "platform", category: "Capital", type: "money", default: 60_000_000_000, min: 1, source: "PRD §6.6.2 / §8 — value from GL capital accounts (demo value)" },
-  { key: "rar.midpoint", label: "360 RAR posture midpoint", description: "Composite midpoint separating postures on the 1–10 scale.", module: "credit-analysis", category: "360 RAR", type: "number", default: 5.5, min: 1, max: 10, step: 0.1, source: "PRD §6.2.5" },
-  { key: "rar.neutralBelow", label: "Neutral / Transitional below", description: "Magnitude below which the obligor is Neutral/Transitional.", module: "credit-analysis", category: "360 RAR", type: "number", default: 0.4, min: 0, max: 5, step: 0.05, source: "PRD §6.2.5 — tenant threshold (demo value)" },
-  { key: "rar.marginalBelow", label: "Marginal below", description: "Magnitude below which a posture is Marginal.", module: "credit-analysis", category: "360 RAR", type: "number", default: 1.2, min: 0, max: 6, step: 0.05, source: "PRD §6.2.5 — tenant threshold (demo value)" },
-  { key: "rar.moderateBelow", label: "Moderate below (else Strong)", description: "Magnitude below which a posture is Moderate; at or above is Strong.", module: "credit-analysis", category: "360 RAR", type: "number", default: 2.4, min: 0, max: 7, step: 0.05, source: "PRD §6.2.5 — tenant threshold (demo value)" },
+  { key: "platform.shareholdersFundsNgn", label: "Shareholders' funds (unimpaired)", description: "Base for single-obligor (20%) and large-exposure (10%) limits.", module: "platform", category: "Capital", type: "money", default: 60_000_000_000, min: 1, source: "value from GL capital accounts (demo value)" },
+  { key: "rar.midpoint", label: "360 RAR posture midpoint", description: "Composite midpoint separating postures on the 1–10 scale.", module: "credit-analysis", category: "360 RAR", type: "number", default: 5.5, min: 1, max: 10, step: 0.1, source: "Platform default" },
+  { key: "rar.neutralBelow", label: "Neutral / Transitional below", description: "Magnitude below which the obligor is Neutral/Transitional.", module: "credit-analysis", category: "360 RAR", type: "number", default: 0.4, min: 0, max: 5, step: 0.05, source: "tenant threshold (demo value)" },
+  { key: "rar.marginalBelow", label: "Marginal below", description: "Magnitude below which a posture is Marginal.", module: "credit-analysis", category: "360 RAR", type: "number", default: 1.2, min: 0, max: 6, step: 0.05, source: "tenant threshold (demo value)" },
+  { key: "rar.moderateBelow", label: "Moderate below (else Strong)", description: "Magnitude below which a posture is Moderate; at or above is Strong.", module: "credit-analysis", category: "360 RAR", type: "number", default: 2.4, min: 0, max: 7, step: 0.05, source: "tenant threshold (demo value)" },
   ...roles
     .filter((r) => r.limitNgn !== null && Number.isFinite(r.limitNgn))
     .map((r) => ({
@@ -44,7 +44,7 @@ defineRules([
       type: "money" as const,
       default: r.limitNgn as number,
       min: 0,
-      source: "PRD §4.1–4.2 — tenant configuration (illustrative value)",
+      source: "tenant configuration (illustrative value)",
     })),
 ]);
 
@@ -64,7 +64,7 @@ registerOperation<RuleChangePayload>({
   type: "rule.change",
   name: "Business rule change",
   module: "operations",
-  description: "Change a business rule / tenant parameter. Second-person approval (PRD §10.4 configurability with control).",
+  description: "Change a business rule / tenant parameter. Second-person approval (configurability with control).",
   defaultSteps: [step("review", "Risk review", ["head-of-risk", "cro"], 24), step("confirm", "Confirmation (System Admin or CRO)", ["system-admin", "cro"], 24)],
   apply: (p, { instance, actor }) => {
     const def = ruleDefinition(p.key);
@@ -80,7 +80,7 @@ registerOperation<AccessPayload>({
   type: "access.request",
   name: "Access request",
   module: "platform",
-  description: "A person who registered and verified their email asks for access (PRD §4: admin-controlled named users).",
+  description: "A person who registered and verified their email asks for access.",
   defaultSteps: [step("approve", "System Admin approval", ["system-admin"], 48)],
   apply: (p) => decideAccessRequest(p.email, "approve", p.roleId),
   onReject: (p) => decideAccessRequest(p.email, "reject"),

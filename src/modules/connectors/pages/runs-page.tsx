@@ -45,7 +45,7 @@ export function RunsPage() {
   ];
 
   return (
-    <ModulePage module="connectors" description="Scheduled, event-driven and manual connector runs into the staging layer (PRD §5, §4.6). Simulated.">
+    <ModulePage module="connectors" description="Scheduled, event-driven and manual connector runs into the staging layer. Simulated.">
       <Stack gap="large">
         <Grid columns={{ base: 2, lg: 4 }} gap="medium">
           <StatCard label="Runs shown" value={number(allRuns.length)} />

@@ -24,10 +24,10 @@ export const indicatorCategories: { name: IndicatorCategory; source: string; met
   { name: "Security Incidents", source: "Security/incident-management connector or manual logging", metrics: "Physical-security incidents, access-control violations, severity, resolution time" },
   { name: "Transaction Processing Quality", source: "CBA transaction-processing logs", metrics: "Error rate by channel/product, reversal/exception rate, time-to-correct" },
   { name: "Systems & Technology", source: "Core banking and channel-system monitoring logs (IT connector)", metrics: "Downtime/availability, failed transactions by channel, batch-job failures" },
-  { name: "Regulatory Breaches", source: "ERM regulatory-breach register (§6.10)", metrics: "Count and severity of breaches by policy area" },
+  { name: "Regulatory Breaches", source: "ERM regulatory-breach register", metrics: "Count and severity of breaches by policy area" },
   { name: "Cyber Intrusions & Attacks", source: "SIEM / cybersecurity-tooling connector", metrics: "Attempted/successful intrusions, attack vector, MTTD/MTTC" },
   { name: "Customer Complaints", source: "Complaints/CRM connector or CBA complaints module", metrics: "Volume and category, resolution time, repeat-complaint rate" },
-  { name: "Loss Events", source: "Loss-event register (sanctions-for-breach §6.3.2, ERM breach register, direct logging)", metrics: "Losses/near-misses vs Loss Limit Framework thresholds" },
+  { name: "Loss Events", source: "Loss-event register (sanctions-for-breach, ERM breach register, direct logging)", metrics: "Losses/near-misses vs Loss Limit Framework thresholds" },
 ];
 
 // ---------------------------------------------------------------- KRIs (§6.9.1)
@@ -68,7 +68,7 @@ const specs: KriSpec[] = [
   { id: "KRI-SEC-01", name: "Physical-security incidents", category: "Security Incidents", owner: "Ibrahim Danjuma", ownerTitle: "Chief Security Officer", formula: "Branch/vault breaches + robbery attempts recorded in the month", sourceSystem: "Incident-management connector", frequency: "Monthly", businessLine: "Branch network", controlId: "CTL-SEC-01", unit: "incidents", boardReported: true, amber: 3, red: 5, higherIsWorse: true, start: 2, end: 1, season: 0.6, noise: 0.7, seed: 13, decimals: 0 },
   { id: "KRI-SEC-02", name: "Access-control violations", category: "Security Incidents", owner: "Ibrahim Danjuma", ownerTitle: "Chief Security Officer", formula: "Unauthorised access attempts to restricted zones (badge/biometric logs)", sourceSystem: "Manual logging", frequency: "Monthly", businessLine: "Branch network", controlId: "CTL-SEC-02", unit: "violations", boardReported: false, amber: 6, red: 10, higherIsWorse: true, start: 5, end: 4, season: 0.8, noise: 1, seed: 14, decimals: 0 },
   { id: "KRI-TPQ-01", name: "Transaction error rate (all channels)", category: "Transaction Processing Quality", owner: "Chinedu Eze", ownerTitle: "Head, Operations", formula: "Errors ÷ transactions processed × 10,000", sourceSystem: "CBA transaction-processing logs", frequency: "Daily", businessLine: "Operations", controlId: "CTL-TPQ-01", unit: "per 10k", boardReported: true, amber: 4, red: 6, higherIsWorse: true, start: 2.6, end: 4.4, season: 0.4, noise: 0.25, seed: 15, decimals: 1 },
-  { id: "KRI-TPQ-02", name: "Reversal / exception rate", category: "Transaction Processing Quality", owner: "Chinedu Eze", ownerTitle: "Head, Operations", formula: "Reversed or exception entries ÷ total entries × 100 (cross-referenced with COP reversal exclusion, §5.1)", sourceSystem: "CBA transaction-processing logs", frequency: "Weekly", businessLine: "Operations", controlId: "CTL-TPQ-02", unit: "%", boardReported: false, amber: 0.8, red: 1.2, higherIsWorse: true, start: 0.55, end: 0.62, season: 0.05, noise: 0.05, seed: 16, decimals: 2 },
+  { id: "KRI-TPQ-02", name: "Reversal / exception rate", category: "Transaction Processing Quality", owner: "Chinedu Eze", ownerTitle: "Head, Operations", formula: "Reversed or exception entries ÷ total entries × 100 (cross-referenced with COP reversal exclusion)", sourceSystem: "CBA transaction-processing logs", frequency: "Weekly", businessLine: "Operations", controlId: "CTL-TPQ-02", unit: "%", boardReported: false, amber: 0.8, red: 1.2, higherIsWorse: true, start: 0.55, end: 0.62, season: 0.05, noise: 0.05, seed: 16, decimals: 2 },
   { id: "KRI-SYS-01", name: "Core banking downtime (% of scheduled uptime)", category: "Systems & Technology", owner: "Olumide Bakare", ownerTitle: "Chief Information Officer", formula: "Unplanned downtime minutes ÷ scheduled uptime minutes × 100", sourceSystem: "IT monitoring connector", frequency: "Daily", businessLine: "Technology", controlId: "CTL-SYS-01", unit: "%", boardReported: true, amber: 0.5, red: 1, higherIsWorse: true, start: 0.42, end: 1.18, season: 0.06, noise: 0.06, seed: 17, decimals: 2 },
   { id: "KRI-SYS-02", name: "Failed transactions — mobile banking", category: "Systems & Technology", owner: "Olumide Bakare", ownerTitle: "Chief Information Officer", formula: "Failed mobile transactions ÷ attempted × 100", sourceSystem: "Channel monitoring logs", frequency: "Daily", businessLine: "Retail banking", controlId: "CTL-SYS-02", unit: "%", boardReported: false, amber: 2.5, red: 4, higherIsWorse: true, start: 2.9, end: 2.1, season: 0.3, noise: 0.2, seed: 18, decimals: 1 },
   { id: "KRI-SYS-03", name: "Batch-job failure rate", category: "Systems & Technology", owner: "Olumide Bakare", ownerTitle: "Chief Information Officer", formula: "Failed end-of-day batch jobs ÷ scheduled jobs × 100", sourceSystem: "IT monitoring connector", frequency: "Daily", businessLine: "Technology", controlId: "CTL-SYS-03", unit: "%", boardReported: false, amber: 1.5, red: 3, higherIsWorse: true, start: 1.1, end: 0.9, season: 0.15, noise: 0.15, seed: 19, decimals: 1 },
@@ -162,7 +162,7 @@ export type BaselEventType = (typeof baselEventTypes)[number];
 export const businessLines = ["Retail banking", "Commercial banking", "Corporate banking", "Treasury", "Payment & settlement", "Operations", "Technology"] as const;
 
 export type LossEventStatus = "Reported" | "Under investigation" | "Remediation" | "Closed";
-export type LossEventSource = "Direct officer logging" | "Credit Admin sanctions-for-breach (§6.3.2)" | "ERM regulatory-breach register" | "Escalated exception (§6.4.4)";
+export type LossEventSource = "Direct officer logging" | "Credit Admin sanctions-for-breach" | "ERM regulatory-breach register" | "Escalated exception";
 
 export type LossEvent = {
   id: string;
@@ -219,7 +219,7 @@ function buildLossEvents(): LossEvent[] {
     const recoveredShare = t.type === "External fraud" || t.type === "Damage to physical assets" ? r.float(0.1, 0.7) : r.float(0, 0.35);
     const status = daysAgo < 20 ? r.pick<LossEventStatus>(["Reported", "Under investigation"]) : daysAgo < 70 ? r.pick<LossEventStatus>(["Under investigation", "Remediation", "Closed"]) : r.pick(statusPool.slice(0, 4));
     const source: LossEventSource =
-      t.cat === "Regulatory Breaches" ? "ERM regulatory-breach register" : t.ctl === "CTL-LE-01" ? "Credit Admin sanctions-for-breach (§6.3.2)" : r.next() < 0.2 ? "Escalated exception (§6.4.4)" : "Direct officer logging";
+      t.cat === "Regulatory Breaches" ? "ERM regulatory-breach register" : t.ctl === "CTL-LE-01" ? "Credit Admin sanctions-for-breach" : r.next() < 0.2 ? "Escalated exception" : "Direct officer logging";
     list.push({
       id: `OLE-${String(2026_460 - i)}`,
       title: nearMiss ? `Near miss — ${t.title.toLowerCase()}` : t.title,

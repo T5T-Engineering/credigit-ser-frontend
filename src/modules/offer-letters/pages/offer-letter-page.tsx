@@ -99,7 +99,7 @@ function LetterRoute() {
         title={app ? "No offer letter yet for this application" : "Offer letter not found"}
         description={
           app
-            ? `${app.id} is at the "${app.stage}" stage. The Offer Letter Engine generates the letter automatically once the application is approved and reaches the customer-presentation step (PRD §6.1.1 step 13).`
+            ? `${app.id} is at the "${app.stage}" stage. The Offer Letter Engine generates the letter automatically once the application is approved and reaches the customer-presentation step.`
             : id
               ? `No offer letter with ID ${id} exists in this tenant. It may have been removed or the demo data reset.`
               : `Open a letter from the list, or one of the ${eligible.length} approved applications.`
@@ -219,7 +219,7 @@ function LetterRecord({ letter }: { letter: OfferLetter }) {
         <EntityHeader
           back={{ href: "/offer-letters/", label: "Offer letters" }}
           linkComponent={Link}
-          eyebrow="Offer letter · PRD §7"
+          eyebrow="Offer letter"
           title={obligor?.name ?? app.obligorId}
           subtitle={`${app.product} · ${app.purpose}`}
           identifier={letter.ref}
@@ -254,13 +254,13 @@ function LetterRecord({ letter }: { letter: OfferLetter }) {
       ) : null}
       {status === "Expired" ? (
         <Alert tone="danger" title="This offer has lapsed">
-          It was issued on {date(letter.issuedAt!)} with a {letter.validityDays}-day validity and was not accepted by {date(expiresAt(letter)!)} (PRD §7.3 Acceptance validity). {canRequest ? "Request a re-issue to restart the validity period — Legal signs it off through Operations." : "The Account Officer can request a re-issue, signed off by Legal."}
+          It was issued on {date(letter.issuedAt!)} with a {letter.validityDays}-day validity and was not accepted by {date(expiresAt(letter)!)} (Acceptance validity). {canRequest ? "Request a re-issue to restart the validity period — Legal signs it off through Operations." : "The Account Officer can request a re-issue, signed off by Legal."}
         </Alert>
       ) : null}
       {!editable && (letter.status === "Draft" || letter.status === "Legal review") ? (
         <div className="print:hidden">
           <Alert tone="info" title={letter.status === "Draft" ? "Draft — not yet sent to Legal" : "Legal is reviewing this letter"}>
-            Clauses can only be added, removed or edited by Legal before release (PRD §7). You can view the letter and comment.
+            Clauses can only be added, removed or edited by Legal before release. You can view the letter and comment.
           </Alert>
         </div>
       ) : null}
@@ -401,7 +401,7 @@ function Aside({ letter, c, editable, commit, lastAt }: { letter: OfferLetter; c
   const idx = order.indexOf(letter.status);
   const st = (i: number): StepItem["status"] => (i < idx || (i === idx && letter.status === "Accepted") ? "complete" : i === idx ? "current" : "upcoming");
   const steps: StepItem[] = [
-    { title: "Auto-generated", description: "House template + auto-tagged clauses (§6.1.5)", status: st(0), meta: date(letter.createdAt) },
+    { title: "Auto-generated", description: "House template + auto-tagged clauses", status: st(0), meta: date(letter.createdAt) },
     { title: "Legal review", description: letter.legalReviewerName ? `Reviewer: ${letter.legalReviewerName}` : letter.status === "Draft" ? "Sent by the Account Officer" : "With Legal (Operations workflow)", status: st(1) },
     { title: "Legal sign-off & issue", description: letter.legalSignedOffByName ? `Signed off by ${letter.legalSignedOffByName}` : "Conditions & covenants text approved", status: st(2), meta: letter.legalSignedOffAt ? date(letter.legalSignedOffAt) : undefined },
     { title: "Customer acceptance", description: letter.acceptedAt ? `Accepted ${date(letter.acceptedAt)}` : status === "Expired" ? "Lapsed — not accepted in time" : `Within ${letter.validityDays} days of issue`, status: st(3), meta: letter.acceptedAt ? date(letter.acceptedAt) : undefined },
@@ -511,7 +511,7 @@ function AiSuggestion({ letter, c, editable, commit }: { letter: OfferLetter; c:
       draft={accepted ? accepted.text : mergeText(s.text, c.ctx)}
       sources={[
         { label: `Application ${c.app.id}`, detail: s.why },
-        { label: "Clause library §7.3", detail: "Closest approved clauses used as style reference" },
+        { label: "Clause library", detail: "Closest approved clauses used as style reference" },
       ]}
       signedOffBy={accepted ? `${accepted.addedByName} · ${date(accepted.addedAt)}` : undefined}
       signOffNote={editable ? "AI-drafted — Legal must review the wording; it is added to this letter only when you accept it." : "AI-drafted — only the Legal Officer can accept this clause into the letter."}
@@ -561,7 +561,7 @@ function ClausePicker({
     <Stack gap="medium">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Text variant="small" tone="muted" className="max-w-xl">
-          Clauses are drawn from the Legal-approved library and auto-tagged by product, obligor type, collateral and covenants tagged at origination (PRD §6.1.5). {editable ? "Tick to add or remove; edits apply to this letter only." : ""}
+          Clauses are drawn from the Legal-approved library and auto-tagged by product, obligor type, collateral and covenants tagged at origination. {editable ? "Tick to add or remove; edits apply to this letter only." : ""}
         </Text>
         <Stack direction="horizontal" gap="small" wrap>
           <Switch label="Show untagged library clauses" checked={showAll} onCheckedChange={setShowAll} size="small" />
@@ -660,7 +660,7 @@ function ConditionsTab({ letter, app, facilityId }: { letter: OfferLetter; app: 
     <Stack gap="medium">
       <ChecklistPanel
         title="Conditions precedent to drawdown"
-        description="Generated from the letter's §7.1 clauses. Credit Administration confirms each one before releasing the file for disbursement (PRD §6.1.1 step 15)."
+        description="Generated from the letter's clauses. Credit Administration confirms each one before releasing the file for disbursement."
         items={items}
         action={
           facilityId ? (
@@ -680,7 +680,7 @@ function ConditionsTab({ letter, app, facilityId }: { letter: OfferLetter; app: 
 }
 
 function CovenantsTab({ letter, clauses, ctx, app }: { letter: OfferLetter; clauses: Clause[]; ctx: MergeContext; app: Application }) {
-  const rows = letterCovenants(letter, clauses).map((x) => ({ ...x, merged: mergeText(x.text, ctx), source: x.id.startsWith("SC-") ? "Tagged at origination (§6.1.5)" : "id" in x && String(x.id).startsWith("GC-") ? "General covenant (§7.3)" : "Bespoke" }));
+  const rows = letterCovenants(letter, clauses).map((x) => ({ ...x, merged: mergeText(x.text, ctx), source: x.id.startsWith("SC-") ? "Tagged at origination" : "id" in x && String(x.id).startsWith("GC-") ? "General covenant" : "Bespoke" }));
   return (
     <Stack gap="medium">
       <Text variant="small" tone="muted">
@@ -747,7 +747,7 @@ function SignOffModal({
       open
       onOpenChange={(o) => !o && onClose()}
       title={reissue ? "Legal sign-off — re-issue" : "Legal sign-off"}
-      description="Approve the conditions and covenants text and release the letter to the Account Officer for customer presentation (PRD §4.1, §6.5). Your decision is recorded on the Operations request."
+      description="Approve the conditions and covenants text and release the letter to the Account Officer for customer presentation. Your decision is recorded on the Operations request."
       footer={
         <>
           <Button variant="text" onClick={onClose}>
@@ -772,7 +772,7 @@ function SignOffModal({
             { label: "Bespoke / edited", value: `${letter.customClauses.length} bespoke · ${Object.keys(letter.clauseEdits).length} edited` },
           ]}
         />
-        <Field label="Acceptance validity (days)" description={`PRD §7.3: commonly 7 days from communication to the customer. Allowed ${min}–${max} days (business rules).`} htmlFor="validity" error={daysOk ? undefined : `Enter ${min}–${max} days.`}>
+        <Field label="Acceptance validity (days)" description={`commonly 7 days from communication to the customer. Allowed ${min}–${max} days (business rules).`} htmlFor="validity" error={daysOk ? undefined : `Enter ${min}–${max} days.`}>
           <Input id="validity" type="number" min={min} max={max} value={days} onChange={(e) => setDays(e.target.value)} numeric suffix="days" invalid={!daysOk} />
         </Field>
         <Field label="Comment" htmlFor="signoff-comment" description="Required when returning the letter." optional>
@@ -801,7 +801,7 @@ function AcceptModal({ letter, onClose, onConfirm }: { letter: OfferLetter; onCl
       open
       onOpenChange={(o) => !o && onClose()}
       title="Record customer acceptance"
-      description="PRD §6.1.1 step 13 — the Account Officer collects the signed duplicate and acceptance documents."
+      description="the Account Officer collects the signed duplicate and acceptance documents."
       footer={
         <>
           <Button variant="text" onClick={onClose}>

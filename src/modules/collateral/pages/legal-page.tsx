@@ -197,7 +197,7 @@ export function LegalReviewPage() {
   ];
 
   return (
-    <ModulePage module="collateral" description="Legal workflow — collateral search at origination (in parallel with BDM review), genuineness of security documents, vaulting and legal sufficiency sign-off (PRD §6.5).">
+    <ModulePage module="collateral" description="Legal workflow — collateral search at origination (in parallel with BDM review), genuineness of security documents, vaulting and legal sufficiency sign-off.">
       <Stack gap="large">
         {message && (
           <Alert tone={message.tone} title={message.tone === "danger" ? "Not completed" : "Submitted"}>

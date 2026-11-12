@@ -74,7 +74,7 @@ function EngineCard({ c }: { c: AppCtx }) {
           <Cpu aria-hidden className="size-5 text-fg-muted" />
           <CardTitle>Recommendation engine</CardTitle>
         </Stack>
-        <CardDescription>System-generated from the 360 RAR position, COP confidence, bureau findings, security cover and the limit gate (PRD §6.1.5). Rule set: {TENANT_PARAM_NOTE.toLowerCase()}.</CardDescription></div>
+        <CardDescription>System-generated from the 360 RAR position, COP confidence, bureau findings, security cover and the limit gate. Rule set: {TENANT_PARAM_NOTE.toLowerCase()}.</CardDescription></div>
       </CardHeader>
       <CardContent>
         <Stack gap="medium">
@@ -132,7 +132,7 @@ function LimitGateCard({ c }: { c: AppCtx }) {
         <Stack direction="horizontal" justify="between" align="start" wrap gap="medium">
           <div>
             <CardTitle>Portfolio-limit gate</CardTitle>
-            <CardDescription>Checked before submission to the next tier against the single-obligor and sectoral limits (PRD §5.6, §6.1.5).</CardDescription>
+            <CardDescription>Checked before submission to the next tier against the single-obligor and sectoral limits.</CardDescription>
           </div>
           {canRun ? (
             <Button
@@ -227,14 +227,14 @@ function CovenantCard({ c }: { c: AppCtx }) {
   });
   const { toast } = useToast();
   const custom = app.covenants.filter((t) => !clauses.some((k) => k.text === t));
-  const groups = ["§7.1 Conditions precedent", "§7.3 General covenants"] as const;
+  const groups = ["Conditions precedent", "General covenants"] as const;
   return (
     <Card>
       <CardHeader>
         <Stack direction="horizontal" justify="between" align="start" wrap gap="medium">
           <div>
             <CardTitle>Covenant & condition tagging</CardTitle>
-            <CardDescription>Auto-tagged from the master conditions / covenants library based on product, sector, tenor, collateral type and 360 RAR posture (PRD §6.1.5, §7). Tagged clauses carry into the offer letter.</CardDescription>
+            <CardDescription>Auto-tagged from the master conditions / covenants library based on product, sector, tenor, collateral type and 360 RAR posture. Tagged clauses carry into the offer letter.</CardDescription>
           </div>
           {canTag ? (
             <Stack direction="horizontal" gap="small" wrap>

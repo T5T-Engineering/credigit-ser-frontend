@@ -20,15 +20,15 @@ export function haircutFor(c: Pick<Collateral, "type" | "description">): Haircut
   const r = (key: string) => getRule<number>(`collateral.haircut.${key}`);
   switch (c.type) {
     case "Cash / lien on deposit":
-      return { pct: r("cash"), source: "PRD §6.7.3", prdCategory: "Cash / deposits with the lending bank" };
+      return { pct: r("cash"), source: "Platform default", prdCategory: "Cash / deposits with the lending bank" };
     case "Quoted shares":
-      return { pct: r("quotedShares"), source: "PRD §6.7.3", prdCategory: "Quoted equities & other traded securities" };
+      return { pct: r("quotedShares"), source: "Platform default", prdCategory: "Quoted equities & other traded securities" };
     case "Legal mortgage": {
       const words = getRule<string[]>("collateral.haircut.residentialKeywords");
       const residential = words.some((w) => w && c.description.toLowerCase().includes(w.toLowerCase()));
       return residential
-        ? { pct: r("residentialMortgage"), source: "PRD §6.7.3", prdCategory: "Residential legal mortgage" }
-        : { pct: r("commercialMortgage"), source: "PRD §6.7.3", prdCategory: "Commercial legal mortgage" };
+        ? { pct: r("residentialMortgage"), source: "Platform default", prdCategory: "Residential legal mortgage" }
+        : { pct: r("commercialMortgage"), source: "Platform default", prdCategory: "Commercial legal mortgage" };
     }
     default:
       return { pct: r(typeSlug(c.type)), source: "Tenant parameter" };
@@ -60,7 +60,7 @@ export function facilityExposure(f: Facility): number {
 /* ---------------- Perfection workflow ---------------- */
 
 export const perfectionSteps: { id: PerfectionStatus; title: string; description: string; owner: "legal-officer" | "collateral-officer" }[] = [
-  { id: "Search in progress", title: "Search", description: "Legal search at the registry (parallel to BDM review, PRD §6.1.1)", owner: "legal-officer" },
+  { id: "Search in progress", title: "Search", description: "Legal search at the registry (parallel to BDM review)", owner: "legal-officer" },
   { id: "Documentation", title: "Documentation", description: "Security documents executed; genuineness and authenticity confirmed", owner: "legal-officer" },
   { id: "Registration", title: "Registration", description: "Charge / mortgage / lien registered (CAC, Lands Registry, CSCS)", owner: "collateral-officer" },
   { id: "Perfected", title: "Perfected", description: "Perfection complete; documents vaulted", owner: "collateral-officer" },

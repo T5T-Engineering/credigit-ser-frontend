@@ -41,11 +41,11 @@ import { useMarketBase } from "../use-market";
 
 const CHAPTERS = [
   { id: "exec", title: "Executive summary", source: "Compiled from all chapters" },
-  { id: "gov", title: "Governance & oversight", source: "Committee configuration (§4)" },
+  { id: "gov", title: "Governance & oversight", source: "Committee configuration" },
   { id: "ras", title: "Risk appetite statement", source: "Versioned RAS configuration (this page)" },
   { id: "factors", title: "Risk factor inventory", source: "Risk factor relevance scoring (this page)" },
-  { id: "metrics", title: "Liquidity position & metrics", source: "Liquidity tab — LCR, NSFR, LDR, ladder, concentration (§6.8.2)" },
-  { id: "stress", title: "Stress testing (incl. reverse stress test)", source: "Approved stress-testing runs with full assumption sets (§6.8.4)" },
+  { id: "metrics", title: "Liquidity position & metrics", source: "Liquidity tab — LCR, NSFR, LDR, ladder, concentration" },
+  { id: "stress", title: "Stress testing (incl. reverse stress test)", source: "Approved stress-testing runs with full assumption sets" },
   { id: "cfp", title: "Contingency Funding Plan", source: "Early-warning indicators, funding-source ranking (this page)" },
   { id: "conclusion", title: "Conclusions & Board attestation", source: "Sign-off chain (Operations)" },
 ];

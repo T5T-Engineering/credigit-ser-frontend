@@ -51,13 +51,13 @@ const ladderDefaults: { level: 1 | 2 | 3 | 4; roles: RoleId[] }[] = [
 // ---------------------------------------------------------------- business rules
 defineRules([
   // CBN days-past-due ladder (PRD §6.4.1, §6.7.1)
-  { key: "monitoring.dpd.watchlistFromDays", label: "Watchlist from (DPD)", description: "Days past due at which a facility moves to Watchlist / IFRS 9 Stage 2.", module: M, category: "Days-past-due ladder", type: "number", unit: "days", default: 30, min: 1, max: 89, source: "PRD §6.4.1, §6.7.1 (CBN prudential guidelines)" },
-  { key: "monitoring.dpd.substandardFromDays", label: "Sub-Standard / non-performing from (DPD)", description: "Days past due at which a facility is non-performing (Sub-Standard, Stage 3).", module: M, category: "Days-past-due ladder", type: "number", unit: "days", default: 90, min: 30, max: 179, source: "PRD §6.4.1, §6.7.1 (CBN prudential guidelines)" },
-  { key: "monitoring.dpd.doubtfulFromDays", label: "Doubtful from (DPD)", description: "Days past due at which a facility is classified Doubtful.", module: M, category: "Days-past-due ladder", type: "number", unit: "days", default: 180, min: 90, max: 359, source: "PRD §6.4.1, §6.7.1 (CBN prudential guidelines)" },
-  { key: "monitoring.dpd.lostFromDays", label: "Lost from (DPD)", description: "Days past due at which a facility is classified Lost.", module: M, category: "Days-past-due ladder", type: "number", unit: "days", default: 360, min: 180, max: 1000, source: "PRD §6.4.1, §6.7.1 (CBN prudential guidelines)" },
-  { key: "monitoring.cbn.substandardProvisionPct", label: "CBN specific provision — Sub-Standard", description: "Specific provision shown for the Sub-Standard bucket.", module: M, category: "Days-past-due ladder", type: "percent", unit: "%", default: 10, min: 0, max: 100, source: "PRD §6.7.1 (CBN prudential guidelines)" },
-  { key: "monitoring.cbn.doubtfulProvisionPct", label: "CBN specific provision — Doubtful", description: "Specific provision shown for the Doubtful bucket.", module: M, category: "Days-past-due ladder", type: "percent", unit: "%", default: 50, min: 0, max: 100, source: "PRD §6.7.1 (CBN prudential guidelines)" },
-  { key: "monitoring.cbn.lostProvisionPct", label: "CBN specific provision — Lost", description: "Specific provision shown for the Lost bucket.", module: M, category: "Days-past-due ladder", type: "percent", unit: "%", default: 100, min: 0, max: 100, source: "PRD §6.7.1 (CBN prudential guidelines)" },
+  { key: "monitoring.dpd.watchlistFromDays", label: "Watchlist from (DPD)", description: "Days past due at which a facility moves to Watchlist / IFRS 9 Stage 2.", module: M, category: "Days-past-due ladder", type: "number", unit: "days", default: 30, min: 1, max: 89, source: "(CBN prudential guidelines)" },
+  { key: "monitoring.dpd.substandardFromDays", label: "Sub-Standard / non-performing from (DPD)", description: "Days past due at which a facility is non-performing (Sub-Standard, Stage 3).", module: M, category: "Days-past-due ladder", type: "number", unit: "days", default: 90, min: 30, max: 179, source: "(CBN prudential guidelines)" },
+  { key: "monitoring.dpd.doubtfulFromDays", label: "Doubtful from (DPD)", description: "Days past due at which a facility is classified Doubtful.", module: M, category: "Days-past-due ladder", type: "number", unit: "days", default: 180, min: 90, max: 359, source: "(CBN prudential guidelines)" },
+  { key: "monitoring.dpd.lostFromDays", label: "Lost from (DPD)", description: "Days past due at which a facility is classified Lost.", module: M, category: "Days-past-due ladder", type: "number", unit: "days", default: 360, min: 180, max: 1000, source: "(CBN prudential guidelines)" },
+  { key: "monitoring.cbn.substandardProvisionPct", label: "CBN specific provision — Sub-Standard", description: "Specific provision shown for the Sub-Standard bucket.", module: M, category: "Days-past-due ladder", type: "percent", unit: "%", default: 10, min: 0, max: 100, source: "(CBN prudential guidelines)" },
+  { key: "monitoring.cbn.doubtfulProvisionPct", label: "CBN specific provision — Doubtful", description: "Specific provision shown for the Doubtful bucket.", module: M, category: "Days-past-due ladder", type: "percent", unit: "%", default: 50, min: 0, max: 100, source: "(CBN prudential guidelines)" },
+  { key: "monitoring.cbn.lostProvisionPct", label: "CBN specific provision — Lost", description: "Specific provision shown for the Lost bucket.", module: M, category: "Days-past-due ladder", type: "percent", unit: "%", default: 100, min: 0, max: 100, source: "(CBN prudential guidelines)" },
 
   // Exception escalation protocol (PRD §6.4.4)
   ...ladderDefaults.flatMap(({ level, roles }): RuleDefinition[] => [
@@ -73,7 +73,7 @@ defineRules([
       default: 5,
       min: 1,
       max: 60,
-      source: `PRD §6.4.4 — ${DEMO}`,
+      source: `${DEMO}`,
     },
     {
       key: `monitoring.escalation.l${level}Roles`,
@@ -83,19 +83,19 @@ defineRules([
       category: "Escalation protocol",
       type: "roles",
       default: roles,
-      source: "PRD §6.4.4",
+      source: "Platform default",
     },
   ]),
-  { key: "monitoring.escalation.boardRoles", label: "Board Risk Committee roles (Level 4, material)", description: "Additional roles notified at Level 4 for exceptions above the materiality threshold.", module: M, category: "Escalation protocol", type: "roles", default: ["board"], source: "PRD §6.4.4" },
-  { key: "monitoring.escalation.boardMaterialityNgn", label: "Board materiality threshold", description: "Exception exposure above which Level 4 also notifies the Board Risk Committee.", module: M, category: "Escalation protocol", type: "money", default: 1_000_000_000, min: 0, source: `PRD §6.4.4 — ${DEMO}` },
-  { key: "monitoring.exceptions.evidenceRequiredTypes", label: "Types that close only with evidence", description: "Exception types for which a manual “mark as resolved” without curing evidence is not permitted.", module: M, category: "Exceptions", type: "list", default: EVIDENCE_REQUIRED_DEFAULT, source: "PRD §6.4.4" },
+  { key: "monitoring.escalation.boardRoles", label: "Board Risk Committee roles (Level 4, material)", description: "Additional roles notified at Level 4 for exceptions above the materiality threshold.", module: M, category: "Escalation protocol", type: "roles", default: ["board"], source: "Platform default" },
+  { key: "monitoring.escalation.boardMaterialityNgn", label: "Board materiality threshold", description: "Exception exposure above which Level 4 also notifies the Board Risk Committee.", module: M, category: "Escalation protocol", type: "money", default: 1_000_000_000, min: 0, source: `${DEMO}` },
+  { key: "monitoring.exceptions.evidenceRequiredTypes", label: "Types that close only with evidence", description: "Exception types for which a manual “mark as resolved” without curing evidence is not permitted.", module: M, category: "Exceptions", type: "list", default: EVIDENCE_REQUIRED_DEFAULT, source: "Platform default" },
   { key: "monitoring.exceptions.minEvidenceLength", label: "Minimum evidence reference length", description: "Characters required in the curing-evidence reference.", module: M, category: "Exceptions", type: "number", unit: "characters", default: 3, min: 1, max: 200, source: DEMO },
   { key: "monitoring.exceptions.minDetailLength", label: "Minimum exception detail length", description: "Characters required when raising an exception manually.", module: M, category: "Exceptions", type: "number", unit: "characters", default: 5, min: 1, max: 500, source: DEMO },
   { key: "monitoring.exceptions.minReasonLength", label: "Minimum escalation / release reason", description: "Characters required in a manual escalation or release reason.", module: M, category: "Exceptions", type: "number", unit: "characters", default: 10, min: 1, max: 500, source: DEMO },
 
   // Account inflows (PRD §6.4.3)
-  { key: "monitoring.inflow.envelopeBandPct", label: "Inflow envelope half-width", description: "Expected inflow ± this percentage forms the floor / ceiling of the envelope.", module: M, category: "Account inflows", type: "percent", unit: "%", default: 25, min: 1, max: 100, source: `PRD §6.4.3 — ${DEMO}` },
-  { key: "monitoring.inflow.offSeasonIndexBelow", label: "Off-season seasonal index", description: "Seasonal obligors whose 3-month seasonal index is below this value are treated as off-season (silence is not an exception).", module: M, category: "Account inflows", type: "number", step: 0.05, default: 0.9, min: 0, max: 2, source: `PRD §6.4.3 — ${DEMO}` },
+  { key: "monitoring.inflow.envelopeBandPct", label: "Inflow envelope half-width", description: "Expected inflow ± this percentage forms the floor / ceiling of the envelope.", module: M, category: "Account inflows", type: "percent", unit: "%", default: 25, min: 1, max: 100, source: `${DEMO}` },
+  { key: "monitoring.inflow.offSeasonIndexBelow", label: "Off-season seasonal index", description: "Seasonal obligors whose 3-month seasonal index is below this value are treated as off-season (silence is not an exception).", module: M, category: "Account inflows", type: "number", step: 0.05, default: 0.9, min: 0, max: 2, source: `${DEMO}` },
   ...natureSectorIds.map(
     (sectorId): RuleDefinition => ({
       key: `monitoring.nature.${sectorId}`,
@@ -106,17 +106,17 @@ defineRules([
       type: "enum",
       options: natureOptions,
       default: NATURE_DEFAULTS[sectorId]!,
-      source: `PRD §6.4.3 — ${DEMO}`,
+      source: `${DEMO}`,
     }),
   ),
-  { key: "monitoring.nature.default", label: "Nature of business — other sectors", description: "Inflow profile for sectors without a specific classification.", module: M, category: "Nature-of-Business profile", type: "enum", options: natureOptions, default: "Steady / Regular", source: `PRD §6.4.3 — ${DEMO}` },
+  { key: "monitoring.nature.default", label: "Nature of business — other sectors", description: "Inflow profile for sectors without a specific classification.", module: M, category: "Nature-of-Business profile", type: "enum", options: natureOptions, default: "Steady / Regular", source: `${DEMO}` },
 
   // Covenants, APGs, TODs (PRD §6.4.2, §6.4.3)
   { key: "monitoring.covenant.dueSoonDays", label: "Covenant test due window", description: "Covenant tests falling due within this many days are shown as due.", module: M, category: "Covenants", type: "duration", durationUnit: "days", default: 30, min: 1, max: 180, source: DEMO },
-  { key: "monitoring.periodic.nextDueDays", label: "Periodic financials cycle", description: "Days until the next periodic financials are due after a submission is analysed.", module: M, category: "Periodic analysis", type: "duration", durationUnit: "days", default: 92, min: 1, max: 400, source: `PRD §6.4.5 — ${DEMO}` },
+  { key: "monitoring.periodic.nextDueDays", label: "Periodic financials cycle", description: "Days until the next periodic financials are due after a submission is analysed.", module: M, category: "Periodic analysis", type: "duration", durationUnit: "days", default: 92, min: 1, max: 400, source: `${DEMO}` },
   { key: "monitoring.apg.expiryWarningDays", label: "APG expiry warning", description: "Advance payment guarantees expiring within this many days are flagged.", module: M, category: "Guarantees & overdrafts", type: "duration", durationUnit: "days", default: 30, min: 1, max: 180, source: DEMO },
   { key: "monitoring.tod.regularisationDays", label: "TOD regularisation window", description: "Days within which a temporary overdraft / excess must be regularised.", module: M, category: "Guarantees & overdrafts", type: "duration", durationUnit: "days", default: 30, min: 1, max: 89, source: DEMO },
-  { key: "monitoring.tod.nonPerformingDays", label: "Unregularised TOD non-performing after", description: "Excess-over-limit, matured-without-renewal and undocumented facilities not regularised within this period are classified non-performing.", module: M, category: "Guarantees & overdrafts", type: "duration", durationUnit: "days", default: 90, min: 1, max: 365, source: "PRD §6.4.2 (CBN 12.10)" },
+  { key: "monitoring.tod.nonPerformingDays", label: "Unregularised TOD non-performing after", description: "Excess-over-limit, matured-without-renewal and undocumented facilities not regularised within this period are classified non-performing.", module: M, category: "Guarantees & overdrafts", type: "duration", durationUnit: "days", default: 90, min: 1, max: 365, source: "(CBN 12.10)" },
   { key: "monitoring.assignment.roles", label: "Assignable monitoring roles", description: "Roles that can be assigned as the monitoring officer of a facility.", module: M, category: "Assignments", type: "roles", default: ["loan-review-officer", "account-officer"], source: DEMO },
 ]);
 
@@ -133,7 +133,7 @@ registerOperation<ResolvePayload>({
   type: "monitoring.exception.resolve",
   name: "Exception resolution sign-off",
   module: M,
-  description: "Close a monitoring exception as cured, with time-stamped curing evidence (PRD §6.4.4). The exception stays open until approved.",
+  description: "Close a monitoring exception as cured, with time-stamped curing evidence. The exception stays open until approved.",
   defaultSteps: [step("signoff", "Resolution sign-off", ["head-of-risk", "cco"], 24)],
   apply: async (p, { actor, instance }) => (await service()).applyResolution(p, actor, instance.id),
   onReject: (p, { actor, instance }) => void service().then((s) => s.resolutionRejected(p, actor, instance.id)),

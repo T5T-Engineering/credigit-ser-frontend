@@ -105,7 +105,7 @@ export const parameters: RarParameter[] = [
     name: "Sales Growth",
     direction: "Low → High",
     systemSource: "Audited financial statements (OCR-parsed) + CBA turnover, prior-period comparison",
-    enrichmentSource: "Where financials are unaudited/provisional, in-house analyst desk review against the sector revenue-growth benchmark (NGX Corpus, §6.2.8)",
+    enrichmentSource: "Where financials are unaudited/provisional, in-house analyst desk review against the sector revenue-growth benchmark (NGX Corpus)",
     observed: {
       unit: "%",
       worst: -12,
@@ -167,7 +167,7 @@ export const parameters: RarParameter[] = [
     point: "internal",
     name: "Cash Flow (operating)",
     direction: "Poor → Good",
-    systemSource: "CBA reconciled account turnover (net of inter-branch/suspense, in-and-out and reversal entries, §5.1) + audited Cash Flow Statement",
+    systemSource: "CBA reconciled account turnover (net of inter-branch/suspense, in-and-out and reversal entries) + audited Cash Flow Statement",
     enrichmentSource: "Analyst review of cash-flow quality where turnover is cash-intensive (informal-sector exposure)",
     observed: {
       unit: "%",
@@ -246,7 +246,7 @@ export const parameters: RarParameter[] = [
     name: "Stock Holding / Debtors Collection / Creditors Payment Period",
     direction: "High → Low",
     systemSource: "Audited financial statements / Notes to Accounts + CBA reconciled receivables ageing",
-    enrichmentSource: "Analyst working-capital-cycle note benchmarked to the Nature-of-Business profile (§6.4.3)",
+    enrichmentSource: "Analyst working-capital-cycle note benchmarked to the Nature-of-Business profile",
     observed: {
       unit: "days",
       worst: 190,
@@ -262,7 +262,7 @@ export const parameters: RarParameter[] = [
     name: "Financial Performance Trend (3–5 year)",
     direction: "Declining → Improving",
     systemSource: "Multi-year audited financial statements held on the Risk Data Spine",
-    enrichmentSource: "Analyst trend commentary, cross-referenced to the obligor's Industry Life-Cycle Stage (§6.2.8)",
+    enrichmentSource: "Analyst trend commentary, cross-referenced to the obligor's Industry Life-Cycle Stage",
     observed: {
       unit: "%",
       worst: -10,
@@ -277,7 +277,7 @@ export const parameters: RarParameter[] = [
     name: "Financial Volatility / Risk",
     direction: "High → Low",
     systemSource: "Standard deviation of quarterly turnover/earnings from the CBA + management accounts",
-    enrichmentSource: "Analyst seasonality note (ties to Nature-of-Business inflow pattern, §6.4.3)",
+    enrichmentSource: "Analyst seasonality note (ties to Nature-of-Business inflow pattern)",
     observed: {
       unit: "%",
       worst: 62,
@@ -291,7 +291,7 @@ export const parameters: RarParameter[] = [
     point: "internal",
     name: "Ease of Exit / Redeployment of Assets",
     direction: "Difficult → Easy",
-    systemSource: "Collateral register — asset type and marketability, incl. CSCS mark-to-market for quoted-share collateral (§5.7, §6.5)",
+    systemSource: "Collateral register — asset type and marketability, incl. CSCS mark-to-market for quoted-share collateral",
     enrichmentSource: "Analyst/valuer commentary on secondary-market depth for the specific asset class",
     observed: {
       unit: "%",
@@ -306,7 +306,7 @@ export const parameters: RarParameter[] = [
     point: "internal",
     name: "Credit Bureau / CRMS Standing",
     direction: "Adverse → Clean",
-    systemSource: "Bureau credit score, per-bank facility/outstanding breakdown, delinquency flags (§5.2)",
+    systemSource: "Bureau credit score, per-bank facility/outstanding breakdown, delinquency flags",
     enrichmentSource: "Analyst review where bureau/CRMS data conflicts with CBA-observed conduct",
     observed: {
       unit: "score",
@@ -323,7 +323,7 @@ export const parameters: RarParameter[] = [
     point: "industry",
     name: "Industry Growth Rate",
     direction: "Low → High",
-    systemSource: "NGX-listed sector aggregate revenue CAGR (§6.2.8), National Bureau of Statistics sector GDP data",
+    systemSource: "NGX-listed sector aggregate revenue CAGR, National Bureau of Statistics sector GDP data",
     enrichmentSource: "Analyst quarterly sector-note, reconciling official statistics with field observation",
     observed: {
       unit: "%",
@@ -340,7 +340,7 @@ export const parameters: RarParameter[] = [
     point: "industry",
     name: "Life-Cycle Stage",
     direction: "Declining → Growing",
-    systemSource: "Computed from the 10–15 year NGX sector-revenue trend (§6.2.8): Introduction / Growth / Maturity / Decline",
+    systemSource: "Computed from the 10–15 year NGX sector-revenue trend: Introduction / Growth / Maturity / Decline",
     enrichmentSource: "Analyst override with documented rationale where a sector is structurally shifting faster than the trailing data shows",
     sectorPinned: "lifecycle",
   },
@@ -349,7 +349,7 @@ export const parameters: RarParameter[] = [
     point: "industry",
     name: "Competitive Intensity",
     direction: "High → Low",
-    systemSource: "Sector concentration computed from NGX-listed peer count/market-share data (§6.2.8)",
+    systemSource: "Sector concentration computed from NGX-listed peer count/market-share data",
     enrichmentSource: "Analyst market-structure survey covering unlisted/informal competitors the NGX data cannot see",
     observed: {
       unit: "%",
@@ -433,7 +433,7 @@ export const parameters: RarParameter[] = [
     point: "industry",
     name: "Cyclicality",
     direction: "High → Low",
-    systemSource: "Statistical seasonality/cyclicality measure computed by the AI trend engine (§6.12) on the NGX Corpus",
+    systemSource: "Statistical seasonality/cyclicality measure computed by the AI trend engine on the NGX Corpus",
     enrichmentSource: "Analyst commentary distinguishing cyclicality from a structural life-cycle decline",
     observed: {
       unit: "x",
@@ -448,7 +448,7 @@ export const parameters: RarParameter[] = [
     point: "industry",
     name: "Financial Stability (of the sector)",
     direction: "Low → High",
-    systemSource: "Sector-aggregate leverage and default-rate trend from the NGX Corpus + the Platform's own portfolio NPL-by-sector history (§6.6)",
+    systemSource: "Sector-aggregate leverage and default-rate trend from the NGX Corpus + the Platform's own portfolio NPL-by-sector history",
     enrichmentSource: null,
     observed: {
       unit: "%",
@@ -504,7 +504,7 @@ export const parameters: RarParameter[] = [
     point: "comparative",
     name: "Customer Loyalty / Predictable & Recurring Revenue",
     direction: "Low → High",
-    systemSource: "CBA transaction-history regularity (recurring-payer pattern detection, net of in-and-out and reversal entries, §5.1)",
+    systemSource: "CBA transaction-history regularity (recurring-payer pattern detection, net of in-and-out and reversal entries)",
     enrichmentSource: "Analyst review of contract terms/off-take agreements submitted at origination",
     observed: {
       unit: "%",
@@ -563,7 +563,7 @@ export const parameters: RarParameter[] = [
     point: "macro",
     name: "Political Influence / Regulatory Influence",
     direction: "Unstable → Stable",
-    systemSource: "CBN and other regulator circular feed (§5.5); policy-change frequency tracker",
+    systemSource: "CBN and other regulator circular feed; policy-change frequency tracker",
     enrichmentSource: "Analyst regulatory-outlook note",
     observed: {
       unit: "count",

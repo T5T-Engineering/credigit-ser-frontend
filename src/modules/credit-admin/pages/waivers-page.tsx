@@ -188,7 +188,7 @@ function Waivers() {
   return (
     <ModulePage
       module="credit-admin"
-      description="Waivers and deferrals of approved conditions, and sanctions for credit-policy breaches (PRD §6.3.2). Every decision runs through the Operations workflow."
+      description="Waivers and deferrals of approved conditions, and sanctions for credit-policy breaches. Every decision runs through the Operations workflow."
       actions={
         isRequester ? (
           <Stack direction="horizontal" gap="small" wrap>
@@ -217,7 +217,7 @@ function Waivers() {
         ) : null}
 
         <Alert tone="info" title="Routing (Operations workflow)">
-          A waiver or deferral is approved at the same tier that approved the original facility, or higher (PRD §6.3.2). Requests within Credit Administration&apos;s delegated tolerance — {toleranceNote()} — can be approved by Credit Administration. Sanctions for breach route to the escalation
+          A waiver or deferral is approved at the same tier that approved the original facility, or higher. Requests within Credit Administration&apos;s delegated tolerance — {toleranceNote()} — can be approved by Credit Administration. Sanctions for breach route to the escalation
           workflow ({roleNames(sanctionRoles())}) and feed the{" "}
           <TextLink as={Link} href="/operational-risk/loss-events/">
             loss-event register
@@ -353,7 +353,7 @@ function RequestDrawer({ row, isRequester, onClose }: { row: Row; isRequester: b
             ...(row.breachDetail ? [{ label: "Breach detail", value: row.breachDetail, span: 2 as const }] : []),
             ...(row.decidedByName ? [{ label: "Decision by", value: `${row.decidedByName}${row.decidedAt ? ` · ${dateTime(row.decidedAt)}` : ""}` }] : []),
             ...(row.decisionComment ? [{ label: "Decision comment", value: row.decisionComment }] : []),
-            ...(row.lossEventRef ? [{ label: "Loss event", value: row.lossEventRef, mono: true, hint: "Operational Risk loss-event register (§6.9)" }] : []),
+            ...(row.lossEventRef ? [{ label: "Loss event", value: row.lossEventRef, mono: true, hint: "Operational Risk loss-event register" }] : []),
             ...(row.operationId ? [{ label: "Operations request", value: <TextLink as={Link} href={`/operations/item?id=${row.operationId}`}>{row.operationId}</TextLink> }] : []),
           ]}
         />
@@ -452,7 +452,7 @@ function NewRequestModal({ open, onOpenChange, defaultFacility, onCreated }: { o
       onOpenChange={onOpenChange}
       size="large"
       title="New waiver, deferral or sanction"
-      description="Raised by Credit Administration against a specific approved condition and routed through the Operations workflow (PRD §6.3.2)."
+      description="Raised by Credit Administration against a specific approved condition and routed through the Operations workflow."
       footer={
         <>
           <Button variant="tertiary" onClick={() => onOpenChange(false)}>

@@ -62,7 +62,7 @@ export function DocumentsTab({ c }: { c: AppCtx }) {
             <Stack direction="horizontal" justify="between" align="start" wrap gap="medium">
               <div>
                 <CardTitle>Application documents</CardTitle>
-                <CardDescription>Every re-upload is retained as a new version — never overwritten (PRD §5.4).</CardDescription>
+                <CardDescription>Every re-upload is retained as a new version — never overwritten.</CardDescription>
               </div>
               {canVerify && unverified.length ? (
                 <Button

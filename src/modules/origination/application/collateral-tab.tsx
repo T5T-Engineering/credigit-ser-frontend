@@ -35,7 +35,7 @@ export function CollateralTab({ c }: { c: AppCtx }) {
       </Grid>
       {!dd ? (
         <Alert tone="warning" title="Collateral due diligence outstanding">
-          Legal has not completed the search on every pledged item. The BDM cannot submit until it is complete (PRD §6.1.1, step 3).
+          Legal has not completed the search on every pledged item. The BDM cannot submit until it is complete.
         </Alert>
       ) : null}
       <DataTable label="Pledged collateral" columns={columns} data={c.collateral} getRowId={(x) => x.id} paginate={false} emptyState={<Text tone="muted">No collateral pledged — unsecured request.</Text>} />
