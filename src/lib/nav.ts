@@ -299,7 +299,7 @@ export const navigation: NavGroup[] = [
         prd: "§4",
         pages: [
           { label: "Users", href: "/admin" },
-          { label: "Roles & limits", href: "/admin/roles" },
+          { label: "Roles & limits", href: "/admin/roles" }, { label: "Permissions", href: "/admin/permissions" },
           { label: "Rules & parameters", href: "/admin/parameters" },
         ],
       },
