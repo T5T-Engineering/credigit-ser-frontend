@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { apiCall, backendSsoEnabled, validAccessToken } from "@/lib/auth/backend-sso";
+import { identityCall } from "@/lib/auth/backend-identity";
+import { backendSsoEnabled } from "@/lib/auth/backend-sso";
 import { useAudit } from "@/lib/data/hooks";
 import type { AuditEvent } from "@/lib/data/types";
 import type { RoleId } from "@/lib/rbac/roles";
@@ -67,13 +68,11 @@ export function useAuditEntries(): { entries: AuditEvent[]; loading: boolean; er
     if (!backendSsoEnabled) return;
     let cancelled = false;
     (async () => {
-      const token = await validAccessToken();
-      const headers = token ? undefined : devHeaders();
       const all: AuditEvent[] = [];
       let total = 0;
       try {
         do {
-          const page = await apiCall<BackendAuditPage>(`/audit?skip=${all.length}`, { headers }, token ?? undefined);
+          const page = await identityCall<BackendAuditPage>(`/audit?skip=${all.length}`);
           total = page.total;
           all.push(...page.entries.map(toEvent));
           if (page.entries.length === 0) break;
@@ -95,17 +94,4 @@ export function useAuditEntries(): { entries: AuditEvent[]; loading: boolean; er
 
   const entries = useMemo(() => [...remote, ...local].sort((a, b) => b.at.localeCompare(a.at)), [remote, local]);
   return { entries, loading, error, backendTotal };
-}
-
-/** Development identity for sign-ins by role (same headers the data store uses; TD-953). */
-function devHeaders(): Record<string, string> | undefined {
-  if (process.env.NEXT_PUBLIC_BACKEND_DEV_IDENTITY !== "true") return undefined;
-  try {
-    const session = JSON.parse(sessionStorage.getItem("credigit.ser.session") ?? "null") as { state?: { user?: { id: string; name: string; email: string }; roleId?: string } } | null;
-    const user = session?.state?.user;
-    if (!user || !session?.state?.roleId) return undefined;
-    return { "X-Dev-User": user.id, "X-Dev-Name": user.name, "X-Dev-Email": user.email, "X-Dev-Tenant": process.env.NEXT_PUBLIC_BACKEND_DEV_TENANT ?? "", "X-Dev-Roles": session.state.roleId };
-  } catch {
-    return undefined;
-  }
 }
