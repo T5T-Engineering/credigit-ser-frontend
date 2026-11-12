@@ -32,7 +32,7 @@ export function BoardPackPage() {
     <ModulePage
       module="executive"
       title="Board Risk Committee pack"
-      description="Pack builder for the Board Risk Committee (§6.6.6, §6.11): sections pulled from each module, the signed-off executive summary, and approval for issue through the Operations workflow."
+      description="Pack builder for the Board Risk Committee: sections pulled from each module, the signed-off executive summary, and approval for issue through the Operations workflow."
       actions={
         <Button as={Link} href="/executive" variant="tertiary" size="small">
           Back to executive view

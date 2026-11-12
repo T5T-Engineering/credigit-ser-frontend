@@ -115,7 +115,7 @@ export function ProfilePage() {
                     { label: "Signed in", value: signedInAt ? `${dateTime(signedInAt)} (${ago(signedInAt)})` : "—" },
                     { label: "This device", value: device },
                     { label: "Session rules", value: `Signs out after ${security.sessionTimeoutMin} minutes idle, with a ${warningSeconds}-second warning. Closing the tab ends the session.` },
-                    { label: "Step-up authentication", value: `Required to approve amounts above ${moneyShort(stepUp)} (PRD §4.2).` },
+                    { label: "Step-up authentication", value: `Required to approve amounts above ${moneyShort(stepUp)}.` },
                   ]}
                 />
                 <Text variant="caption" tone="subtle">

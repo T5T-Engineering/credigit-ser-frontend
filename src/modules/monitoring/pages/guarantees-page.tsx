@@ -196,7 +196,7 @@ export function GuaranteesPage() {
   const todOverdue = tods.filter((t) => t.status === "Regularisation overdue" || t.status.startsWith("Classified"));
 
   return (
-    <ModulePage module="monitoring" description="Advance payment guarantees, temporary overdrafts and collateral monitoring (PRD §6.4.2).">
+    <ModulePage module="monitoring" description="Advance payment guarantees, temporary overdrafts and collateral monitoring.">
       <Stack gap="large">
         {notice && (
           <Alert
@@ -254,7 +254,7 @@ export function GuaranteesPage() {
                 <Stack gap="medium">
                   <Text variant="small" tone="muted">
                     Perfection status, revaluation due-dates and insurance currency for every collateral securing a live facility. Share-backed collateral is tracked on its SEC/CSCS mark-to-market
-                    value and lien status, not a periodic manual revaluation (PRD §5.7). Fixed-asset revaluation rules per CBN 3.11 apply to the bank’s own premises.
+                    value and lien status, not a periodic manual revaluation. Fixed-asset revaluation rules per CBN 3.11 apply to the bank’s own premises.
                   </Text>
                   <DataTable label="Collateral monitoring alerts" data={alerts} columns={alertCols} getRowId={(a) => a.id} searchable density="compact" filters={[{ id: "kind", label: "Alert", columnId: "kind" }]} exportFilename="collateral-alerts.csv" emptyState={<EmptyState title="No collateral alerts" />} />
                 </Stack>

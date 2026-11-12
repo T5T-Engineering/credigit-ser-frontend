@@ -67,7 +67,7 @@ function AiFrame({ description, children }: { description: string; children: (sc
       <PermissionGate
         allowed={!!scope}
         title="Restricted to designated power users"
-        description={`The natural-language query console is open only to ${roleNames(allowed)} (PRD §6.13). AI-drafted and AI-flagged items for your role appear in the module you work in.`}
+        description={`The natural-language query console is open only to ${roleNames(allowed)}. AI-drafted and AI-flagged items for your role appear in the module you work in.`}
       >
         {scope && children(scope)}
       </PermissionGate>
@@ -174,7 +174,7 @@ function Console({ scope }: { scope: QueryScope }) {
       <Stack gap="large" className="min-w-0 lg:col-span-8">
         <SubmitOutcome result={saveOutcome} />
         {scope === "platform" && (
-          <Alert tone="info" title="Platform scope">Your queries are limited to platform-health and configuration data — never customer-identifiable financial detail — unless separately entitled (§6.13).</Alert>
+          <Alert tone="info" title="Platform scope">Your queries are limited to platform-health and configuration data — never customer-identifiable financial detail — unless separately entitled.</Alert>
         )}
         {conversation.length === 0 ? (
           <Stack gap="medium">
@@ -455,7 +455,7 @@ function ActivityTab() {
   return (
     <Stack gap="large" className="pt-2">
       <Alert tone="info" title="Human sign-off before any workflow effect">
-        AI output is always labelled AI-drafted or AI-flagged, is fully editable, and needs the accountable role’s sign-off — the AI never auto-approves a credit decision or auto-books a provisioning entry (§6.12).
+        AI output is always labelled AI-drafted or AI-flagged, is fully editable, and needs the accountable role’s sign-off — the AI never auto-approves a credit decision or auto-books a provisioning entry.
       </Alert>
       <SubmitOutcome result={outcome} appliedText="Recorded through the Operations workflow (no extra approval steps configured)." />
       <Grid columns={{ base: 1, sm: 3 }} gap="medium">
@@ -514,7 +514,7 @@ function QueryLogTab() {
             ]}
           />
         </div>
-        <DataTable label="Query log" caption="Every query is also written to the immutable audit trail (§10.1)." columns={logCols} data={[...history].reverse()} getRowId={(h) => h.id} searchable searchPlaceholder="Search questions" filters={[{ id: "status", label: "Outcome" }]} exportFilename="nlq-query-log.csv" emptyState={<EmptyState icon={<Bot aria-hidden />} title="No queries yet" description="Ask a question in the console." />} />
+        <DataTable label="Query log" caption="Every query is also written to the immutable audit trail." columns={logCols} data={[...history].reverse()} getRowId={(h) => h.id} searchable searchPlaceholder="Search questions" filters={[{ id: "status", label: "Outcome" }]} exportFilename="nlq-query-log.csv" emptyState={<EmptyState icon={<Bot aria-hidden />} title="No queries yet" description="Ask a question in the console." />} />
       </div>
       <Card>
         <CardHeader>

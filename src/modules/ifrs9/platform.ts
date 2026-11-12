@@ -39,51 +39,51 @@ const days = (key: string, label: string, category: string, def: number, source:
 
 defineRules([
   // PD calibration (§6.7.2 — demo calibration until the model register supplies it)
-  ...PD_SCALE.map((v, i) => num(`pd.grade${i + 1}`, `12-month PD — grade ${i + 1}`, "PD calibration", v, `PRD §6.7.2 — PD master scale (${DEMO})`, { min: 0, max: 1, step: 0.0001, description: `Through-the-cycle 12-month PD for internal risk grade ${i + 1}.` })),
-  ...Object.entries(SECTOR_MULTIPLIER_DEFAULTS).map(([id, v]) => num(`pdMultiplier.sector.${id}`, `Sector PD multiplier — ${id}`, "PD calibration", v, `PRD §6.7.2 segmentation by sector (${DEMO})`, { min: 0.1, max: 5, step: 0.05, unit: "×" })),
-  ...POSTURES.map((p, i) => num(`pdMultiplier.posture.${p}`, `360 RAR posture PD multiplier — ${p}`, "PD calibration", POSTURE_DEFAULTS[i]!, `PRD §6.7.2 segmentation by 360 RAR posture (${DEMO})`, { min: 0.1, max: 5, step: 0.05, unit: "×" })),
+  ...PD_SCALE.map((v, i) => num(`pd.grade${i + 1}`, `12-month PD — grade ${i + 1}`, "PD calibration", v, `PD master scale (${DEMO})`, { min: 0, max: 1, step: 0.0001, description: `Through-the-cycle 12-month PD for internal risk grade ${i + 1}.` })),
+  ...Object.entries(SECTOR_MULTIPLIER_DEFAULTS).map(([id, v]) => num(`pdMultiplier.sector.${id}`, `Sector PD multiplier — ${id}`, "PD calibration", v, `segmentation by sector (${DEMO})`, { min: 0.1, max: 5, step: 0.05, unit: "×" })),
+  ...POSTURES.map((p, i) => num(`pdMultiplier.posture.${p}`, `360 RAR posture PD multiplier — ${p}`, "PD calibration", POSTURE_DEFAULTS[i]!, `segmentation by 360 RAR posture (${DEMO})`, { min: 0.1, max: 5, step: 0.05, unit: "×" })),
   num("pd.floor", "PD floor", "PD calibration", 0.0005, DEMO, { min: 0, max: 0.1, step: 0.0001, description: "Minimum 12-month PD applied." }),
   num("pd.cap", "PD cap (performing)", "PD calibration", 0.95, DEMO, { min: 0.1, max: 1, step: 0.01, description: "Maximum 12-month PD for performing exposures." }),
   num("pd.minTenorYears", "Minimum tenor for PD term structure", "PD calibration", 0.25, DEMO, { min: 0, max: 5, step: 0.05, unit: "years" }),
   ...MACRO.flatMap((s) => [
-    pctRule(`fli.${s.id}.weight`, `Macro scenario weight — ${s.name}`, "Forward-looking overlay", s.weight, `PRD §6.7.2 / §5.5 external data feed (${DEMO})`, { description: "Probability weight of the scenario; weights should sum to 100%." }),
-    num(`fli.${s.id}.pdFactor`, `Macro scenario PD factor — ${s.name}`, "Forward-looking overlay", s.pdFactor, `PRD §6.7.2 (${DEMO})`, { min: 0.1, max: 5, step: 0.01, unit: "×" }),
+    pctRule(`fli.${s.id}.weight`, `Macro scenario weight — ${s.name}`, "Forward-looking overlay", s.weight, `external data feed (${DEMO})`, { description: "Probability weight of the scenario; weights should sum to 100%." }),
+    num(`fli.${s.id}.pdFactor`, `Macro scenario PD factor — ${s.name}`, "Forward-looking overlay", s.pdFactor, `(${DEMO})`, { min: 0.1, max: 5, step: 0.01, unit: "×" }),
   ]),
   // LGD / EAD
   pctRule("lgd.floor", "LGD floor", "LGD & EAD", 10, DEMO),
   pctRule("lgd.unsecuredCap", "LGD cap (performing)", "LGD & EAD", 75, DEMO, { description: "Upper bound on LGD for Stage 1/2 exposures." }),
-  pctRule("lgd.recoveryRate", "Collateral recovery after work-out", "LGD & EAD", 85, `PRD §6.7.2 work-out recovery (${DEMO})`, { description: "Share of haircut-adjusted collateral value recovered after time-to-recover and work-out cost." }),
-  pctRule("ccf.revolving", "CCF — overdraft / revolving undrawn limit", "LGD & EAD", 75, `PRD §6.7.2 undrawn-limit CCF (${DEMO})`),
-  pctRule("ccf.guarantee", "CCF — guarantees (transaction-related contingencies)", "LGD & EAD", 50, "PRD §9.1 CCF category"),
+  pctRule("lgd.recoveryRate", "Collateral recovery after work-out", "LGD & EAD", 85, `work-out recovery (${DEMO})`, { description: "Share of haircut-adjusted collateral value recovered after time-to-recover and work-out cost." }),
+  pctRule("ccf.revolving", "CCF — overdraft / revolving undrawn limit", "LGD & EAD", 75, `undrawn-limit CCF (${DEMO})`),
+  pctRule("ccf.guarantee", "CCF — guarantees (transaction-related contingencies)", "LGD & EAD", 50, "CCF category"),
   days("accrual.dpdCap", "Accrued-interest DPD cap", "LGD & EAD", 90, DEMO, { description: "Accrued interest counts at most this many days past due." }),
   days("accrual.windowDays", "Accrued-interest window", "LGD & EAD", 30, DEMO, { description: "Days of current-period accrual added to EAD." }),
   num("usdNgnSpot", "USD/NGN spot rate", "LGD & EAD", 1535, `Rules & Parameters Engine spot-rate feed (${DEMO})`, { type: "money", unit: "₦ per US$", min: 1, max: 100000 }),
   // Staging & SICR (§6.7.1)
-  days("stage2DpdTrigger", "Stage 2 DPD backstop", "Staging & SICR", 30, "PRD §6.7.1 (Watchlist typically 30–89 days)"),
-  days("stage3DpdTrigger", "Stage 3 default definition (DPD)", "Staging & SICR", 90, "PRD §6.7.1 (Sub-Standard 90–179 days)"),
+  days("stage2DpdTrigger", "Stage 2 DPD backstop", "Staging & SICR", 30, "(Watchlist typically 30–89 days)"),
+  days("stage3DpdTrigger", "Stage 3 default definition (DPD)", "Staging & SICR", 90, "(Sub-Standard 90–179 days)"),
   num("sicr.gradeTrigger", "SICR risk-grade trigger", "Staging & SICR", 7, DEMO, { min: 1, max: 10, description: "Internal grade at or above which SICR is flagged (proxy for downgrade since origination)." }),
   num("sicr.notchDowngrade", "SICR notch downgrade", "Staging & SICR", 3, DEMO, { min: 1, max: 9, unit: "notches" }),
-  { key: "ifrs9.sicr.watchlistTrigger", label: "SICR — Loan Review watchlist flag", description: "Obligors on the watchlist move to Stage 2.", module: M, category: "Staging & SICR", type: "boolean", default: true, source: "PRD §6.7.1 qualitative triggers" },
-  { key: "ifrs9.sicr.defensiveTrigger", label: "SICR — Defensive 360 RAR posture", description: "Obligors whose posture moved to Defensive are flagged.", module: M, category: "Staging & SICR", type: "boolean", default: true, source: `PRD §6.2.5 (${DEMO})` },
+  { key: "ifrs9.sicr.watchlistTrigger", label: "SICR — Loan Review watchlist flag", description: "Obligors on the watchlist move to Stage 2.", module: M, category: "Staging & SICR", type: "boolean", default: true, source: "qualitative triggers" },
+  { key: "ifrs9.sicr.defensiveTrigger", label: "SICR — Defensive 360 RAR posture", description: "Obligors whose posture moved to Defensive are flagged.", module: M, category: "Staging & SICR", type: "boolean", default: true, source: `(${DEMO})` },
   // CBN prudential provisioning (§6.7.1, §6.7.3)
-  pctRule("cbn.generalProvisionRate", "CBN general provision (performing)", "CBN provisioning", 1, `PRD §6.7.1 — general provision (${DEMO})`),
-  pctRule("cbn.generalProvisionCapRwa", "General provision cap (% of RWA)", "CBN provisioning", 1.25, "PRD §6.7.1 (CBN 3.16(d))"),
-  pctRule("cbn.substandardRate", "Specific provision — Sub-Standard", "CBN provisioning", 10, "PRD §6.7.1 (CBN 12.2(a)(2)(i))"),
-  pctRule("cbn.doubtfulRate", "Specific provision — Doubtful", "CBN provisioning", 50, "PRD §6.7.1 (CBN 12.2(a)(2)(ii))"),
-  pctRule("cbn.lostRate", "Specific provision — Lost", "CBN provisioning", 100, "PRD §6.7.1 (CBN 12.2(a)(2)(iii))"),
-  days("cbn.dpd.watchlist", "CBN Watchlist from (DPD)", "CBN provisioning", 30, "PRD §6.7.1"),
-  days("cbn.dpd.substandard", "CBN Sub-Standard from (DPD)", "CBN provisioning", 90, "PRD §6.7.1"),
-  days("cbn.dpd.doubtful", "CBN Doubtful from (DPD)", "CBN provisioning", 180, "PRD §6.7.1"),
-  days("cbn.dpd.lost", "CBN Lost from (DPD)", "CBN provisioning", 360, "PRD §6.7.1"),
-  pctRule("cbn.haircut.cash", "Lost haircut weighting — cash / deposits", "CBN provisioning", 0, "PRD §6.7.3 (CBN 12.13(a)(5))"),
-  pctRule("cbn.haircut.quotedShares", "Lost haircut weighting — quoted equities", "CBN provisioning", 20, "PRD §6.7.3 (CBN 12.13(a)(5))"),
-  pctRule("cbn.haircut.legalMortgage", "Lost haircut weighting — legal mortgage", "CBN provisioning", 50, "PRD §6.7.3 (CBN 12.13(a)(5))"),
-  days("cbn.haircutLapseDays", "Haircut adjustment lapses after (in Lost)", "CBN provisioning", 365, "PRD §6.7.3 (CBN 12.13(b)(3)-(4): max 1 year)"),
+  pctRule("cbn.generalProvisionRate", "CBN general provision (performing)", "CBN provisioning", 1, `general provision (${DEMO})`),
+  pctRule("cbn.generalProvisionCapRwa", "General provision cap (% of RWA)", "CBN provisioning", 1.25, "(CBN 3.16(d))"),
+  pctRule("cbn.substandardRate", "Specific provision — Sub-Standard", "CBN provisioning", 10, "(CBN 12.2(a)(2)(i))"),
+  pctRule("cbn.doubtfulRate", "Specific provision — Doubtful", "CBN provisioning", 50, "(CBN 12.2(a)(2)(ii))"),
+  pctRule("cbn.lostRate", "Specific provision — Lost", "CBN provisioning", 100, "(CBN 12.2(a)(2)(iii))"),
+  days("cbn.dpd.watchlist", "CBN Watchlist from (DPD)", "CBN provisioning", 30, "Platform default"),
+  days("cbn.dpd.substandard", "CBN Sub-Standard from (DPD)", "CBN provisioning", 90, "Platform default"),
+  days("cbn.dpd.doubtful", "CBN Doubtful from (DPD)", "CBN provisioning", 180, "Platform default"),
+  days("cbn.dpd.lost", "CBN Lost from (DPD)", "CBN provisioning", 360, "Platform default"),
+  pctRule("cbn.haircut.cash", "Lost haircut weighting — cash / deposits", "CBN provisioning", 0, "(CBN 12.13(a)(5))"),
+  pctRule("cbn.haircut.quotedShares", "Lost haircut weighting — quoted equities", "CBN provisioning", 20, "(CBN 12.13(a)(5))"),
+  pctRule("cbn.haircut.legalMortgage", "Lost haircut weighting — legal mortgage", "CBN provisioning", 50, "(CBN 12.13(a)(5))"),
+  days("cbn.haircutLapseDays", "Haircut adjustment lapses after (in Lost)", "CBN provisioning", 365, "(CBN 12.13(b)(3)-(4): max 1 year)"),
   // Declassification (§6.7.5)
-  days("cure.stage3DpdThreshold", "Stage 3 → 2: arrears cured below", "Declassification", 90, "PRD §6.7.5 — configurable DPD threshold (demo default)"),
-  num("cure.periods", "Cure period (consecutive timely repayments)", "Declassification", 3, "PRD §6.7.5 — configurable cure period (demo default)", { min: 1, max: 24, unit: "periods" }),
-  num("cure.stage2ProbationMonths", "Stage 2 → 1 probation", "Declassification", 3, "PRD §6.7.5 — configurable probation (demo default)", { min: 0, max: 36, unit: "months" }),
-  num("cure.restructuredProbationMonths", "Restructured / modified probation", "Declassification", 12, "PRD §6.7.5 — configurable probation (demo default)", { min: 0, max: 60, unit: "months" }),
+  days("cure.stage3DpdThreshold", "Stage 3 → 2: arrears cured below", "Declassification", 90, "configurable DPD threshold (demo default)"),
+  num("cure.periods", "Cure period (consecutive timely repayments)", "Declassification", 3, "configurable cure period (demo default)", { min: 1, max: 24, unit: "periods" }),
+  num("cure.stage2ProbationMonths", "Stage 2 → 1 probation", "Declassification", 3, "configurable probation (demo default)", { min: 0, max: 36, unit: "months" }),
+  num("cure.restructuredProbationMonths", "Restructured / modified probation", "Declassification", 12, "configurable probation (demo default)", { min: 0, max: 60, unit: "months" }),
   num("cure.watchlistExtraPeriods", "Extra timely periods while on watchlist", "Declassification", 3, DEMO, { min: 0, max: 24, unit: "periods" }),
   {
     key: "ifrs9.cure.suspendedInterestPolicy",
@@ -97,10 +97,10 @@ defineRules([
       { value: "On cash receipt", label: "On cash receipt" },
       { value: "On declassification", label: "On declassification" },
     ],
-    source: "PRD §6.7.5 — tenant policy",
+    source: "tenant policy",
   },
   // Model governance
-  num("model.reviewIntervalMonths", "Model refresh interval", "Model governance", 12, "PRD §6.7.2 (CBN 12.15: at least annually)", { min: 1, max: 12, unit: "months" }),
+  num("model.reviewIntervalMonths", "Model refresh interval", "Model governance", 12, "(CBN 12.15: at least annually)", { min: 1, max: 12, unit: "months" }),
   // ICAAP (§6.7.4, §9.1)
   {
     key: "ifrs9.icaap.licenceCategory",
@@ -114,20 +114,20 @@ defineRules([
       { value: "other", label: "Other banks" },
       { value: "international", label: "International / SIB" },
     ],
-    source: "PRD §9.1 / §6.7.4 — tenant licence category",
+    source: "tenant licence category",
   },
-  pctRule("icaap.minCarOther", "Minimum CAR — other banks", "ICAAP — capital adequacy", 10, "PRD §9.1"),
-  pctRule("icaap.minCarInternational", "Minimum CAR — international / SIB", "ICAAP — capital adequacy", 15, "PRD §9.1"),
-  pctRule("icaap.tier2CapPctOfTier1", "Tier 2 cap (% of Tier 1)", "ICAAP — capital adequacy", 33.3333, "PRD §9.1 — one-third of Tier 1", { step: 0.0001 }),
-  pctRule("icaap.band.significantly", "Significantly under-capitalised below", "ICAAP — capital adequacy", 5, "PRD §6.7.4 (CBN 3.16(f)-(g))"),
-  pctRule("icaap.band.critically", "Critically under-capitalised below", "ICAAP — capital adequacy", 2, "PRD §6.7.4 (CBN 3.16(f)-(g))"),
+  pctRule("icaap.minCarOther", "Minimum CAR — other banks", "ICAAP — capital adequacy", 10, "Platform default"),
+  pctRule("icaap.minCarInternational", "Minimum CAR — international / SIB", "ICAAP — capital adequacy", 15, "Platform default"),
+  pctRule("icaap.tier2CapPctOfTier1", "Tier 2 cap (% of Tier 1)", "ICAAP — capital adequacy", 33.3333, "one-third of Tier 1", { step: 0.0001 }),
+  pctRule("icaap.band.significantly", "Significantly under-capitalised below", "ICAAP — capital adequacy", 5, "(CBN 3.16(f)-(g))"),
+  pctRule("icaap.band.critically", "Critically under-capitalised below", "ICAAP — capital adequacy", 2, "(CBN 3.16(f)-(g))"),
   pctRule("icaap.taxShield", "Tax shield on ECL increase", "ICAAP — capital adequacy", 30, DEMO),
   ...PILLAR2.map((p) => pctRule(`icaap.pillar2.${p.id}`, `Pillar 2 add-on — ${p.risk}`, "ICAAP — Pillar 2", p.def, `Tenant ICAAP policy (${DEMO})`, { description: `${p.basis}. % of RWA.`, max: 20 })),
   // Capital base demo calibration (GL connector not yet live) — TD in TECH-DEBT.md
-  pctRule("capital.rw.publicSector", "Risk weight — public sector", "ICAAP — capital base", 20, `PRD §9.1 risk weights (${DEMO})`, { max: 1250 }),
-  pctRule("capital.rw.retail", "Risk weight — retail", "ICAAP — capital base", 75, `PRD §9.1 risk weights (${DEMO})`, { max: 1250 }),
-  pctRule("capital.rw.defaulted", "Risk weight — Stage 3 / defaulted", "ICAAP — capital base", 150, `PRD §9.1 risk weights (${DEMO})`, { max: 1250 }),
-  pctRule("capital.rw.corporate", "Risk weight — other exposures", "ICAAP — capital base", 100, `PRD §9.1 risk weights (${DEMO})`, { max: 1250 }),
+  pctRule("capital.rw.publicSector", "Risk weight — public sector", "ICAAP — capital base", 20, `risk weights (${DEMO})`, { max: 1250 }),
+  pctRule("capital.rw.retail", "Risk weight — retail", "ICAAP — capital base", 75, `risk weights (${DEMO})`, { max: 1250 }),
+  pctRule("capital.rw.defaulted", "Risk weight — Stage 3 / defaulted", "ICAAP — capital base", 150, `risk weights (${DEMO})`, { max: 1250 }),
+  pctRule("capital.rw.corporate", "Risk weight — other exposures", "ICAAP — capital base", 100, `risk weights (${DEMO})`, { max: 1250 }),
   pctRule("capital.loanBookShareOfCreditRwa", "Loan book share of credit RWA", "ICAAP — capital base", 69, `Demo calibration until the GL connector is live (${DEMO})`, { min: 1 }),
   pctRule("capital.marketRwaPct", "Market RWA (% of credit RWA)", "ICAAP — capital base", 8, `Demo calibration (${DEMO})`),
   pctRule("capital.operationalRwaPct", "Operational RWA (% of credit RWA)", "ICAAP — capital base", 16, `Demo calibration (${DEMO})`),
@@ -138,7 +138,7 @@ defineRules([
   // ICAAP stress scenarios (§6.7.4)
   ...Object.entries(SCENARIO_DEFAULTS).flatMap(([id, values]) =>
     SCENARIO_FIELDS.map((f) =>
-      num(`scenario.${id}.${f.field}`, `${id[0]!.toUpperCase()}${id.slice(1)} scenario — ${f.label}`, "ICAAP — stress scenarios", values[f.field]!, `PRD §6.7.4 / §5.5 macro scenarios (${DEMO})`, {
+      num(`scenario.${id}.${f.field}`, `${id[0]!.toUpperCase()}${id.slice(1)} scenario — ${f.label}`, "ICAAP — stress scenarios", values[f.field]!, `macro scenarios (${DEMO})`, {
         unit: f.unit,
         min: f.min,
         max: f.max,
@@ -187,8 +187,8 @@ registerOperation<Declassification>({
   type: "ifrs9.declassification",
   name: "IFRS 9 declassification & write-back",
   module: M,
-  description: "Stage reversal with ECL and suspended-interest write-back (PRD §6.7.5). Proposed by Predictive Analytics, approved by the approving officer.",
-  defaultSteps: [step("approve", "Approving officer (§6.4.4)", ["head-of-risk", "cro"], 48)],
+  description: "Stage reversal with ECL and suspended-interest write-back. Proposed by Predictive Analytics, approved by the approving officer.",
+  defaultSteps: [step("approve", "Approving officer", ["head-of-risk", "cro"], 48)],
   apply: async (d, { instance, actor }) => {
     const hook = await runHooks("ifrs9.declassification.apply.before", { declassification: d, actor });
     if (!hook.ok) {
@@ -230,7 +230,7 @@ registerOperation<ModelApprovalPayload>({
   type: "ifrs9.model.approval",
   name: "PD / LGD / EAD model version approval",
   module: M,
-  description: "Model change governance: submitted by the model owner, independently validated, then approved for production (PRD §6.7.2, CBN 12.15).",
+  description: "Model change governance: submitted by the model owner, independently validated, then approved for production.",
   defaultSteps: [step("validate", "Independent validation (2nd line)", ["head-of-risk"], 120), step("approve", "Approval for production", ["cro"], 72)],
   apply: (p, { actor }) => {
     if (p.version !== p.currentVersion) useIfrs9.getState().setModelVersion(p.modelId, p.version);
@@ -254,7 +254,7 @@ registerOperation<Omit<ReservePosting, "id" | "at" | "by">>({
   type: "ifrs9.ecl.post",
   name: "Post ECL / regulatory-reserve entry to Finance",
   module: M,
-  description: "Prudential-vs-IFRS 9 reserve-transfer entry (CBN 12.4) posted to the Finance module after review (PRD §6.7.1).",
+  description: "Prudential-vs-IFRS 9 reserve-transfer entry (CBN 12.4) posted to the Finance module after review.",
   defaultSteps: [step("review", "Head of Risk review", ["head-of-risk"], 24), step("approve", "CRO approval", ["cro"], 24)],
   apply: async (p, { actor, instance }) => {
     const hook = await runHooks("ifrs9.reserve.post.before", { posting: p, actor });
@@ -278,7 +278,7 @@ registerOperation<ScenarioChangePayload>({
   type: "ifrs9.icaap.scenario.change",
   name: "ICAAP stress scenario change",
   module: M,
-  description: "Change macro shock severities of the ICAAP stress scenarios (PRD §6.7.4). Applied to the business rules on approval.",
+  description: "Change macro shock severities of the ICAAP stress scenarios. Applied to the business rules on approval.",
   defaultSteps: [step("review", "Head of Risk review", ["head-of-risk"], 48), step("approve", "CRO approval", ["cro"], 48)],
   apply: async (p, { actor, instance }) => {
     const hook = await runHooks("ifrs9.scenario.change.before", { ...p, actor });

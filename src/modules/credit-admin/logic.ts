@@ -348,9 +348,9 @@ export type CovenantRow = { id: string; title: string; category: string; status:
 export function covenantsFor(row: FacilityRow, clauses: Clause[]): CovenantRow[] {
   const { facility, letter, app, obligor } = row;
   const list: Array<{ id: string; title: string; category: string; source: string }> = letter
-    ? letterCovenants(letter, clauses).map((c) => ({ id: c.id, title: c.title, category: c.category, source: c.id.startsWith("SC-") ? "Tagged at origination (§6.1.5)" : "Offer letter (§7.3)" }))
-    : clauses.filter((c) => c.library === "general" && c.category === "Covenant").map((c) => ({ id: c.id, title: c.title, category: c.category, source: "Offer letter (§7.3)" }));
-  if (!letter && app) for (const t of app.covenants) list.push({ id: t, title: t, category: "Special covenant", source: "Tagged at origination (§6.1.5)" });
+    ? letterCovenants(letter, clauses).map((c) => ({ id: c.id, title: c.title, category: c.category, source: c.id.startsWith("SC-") ? "Tagged at origination" : "Offer letter" }))
+    : clauses.filter((c) => c.library === "general" && c.category === "Covenant").map((c) => ({ id: c.id, title: c.title, category: c.category, source: "Offer letter" }));
+  if (!letter && app) for (const t of app.covenants) list.push({ id: t, title: t, category: "Special covenant", source: "Tagged at origination" });
   const stress = facility.dpd >= 30 || obligor?.watchlist;
   return list.map((c) => {
     const r = rand(facility.id, c.id);

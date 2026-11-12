@@ -89,7 +89,7 @@ defineRules([
     min: 0,
     max: 100,
     step: 0.5,
-    source: "PRD §6.6.2 / §8 — large exposure at 10% of shareholders' funds",
+    source: "large exposure at 10% of shareholders' funds",
   },
 ]);
 

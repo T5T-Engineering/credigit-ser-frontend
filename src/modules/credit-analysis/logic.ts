@@ -388,7 +388,7 @@ export const postureGuidance: Record<Posture, { recommendation: string; talkingP
     recommendation:
       "Supports growth/expansion facilities, longer tenor, and higher single-obligor utilisation within limit; maintain momentum but require standard financial-reporting covenants to preserve visibility as exposure grows.",
     talkingPoints:
-      "This is a business and a sector both performing well. Where the customer is also expanding capacity, this is the moment to discuss additional facilities or better pricing for loyalty — but confirm the expansion request is proportionate to the industry's actual growth runway (§6.2.8), not just the customer's ambition.",
+      "This is a business and a sector both performing well. Where the customer is also expanding capacity, this is the moment to discuss additional facilities or better pricing for loyalty — but confirm the expansion request is proportionate to the industry's actual growth runway, not just the customer's ambition.",
   },
   Competitive: {
     recommendation:
@@ -398,13 +398,13 @@ export const postureGuidance: Record<Posture, { recommendation: string; talkingP
   },
   Conservative: {
     recommendation:
-      "Financially strong but operating in a less attractive or maturing/declining industry — favour capital preservation, selective/short-tenor facilities, and discourage large long-tenor expansion asks; a mandatory Credit Analyst note is required addressing why an expansion facility is justified if the industry life-cycle stage (§6.2.8) is Maturity or Decline.",
+      "Financially strong but operating in a less attractive or maturing/declining industry — favour capital preservation, selective/short-tenor facilities, and discourage large long-tenor expansion asks; a mandatory Credit Analyst note is required addressing why an expansion facility is justified if the industry life-cycle stage is Maturity or Decline.",
     talkingPoints:
       "This customer is a strong operator in a market that is not growing quickly. The right conversation is about protecting margin, diversification, or redeploying surplus cash — not aggressive capacity expansion in the existing line of business.",
   },
   Defensive: {
     recommendation:
-      "Mandatory CRO referral regardless of facility size; presumption against new/incremental exposure; existing exposure moves to enhanced monitoring (Loan Review, §6.4) with a remediation or exit plan requested from the obligor.",
+      "Mandatory CRO referral regardless of facility size; presumption against new/incremental exposure; existing exposure moves to enhanced monitoring (Loan Review) with a remediation or exit plan requested from the obligor.",
     talkingPoints:
       "This is a business under pressure in a difficult market. The advisory conversation should focus on early, honest engagement — restructuring options, additional security, or an orderly exit — rather than encouraging further borrowing.",
   },
@@ -414,13 +414,13 @@ export const overlayGuidance = {
   Strongly: "Proceed with the base posture's stance at full conviction; the advisory note is presented without a confidence caveat.",
   Moderately: "Proceed with the base posture's stance, but the position is not yet firmly entrenched and should be re-tested at the next 360 RAR refresh.",
   Marginally:
-    "Provisional: the Credit Analyst records which parameter(s) are closest to flipping the posture, and the front-office conversation is framed around the trend (§6.2.11) rather than the label itself.",
+    "Provisional: the Credit Analyst records which parameter(s) are closest to flipping the posture, and the front-office conversation is framed around the trend rather than the label itself.",
   "Internally-Led":
     "Centre the conversation on how the customer deploys its own balance-sheet capacity — expansion, dividend policy, working-capital efficiency — since its own financial position, not its market, is driving the posture.",
   "Externally-Led":
     "Centre the conversation on whether the customer's execution is keeping pace with its industry/competitive tailwind or headwind, since the external environment is driving the posture more than its own financials.",
   Neutral:
-    "No standard posture-driven stance is auto-generated; the Recommendation Engine requires a mandatory Credit Analyst narrative addressing why the request should proceed, referencing Comparative & Peer Benchmarking (§6.2.10) and Trend & Momentum (§6.2.11) insights in place of a posture label.",
+    "No standard posture-driven stance is auto-generated; the Recommendation Engine requires a mandatory Credit Analyst narrative addressing why the request should proceed, referencing Comparative & Peer Benchmarking and Trend & Momentum insights in place of a posture label.",
 } as const;
 
 /** Parameters with the most leverage to flip the posture across the nearest composite midpoint (for Marginal readings). */

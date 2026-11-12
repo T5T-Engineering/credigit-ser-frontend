@@ -144,7 +144,7 @@ export function WarrPage() {
   return (
     <ModulePage
       module="portfolio"
-      description="Weighted Average Risk Rating (§6.6.9) — rating quality as a single trendable number, always reported with its migration drivers, unrated bucket and Stage 3 treatment."
+      description="Weighted Average Risk Rating — rating quality as a single trendable number, always reported with its migration drivers, unrated bucket and Stage 3 treatment."
       actions={
         <SegmentedControl
           label="Exposure weighting basis"
@@ -160,7 +160,7 @@ export function WarrPage() {
     >
       <Stack gap="large">
         <Alert tone={status === "Within appetite" ? "info" : status === "Early warning" ? "warning" : "danger"} title={`WARR ${w.warr.toFixed(2)} — ${status.toLowerCase()} (ceiling ${p.warrCeiling.value.toFixed(1)}, early warning ${p.warrEarlyWarning.value.toFixed(1)} — demo Board appetite)`}>
-          Computation basis stamped on this view: weighting = {basis === "ccf" ? "gross outstanding + undrawn/contingent × CCF (default, §9.1)" : "approved limit (selectable alternative)"}; grade-score table GST-2026.1 (demo: grade n = score n, 1 best – 10 worst); unrated reported separately; Stage 3 shown included and excluded.
+          Computation basis stamped on this view: weighting = {basis === "ccf" ? "gross outstanding + undrawn/contingent × CCF (default)" : "approved limit (selectable alternative)"}; grade-score table GST-2026.1 (demo: grade n = score n, 1 best – 10 worst); unrated reported separately; Stage 3 shown included and excluded.
         </Alert>
 
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
@@ -174,7 +174,7 @@ export function WarrPage() {
             calc={{
               metric: "WARR",
               formula: "WARR = Σ (exposure × grade score) / Σ rated exposure",
-              source: "Grade: internal rating per §6.2.7 (360 RAR composite + PD). Grade score: tenant grade-to-score table. Exposure: CBA outstanding + undrawn at CCF (or approved limit / EAD per the basis in force).",
+              source: "Grade: internal rating per (360 RAR composite + PD). Grade score: tenant grade-to-score table. Exposure: CBA outstanding + undrawn at CCF (or approved limit / EAD per the basis in force).",
               prd: "§6.6.9, §8",
               inputs: [
                 { label: "Rated exposure", value: money(w.ratedExposure) },
@@ -201,7 +201,7 @@ export function WarrPage() {
             value={moneyShort(w.unratedExposure)}
             hint={`${pct(w.unratedPct)} of book — not averaged in`}
             tone="neutral"
-            calc={{ metric: "unrated bucket", formula: "Σ exposure carrying no current internal grade", source: "Reported separately with value and % of book; above the tenant threshold it is a §6.4.4 exception.", prd: "§6.6.9" }}
+            calc={{ metric: "unrated bucket", formula: "Σ exposure carrying no current internal grade", source: "Reported separately with value and % of book; above the tenant threshold it is a exception.", prd: "§6.6.9" }}
           />
         </Grid>
 
@@ -225,7 +225,7 @@ export function WarrPage() {
           <Panel
             title="Why WARR moved"
             description={`Drivers of the move from ${dec.opening.toFixed(2)} (${openingLabel()}) to ${dec.closing.toFixed(2)} today.`}
-            calc={{ metric: "WARR decomposition", formula: "Opening → run-off (exposure change at opening grades) → migration (grade change, existing book) → new disbursements → write-offs/exits → closing", source: "Prior grades retained under §6.2.7 (prototype: opening grades synthesised deterministically).", prd: "§6.6.9" }}
+            calc={{ metric: "WARR decomposition", formula: "Opening → run-off (exposure change at opening grades) → migration (grade change, existing book) → new disbursements → write-offs/exits → closing", source: "Prior grades retained under (prototype: opening grades synthesised deterministically).", prd: "§6.6.9" }}
           >
             <WaterfallChart
               label="WARR movement decomposition"
@@ -272,7 +272,7 @@ export function WarrPage() {
 
         <Panel
           title="WARR by segment"
-          description="Every §6.6.4 dimension plus account officer and booking vintage. Flag = WARR deteriorating while exposure share grows (checked against the annual plan, §6.6.8). Select a row to drill through to obligors."
+          description="Every dimension plus account officer and booking vintage. Flag = WARR deteriorating while exposure share grows (checked against the annual plan). Select a row to drill through to obligors."
           actions={<Select aria-label="Segment dimension" size="small" value={dim} onChange={(e) => { setDim(e.target.value as Dimension); setSegment(null); }} options={dimensions} />}
         >
           <DataTable
@@ -298,7 +298,7 @@ export function WarrPage() {
         {segment ? (
           <Panel
             title={`Drill-through: ${segment}`}
-            description="Obligors producing this WARR — grade, exposure, weight and contribution, with the 360 RAR composite behind the grade (§6.6.9)."
+            description="Obligors producing this WARR — grade, exposure, weight and contribution, with the 360 RAR composite behind the grade."
             actions={<Button variant="tertiary" size="small" onClick={() => setSegment(null)}>Close</Button>}
           >
             <DataTable
@@ -322,7 +322,7 @@ export function WarrPage() {
         ) : null}
 
         <Grid columns={{ base: 1, lg: 2 }} gap="medium">
-          <Panel title={<span className="inline-flex items-center gap-2">Forward-looking WARR <PhaseBadge phase={2} /></span>} description="Projected WARR under each macro/sector scenario from the projection engine (§6.6.7).">
+          <Panel title={<span className="inline-flex items-center gap-2">Forward-looking WARR <PhaseBadge phase={2} /></span>} description="Projected WARR under each macro/sector scenario from the projection engine.">
             <DataTable
               label="Projected WARR by scenario"
               data={projectedWarr(w.warr)}

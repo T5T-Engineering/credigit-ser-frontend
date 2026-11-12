@@ -184,7 +184,7 @@ export function MarketRiskPage() {
     {
       metric: "VaR (99%, 1-day)",
       formula: "Historical simulation / parametric / Monte Carlo (tenant-configurable)",
-      sources: "Positions: Treasury/dealing system; price series: market-data feed (§5.5)",
+      sources: "Positions: Treasury/dealing system; price series: market-data feed",
       value: ms(totalVar),
       prd: "§6.8.1",
     },
@@ -581,7 +581,7 @@ export function MarketRiskPage() {
             <Stack gap="xsmall">
               <CardTitle>Limit breaches &amp; escalation</CardTitle>
               <CardDescription>
-                Escalated through the §6.4.4 protocol: {ladderRoles.map(roleName).join(" → ")}. Closure is approved in Operations. Visible on the CRO Dashboard (§6.11).
+                Escalated through the protocol: {ladderRoles.map(roleName).join(" → ")}. Closure is approved in Operations. Visible on the CRO Dashboard.
               </CardDescription>
             </Stack>
             <SegmentedControl

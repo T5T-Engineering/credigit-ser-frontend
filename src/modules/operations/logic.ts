@@ -196,7 +196,6 @@ export function ruleSummary(def: RuleDefinition, value: RuleValue, pending?: Ope
     unit: def.unit,
     options: ruleOptions(def),
     scope: def.requiresApproval === false ? { label: "Direct", tone: "warning" } : "Tenant",
-    source: def.source,
     pending: pending
       ? { formattedValue: formatValue(def, proposed), requestedBy: pending.requestedBy.name, requestedAt: dateTime(pending.requestedAt), href: `/operations/item?id=${pending.id}` }
       : undefined,

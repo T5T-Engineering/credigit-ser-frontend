@@ -291,7 +291,7 @@ export function CollateralItemPage() {
                       <CardHeader>
                         <div>
                           <CardTitle>Haircut-adjusted value</CardTitle>
-                          <CardDescription>PRD §6.7.3 — Required provision = Total exposure − {"{"}Value of collateral × (1 − Haircut weighting){"}"}</CardDescription>
+                          <CardDescription>Required provision = Total exposure − {"{"}Value of collateral × (1 − Haircut weighting){"}"}</CardDescription>
                         </div>
                       </CardHeader>
                       <DescriptionList
@@ -557,7 +557,7 @@ export function CollateralItemPage() {
                             Upload {files.length ? `(${files.length})` : ""}
                           </Button>
                           <Text variant="caption" tone="subtle" className="self-center">
-                            Every re-upload is kept as a new version (PRD §5.4).
+                            Every re-upload is kept as a new version.
                           </Text>
                         </Stack>
                       </Stack>
@@ -671,7 +671,7 @@ function ActionModal({ kind, collateralName, shares, onClose, onSubmit }: { kind
       <Stack gap="medium">
         {kind === "revalue" && (
           <>
-            {shares && <Alert tone="info">Phase 1: manual upload of CSCS share-statement / valuation evidence (PRD §5.7). Phase 2 refreshes automatically.</Alert>}
+            {shares && <Alert tone="info">Phase 1: manual upload of CSCS share-statement / valuation evidence. Phase 2 refreshes automatically.</Alert>}
             <Field label={shares ? "Mark-to-market value" : "Open market value"} htmlFor="m-mv" required>
               <Input id="m-mv" type="number" prefix="₦" value={v.mv ?? ""} onChange={set("mv")} />
             </Field>

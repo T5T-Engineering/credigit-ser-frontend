@@ -20,7 +20,7 @@ export const pipelineStages: { id: ApplicationStage; title: string; tone: Tone; 
   { id: "Analysis", title: "Analysis", tone: "info", description: "Financial-statement validation, COP Ratio, bureau / CRMS, 360 RAR" },
   { id: "Recommendation", title: "Recommendation", tone: "accent", description: "Recommendation engine and BDM concurrence" },
   { id: "Approval", title: "Approval", tone: "warning", description: "Co-signer chart-flow up to the required tier" },
-  { id: "Offer", title: "Offer", tone: "brand", description: "Offer letter generation and acceptance (§7)" },
+  { id: "Offer", title: "Offer", tone: "brand", description: "Offer letter generation and acceptance" },
   { id: "Conditions", title: "Conditions", tone: "brand", description: "Legal and Credit Administration conditions precedent" },
   { id: "Disbursement", title: "Disbursement", tone: "success", description: "Maker / Checker disbursement" },
   { id: "Booked", title: "Booked", tone: "success", description: "Facility booked on the CBA" },
@@ -200,7 +200,7 @@ export function runEngine(i: EngineInput): EngineOutput {
 // ---------------------------------------------------------------- Covenant tagging (PRD §6.1.5 → §7 libraries)
 
 export type CovenantContext = { product: ProductType; obligor: Obligor; tenorMonths: number; collateral: Pick<Collateral, "type">[]; position: RarPosition; variant?: string };
-export type LibraryClause = { id: string; library: "§7.1 Conditions precedent" | "§7.3 General covenants"; category: string; text: string; reason: string };
+export type LibraryClause = { id: string; library: "Conditions precedent" | "General covenants"; category: string; text: string; reason: string };
 
 const contingent: ProductType[] = ["Bank guarantee", "Advance payment guarantee"];
 const contractBased: ProductType[] = ["Bank guarantee", "Advance payment guarantee", "Invoice discounting", "Trade finance (LC)"];
@@ -212,26 +212,26 @@ export function tagCovenants(c: CovenantContext): LibraryClause[] {
   const add = (x: LibraryClause) => out.push(x);
   const corporate = c.obligor.type === "Corporate" || c.obligor.type === "Commercial" || c.obligor.type === "SME";
   const types = new Set(c.collateral.map((x) => x.type));
-  add({ id: "cp-request", library: "§7.1 Conditions precedent", category: "Documentation", text: "Submission of a formal request letter for the facility.", reason: "All facilities" });
-  add({ id: "cp-acceptance", library: "§7.1 Conditions precedent", category: "Documentation", text: "Signed acceptance of the bank's offer letter.", reason: "All facilities" });
-  add({ id: "cp-bureau", library: "§7.1 Conditions precedent", category: "Due diligence", text: "Receipt of a satisfactory CRMS / credit-bureau report on the company and its principal officers.", reason: "All facilities" });
-  if (corporate) add({ id: "cp-board", library: "§7.1 Conditions precedent", category: "Corporate authorisation", text: "Board Resolution authorising and accepting the offer letter and the pledge of security.", reason: `Obligor type: ${c.obligor.type}` });
-  if (contractBased.includes(c.product)) add({ id: "cp-contract", library: "§7.1 Conditions precedent", category: "Due diligence", text: "Copy of the underlying contract / purchase order / LPO for which the facility is granted.", reason: `Product: ${c.product}` });
-  if (contingent.includes(c.product)) add({ id: "cp-guarantee-agreement", library: "§7.1 Conditions precedent", category: "Guarantee / security", text: "Execution of a guarantee-issuance agreement for the contingent facility.", reason: `Contingent product: ${c.product}` });
+  add({ id: "cp-request", library: "Conditions precedent", category: "Documentation", text: "Submission of a formal request letter for the facility.", reason: "All facilities" });
+  add({ id: "cp-acceptance", library: "Conditions precedent", category: "Documentation", text: "Signed acceptance of the bank's offer letter.", reason: "All facilities" });
+  add({ id: "cp-bureau", library: "Conditions precedent", category: "Due diligence", text: "Receipt of a satisfactory CRMS / credit-bureau report on the company and its principal officers.", reason: "All facilities" });
+  if (corporate) add({ id: "cp-board", library: "Conditions precedent", category: "Corporate authorisation", text: "Board Resolution authorising and accepting the offer letter and the pledge of security.", reason: `Obligor type: ${c.obligor.type}` });
+  if (contractBased.includes(c.product)) add({ id: "cp-contract", library: "Conditions precedent", category: "Due diligence", text: "Copy of the underlying contract / purchase order / LPO for which the facility is granted.", reason: `Product: ${c.product}` });
+  if (contingent.includes(c.product)) add({ id: "cp-guarantee-agreement", library: "Conditions precedent", category: "Guarantee / security", text: "Execution of a guarantee-issuance agreement for the contingent facility.", reason: `Contingent product: ${c.product}` });
   if (c.product === "Advance payment guarantee" || c.product === "Overdraft" || (corporate && c.obligor.type === "SME"))
-    add({ id: "cp-pg", library: "§7.1 Conditions precedent", category: "Guarantee / security", text: "Full and unconditional personal guarantee of the principal officers, supported by a notarised statement of net worth.", reason: c.obligor.type === "SME" ? "SME obligor" : `Product: ${c.product}` });
+    add({ id: "cp-pg", library: "Conditions precedent", category: "Guarantee / security", text: "Full and unconditional personal guarantee of the principal officers, supported by a notarised statement of net worth.", reason: c.obligor.type === "SME" ? "SME obligor" : `Product: ${c.product}` });
   if (types.has("Legal mortgage") || types.has("Equitable mortgage") || c.product === "Mortgage")
-    add({ id: "cp-mortgage", library: "§7.1 Conditions precedent", category: "Legal perfection", text: "Execution and registration / perfection of a legal mortgage over the pledged property.", reason: "Mortgage collateral" });
-  if (types.has("Debenture")) add({ id: "cp-debenture", library: "§7.1 Conditions precedent", category: "Legal perfection", text: "Execution and registration of a debenture / floating charge over the company's assets.", reason: "Debenture collateral" });
-  if (types.has("Quoted shares")) add({ id: "cp-cscs", library: "§7.1 Conditions precedent", category: "Guarantee / security", text: "SEC / CSCS confirmation that pledged shares are registered, lien-marked to the bank and not pledged elsewhere.", reason: "Share-backed collateral" });
-  if ([...types].some((t) => physical.includes(t))) add({ id: "cov-insurance", library: "§7.3 General covenants", category: "Insurance", text: "Maintain satisfactory insurance on pledged assets with the bank's interest noted.", reason: "Physical collateral pledged" });
-  if (c.obligor.sectorId === "SEC-AGR") add({ id: "cp-agri-insurance", library: "§7.1 Conditions precedent", category: "Specialised loans", text: "Evidence of insurance of agricultural produce, where applicable.", reason: "Sector: Agriculture" });
-  add({ id: "cov-reporting", library: "§7.3 General covenants", category: "Financial reporting", text: "Audited accounts within six months of year-end and quarterly management accounts.", reason: "All facilities" });
+    add({ id: "cp-mortgage", library: "Conditions precedent", category: "Legal perfection", text: "Execution and registration / perfection of a legal mortgage over the pledged property.", reason: "Mortgage collateral" });
+  if (types.has("Debenture")) add({ id: "cp-debenture", library: "Conditions precedent", category: "Legal perfection", text: "Execution and registration of a debenture / floating charge over the company's assets.", reason: "Debenture collateral" });
+  if (types.has("Quoted shares")) add({ id: "cp-cscs", library: "Conditions precedent", category: "Guarantee / security", text: "SEC / CSCS confirmation that pledged shares are registered, lien-marked to the bank and not pledged elsewhere.", reason: "Share-backed collateral" });
+  if ([...types].some((t) => physical.includes(t))) add({ id: "cov-insurance", library: "General covenants", category: "Insurance", text: "Maintain satisfactory insurance on pledged assets with the bank's interest noted.", reason: "Physical collateral pledged" });
+  if (c.obligor.sectorId === "SEC-AGR") add({ id: "cp-agri-insurance", library: "Conditions precedent", category: "Specialised loans", text: "Evidence of insurance of agricultural produce, where applicable.", reason: "Sector: Agriculture" });
+  add({ id: "cov-reporting", library: "General covenants", category: "Financial reporting", text: "Audited accounts within six months of year-end and quarterly management accounts.", reason: "All facilities" });
   if (c.tenorMonths > 12 || c.position.base === "Defensive" || c.position.base === "Conservative")
-    add({ id: "cov-negative-pledge", library: "§7.3 General covenants", category: "Negative pledge", text: "No further mortgage, pledge or encumbrance over assets without the bank's prior written consent.", reason: c.tenorMonths > 12 ? `Tenor ${c.tenorMonths} months` : `360 RAR posture: ${c.position.base}` });
-  if (corporate && c.tenorMonths > 12) add({ id: "cov-merger", library: "§7.3 General covenants", category: "Merger / disposal", text: "No merger, consolidation or disposal of a substantial part of assets without the bank's consent.", reason: "Corporate obligor, tenor > 12 months" });
-  add({ id: "cov-cross-default", library: "§7.3 General covenants", category: "Cross-default", text: "A default on this facility is a default on all facilities to the obligor and related parties.", reason: "All facilities" });
-  if (c.position.base === "Defensive" || c.obligor.watchlist) add({ id: "cov-setoff", library: "§7.3 General covenants", category: "Right of set-off", text: "Bank may combine or set off any of the obligor's accounts against its liabilities.", reason: c.obligor.watchlist ? "Watchlist obligor" : "Defensive 360 RAR posture" });
+    add({ id: "cov-negative-pledge", library: "General covenants", category: "Negative pledge", text: "No further mortgage, pledge or encumbrance over assets without the bank's prior written consent.", reason: c.tenorMonths > 12 ? `Tenor ${c.tenorMonths} months` : `360 RAR posture: ${c.position.base}` });
+  if (corporate && c.tenorMonths > 12) add({ id: "cov-merger", library: "General covenants", category: "Merger / disposal", text: "No merger, consolidation or disposal of a substantial part of assets without the bank's consent.", reason: "Corporate obligor, tenor > 12 months" });
+  add({ id: "cov-cross-default", library: "General covenants", category: "Cross-default", text: "A default on this facility is a default on all facilities to the obligor and related parties.", reason: "All facilities" });
+  if (c.position.base === "Defensive" || c.obligor.watchlist) add({ id: "cov-setoff", library: "General covenants", category: "Right of set-off", text: "Bank may combine or set off any of the obligor's accounts against its liabilities.", reason: c.obligor.watchlist ? "Watchlist obligor" : "Defensive 360 RAR posture" });
   return out;
 }
 

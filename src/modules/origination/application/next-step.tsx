@@ -53,7 +53,7 @@ export function NextStepCard({ c, onOpenTab }: { c: AppCtx; onOpenTab: (tab: str
   switch (app.stage) {
     case "Draft": {
       title = "Draft — not yet submitted";
-      body = "Complete the request and submit it. It flows in parallel to the BDM and to Legal for collateral search (PRD §6.1.1, step 2).";
+      body = "Complete the request and submit it. It flows in parallel to the BDM and to Legal for collateral search.";
       const docsReady = gate("docs").status === "met";
       if (canEdit && isInitiatorRole)
         action = (
@@ -94,11 +94,11 @@ export function NextStepCard({ c, onOpenTab }: { c: AppCtx; onOpenTab: (tab: str
       if (isBreach(app.limitGate) && c.extra.exception?.decision !== "granted") {
         tone = "danger";
         title = `Blocked by the portfolio-limit gate — ${app.limitGate}`;
-        body = "Progression is blocked and the request is routed to the CRO / Board for an informed exception decision (PRD §6.1.5).";
+        body = "Progression is blocked and the request is routed to the CRO / Board for an informed exception decision.";
       } else if (status === "Approved") {
         tone = "success";
         title = "Fully approved";
-        body = "All required tiers have signed. Release the request to offer-letter generation (PRD §7).";
+        body = "All required tiers have signed. Release the request to offer-letter generation.";
         if (canEdit && inGroup("releasers", roleId))
           action = (
             <Button iconBefore={<FileSignature aria-hidden />} onClick={() => run(releaseToOffer(app.id), "Released to offer letter")}>
@@ -132,7 +132,7 @@ export function NextStepCard({ c, onOpenTab }: { c: AppCtx; onOpenTab: (tab: str
     case "Offer":
       tone = "success";
       title = "Approved — offer letter stage";
-      body = "The Account Officer presents the system-generated offer letter and collects acceptance documents (PRD §6.1.1, step 13).";
+      body = "The Account Officer presents the system-generated offer letter and collects acceptance documents.";
       action = (
         <Button as={Link} href={`/offer-letters/letter/?applicationId=${app.id}`} iconBefore={<FileSignature aria-hidden />}>
           Open offer letter
@@ -151,7 +151,7 @@ export function NextStepCard({ c, onOpenTab }: { c: AppCtx; onOpenTab: (tab: str
     case "Disbursement":
       tone = "success";
       title = "With Disbursement (Maker / Checker)";
-      body = "Segregation of duties: the initiator and recommender cannot act as Maker or Checker (PRD §4.2).";
+      body = "Segregation of duties: the initiator and recommender cannot act as Maker or Checker.";
       action = (
         <Button as={Link} href="/disbursement/" variant="tertiary" iconAfter={<ArrowRight aria-hidden />}>
           Disbursement

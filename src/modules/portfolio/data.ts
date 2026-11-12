@@ -177,7 +177,7 @@ export const macroVariables = [
   { id: "oil", variable: "Brent crude (US$/bbl) & production (mbpd)", source: "Global commodity-price feed", current: "$71 · 1.62", trend: "Softening", use: "Oil & gas cash flow; government-linked liquidity" },
   { id: "gdp", variable: "Real GDP growth (y/y)", source: "NBS", current: "3.6%", trend: "Improving", use: "Demand-side confirmation of Life-Cycle direction" },
   { id: "pmi", variable: "Purchasing Managers' Index", source: "CBN Business Expectations Survey", current: "52.3", trend: "Expansion", use: "Leading indicator for corporate/SME turning points" },
-  { id: "tb", variable: "364-day Treasury bill yield", source: "CBN / DMO", current: "19.8%", trend: "Easing", use: "HQLA valuation feeding §6.8 liquidity metrics" },
+  { id: "tb", variable: "364-day Treasury bill yield", source: "CBN / DMO", current: "19.8%", trend: "Easing", use: "HQLA valuation feeding liquidity metrics" },
 ];
 
 export type CyclePhase = "Expansion" | "Peak" | "Contraction" | "Trough";

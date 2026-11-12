@@ -22,7 +22,7 @@ defineRules([
     category: "Branding",
     type: "roles",
     default: ["system-admin"],
-    source: "PRD §4.1 (System Admin configures the tenant) — demo value",
+    source: "(System Admin configures the tenant) — demo value",
   },
   {
     key: "settings.brand.personalPreview",

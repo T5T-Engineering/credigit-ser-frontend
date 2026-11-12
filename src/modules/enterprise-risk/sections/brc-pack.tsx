@@ -68,7 +68,7 @@ export function BrcPackSection() {
       `Harbourline Bank remains within appetite on ${metrics.filter((m) => m.rag === "green").length} of ${metrics.length} Risk Appetite Statement metrics.`,
       breaches.length ? `Breaches requiring the Committee's attention:\n${breaches.map((m) => `- ${m.name}: ${fmtMetric(m, m.actual)} against appetite of ${m.direction === "max" ? "≤" : "≥"} ${fmtMetric(m, m.limit)} (owner: ${m.owner}).`).join("\n")}` : "No appetite breaches this period.",
       amber.length ? `Early-warning (Amber) metrics: ${amber.map((m) => m.name).join("; ")}.` : "",
-      `Operational risk: ${reds.length} KRI(s) in Red (${reds.map((k) => k.name).join(", ") || "none"}); escalations are running under the §6.4.4 protocol.`,
+      `Operational risk: ${reds.length} KRI(s) in Red (${reds.map((k) => k.name).join(", ") || "none"}); escalations are running under the protocol.`,
       breaches.length ? "Management recommends the Committee notes the breaches above and the remediation plans presented by the metric owners." : "Management recommends the Committee notes the scorecard.",
     ]
       .filter(Boolean)
@@ -141,7 +141,7 @@ export function BrcPackSection() {
       <Card className="lg:col-span-5">
         <CardHeader>
           <CardTitle>Board Risk Committee pack builder</CardTitle>
-          <CardDescription>Head of Risk compiles; the CRO approves before circulation (§6.11, §4.3)</CardDescription>
+          <CardDescription>Head of Risk compiles; the CRO approves before circulation</CardDescription>
         </CardHeader>
         <CardContent>
           <Stack gap="medium">

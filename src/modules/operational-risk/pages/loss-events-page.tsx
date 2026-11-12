@@ -156,7 +156,7 @@ export function LossEventsPage() {
 
         {largeOpen.length > 0 && (
           <Alert tone="warning" title={`${largeOpen.length} open event${largeOpen.length === 1 ? "" : "s"} above the single-event escalation threshold (${moneyShort(singleEvent)})`}>
-            Auto-escalated through the §6.4.4 protocol; events above {moneyShort(boardMateriality)} are notified to the Board Risk Committee.
+            Auto-escalated through the protocol; events above {moneyShort(boardMateriality)} are notified to the Board Risk Committee.
           </Alert>
         )}
 

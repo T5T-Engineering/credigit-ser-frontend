@@ -240,7 +240,7 @@ export function PastDuePage() {
             <CardHeader>
               <div>
                 <CardTitle>CBN days-past-due ladder</CardTitle>
-                <CardDescription>Outstanding exposure by ageing bucket. Performing → Non-Performing at {t.substandard}+ days (PRD §6.4.1, §6.7.1 — business rules).</CardDescription>
+                <CardDescription>Outstanding exposure by ageing bucket. Performing → Non-Performing at {t.substandard}+ days.</CardDescription>
               </div>
             </CardHeader>
             <StackedBarChart categories={ladder.map((b) => b.id)} series={ladderSeries} orientation="horizontal" valueFormatter={(v) => moneyShort(v)} label="Past-due exposure by DPD bucket" />

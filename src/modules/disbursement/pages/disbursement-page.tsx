@@ -196,7 +196,7 @@ export function DisbursementPage() {
           <StatCard label="Pending disbursement" value={String(queue.length)} hint={`${moneyShort(queue.reduce((s, q) => s + q.row.undisbursed, 0))} undisbursed`} icon={<Inbox aria-hidden />} />
           <StatCard label="Awaiting authorisation" value={String(awaiting.length)} hint={`${moneyShort(awaiting.reduce((s, d) => s + d.amount, 0))} prepared by Makers`} icon={<Clock aria-hidden />} tone="info" />
           <StatCard label="Authorised this month" value={moneyShort(authorisedMonth.reduce((s, d) => s + d.amount, 0))} hint={`${authorisedMonth.length} disbursements · ${DEMO_NOW.toLocaleString("en-NG", { month: "long", year: "numeric" })}`} icon={<Banknote aria-hidden />} tone="success" />
-          <StatCard label="Step-up threshold" value={moneyShort(stepUpThreshold)} hint="Business rule approvals.stepUpThresholdNgn (PRD §4.2). Above this the Checker re-authenticates." icon={<GaugeIcon aria-hidden />} tone="accent" />
+          <StatCard label="Step-up threshold" value={moneyShort(stepUpThreshold)} hint="Business rule approvals.stepUpThresholdNgn. Above this the Checker re-authenticates." icon={<GaugeIcon aria-hidden />} tone="accent" />
         </Grid>
 
         <Tabs
@@ -237,7 +237,7 @@ export function DisbursementPage() {
                     <CardHeader>
                       <CardTitle>Coming through — awaiting CP clearance</CardTitle>
                       <CardDescription>
-                        Applications at the Conditions stage (PRD §6.1.1 steps 14–15). They join the queue once Credit Administration releases the file.
+                        Applications at the Conditions stage (steps 14–15). They join the queue once Credit Administration releases the file.
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -503,7 +503,7 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
               <CardHeader>
                 <CardTitle>Prepare disbursement</CardTitle>
                 <CardDescription>
-                  {returned ? `Last request ${returned.id} was ${returned.status.toLowerCase()}${returned.comment ? `: “${returned.comment}”` : ""}. Correct and resubmit.` : "Execution only, within the approved facility amount (PRD §4.1)."}
+                  {returned ? `Last request ${returned.id} was ${returned.status.toLowerCase()}${returned.comment ? `: “${returned.comment}”` : ""}. Correct and resubmit.` : "Execution only, within the approved facility amount."}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -616,7 +616,7 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
             <CardHeader>
               <CardTitle>Segregation of duties</CardTitle>
               <CardDescription>
-                PRD §4.2: whoever initiated or recommended the facility can&apos;t be its Maker or Checker, and the Checker must be a different person from the Maker. Switching role from the user menu keeps you the same person — try it to see no-self-approval enforced.
+                whoever initiated or recommended the facility can&apos;t be its Maker or Checker, and the Checker must be a different person from the Maker. Switching role from the user menu keeps you the same person — try it to see no-self-approval enforced.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -629,7 +629,7 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
 
           <ChecklistPanel
             title="Conditions precedent to drawdown"
-            description="Confirmed by Credit Administration (PRD §6.1.1 step 15, §7.1). Approved deferrals count as cleared."
+            description="Confirmed by Credit Administration. Approved deferrals count as cleared."
             items={cpItems}
             action={
               <Button as={Link} href={`/credit-admin/facility/?id=${facility.id}`} size="small" variant="tertiary">

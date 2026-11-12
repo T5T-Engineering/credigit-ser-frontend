@@ -178,7 +178,7 @@ export function KriPage() {
         <SubmitOutcome result={outcome} appliedText="Applied — the workflow for this operation has no approval steps." />
         {reds.length > 0 && (
           <Alert tone="danger" title={`${reds.length} KRIs in Red — outside Board-approved tolerance`}>
-            {reds.map((k) => k.name).join(", ")}. Red readings run through the §6.4.4 escalation protocol ({levels.map((l) => roleNames(l.roles)).join(" → ")}).
+            {reds.map((k) => k.name).join(", ")}. Red readings run through the escalation protocol ({levels.map((l) => roleNames(l.roles)).join(" → ")}).
           </Alert>
         )}
 
@@ -194,7 +194,7 @@ export function KriPage() {
           <Card>
             <CardHeader>
               <CardTitle>RAG mix by indicator category</CardTitle>
-              <CardDescription>Count of KRIs per band, current month (§6.9.2 categories)</CardDescription>
+              <CardDescription>Count of KRIs per band, current month (by category)</CardDescription>
             </CardHeader>
             <CardContent>
               <StackedBarChart
@@ -213,7 +213,7 @@ export function KriPage() {
           <Card>
             <CardHeader>
               <CardTitle>Escalation standard</CardTitle>
-              <CardDescription>Amber raises Level 1; Red runs the full §6.4.4 protocol until cured — never a weaker standard than credit exceptions.</CardDescription>
+              <CardDescription>Amber raises Level 1; Red runs the full protocol until cured — never a weaker standard than credit exceptions.</CardDescription>
             </CardHeader>
             <CardContent>
               <Steps
@@ -291,7 +291,7 @@ export function KriPage() {
           <Card>
             <CardHeader>
               <CardTitle>KRI threshold governance</CardTitle>
-              <CardDescription>Threshold changes are business-rule changes routed through the Operations workflow (Head of Risk / CRO approval), versioned and audited (§6.9.1, §10.1).</CardDescription>
+              <CardDescription>Threshold changes are business-rule changes routed through the Operations workflow (Head of Risk / CRO approval), versioned and audited.</CardDescription>
             </CardHeader>
             <CardContent>
               <Stack gap="small">

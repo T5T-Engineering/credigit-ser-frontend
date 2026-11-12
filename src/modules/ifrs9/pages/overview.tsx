@@ -72,7 +72,7 @@ export function Ifrs9OverviewPage() {
   }, [rows]);
 
   const specs: CalcSpec[] = [
-    { metric: "Stage 1 ECL", formula: "12-month PD × LGD × EAD", sources: "PD/LGD/EAD per §6.7.2 source mapping (model register)", value: ms(stages[0]!.ecl), prd: "§8, §6.7.1" },
+    { metric: "Stage 1 ECL", formula: "12-month PD × LGD × EAD", sources: "PD/LGD/EAD per source mapping (model register)", value: ms(stages[0]!.ecl), prd: "§8, §6.7.1" },
     {
       metric: "Stage 2/3 ECL",
       formula: "Lifetime PD × LGD × EAD (Stage 3: PD = 100%, credit-adjusted)",
@@ -96,14 +96,14 @@ export function Ifrs9OverviewPage() {
     {
       metric: "LGD",
       formula: "1 − (perfected FSV or MTM × (1 − haircut) × work-out discount) / EAD",
-      sources: "Collateral register (§6.5); SEC/CSCS MTM for quoted shares (§5.7)",
+      sources: "Collateral register; SEC/CSCS MTM for quoted shares",
       prd: "§6.7.2",
     },
     { metric: "Coverage ratio", formula: "ECL / EAD × 100", sources: "Computed", value: pct((totalEcl / totalEad) * 100, 2) },
     {
       metric: "CBN prudential provision",
-      formula: `General ${pct(gpRate, 2)} on performing + specific ${specificRates} (Sub-Standard / Doubtful / Lost); Lost haircut-adjusted per §6.7.3`,
-      sources: "CBN classification from Loan Review (§6.4.1); collateral register",
+      formula: `General ${pct(gpRate, 2)} on performing + specific ${specificRates} (Sub-Standard / Doubtful / Lost); Lost haircut-adjusted per`,
+      sources: "CBN classification from Loan Review; collateral register",
       value: ms(prudential),
       prd: "§6.7.1, §6.7.3",
     },
@@ -171,7 +171,7 @@ export function Ifrs9OverviewPage() {
             <CardHeader>
               <Stack gap="xsmall">
                 <CardTitle>ECL by stage</CardTitle>
-                <CardDescription>12-month ECL for Stage 1; lifetime ECL for Stages 2 and 3 (§6.7.1).</CardDescription>
+                <CardDescription>12-month ECL for Stage 1; lifetime ECL for Stages 2 and 3.</CardDescription>
               </Stack>
               <CalcPopover spec={specs[0]!} />
             </CardHeader>
@@ -253,7 +253,7 @@ export function Ifrs9OverviewPage() {
               <Stack gap="xsmall">
                 <CardTitle>Prudential vs IFRS 9 reconciliation</CardTitle>
                 <CardDescription>
-                  CBN Prudential Guidelines §12.4 — both bases computed in parallel; the difference is posted to the non-distributable regulatory risk reserve.
+                  CBN Prudential Guidelines — both bases computed in parallel; the difference is posted to the non-distributable regulatory risk reserve.
                 </CardDescription>
               </Stack>
               <CalcPopover spec={specs[7]!} />
@@ -271,7 +271,7 @@ export function Ifrs9OverviewPage() {
                       mono: true,
                       hint: `${pct(gpRate, 2)} business rule; capped at ${pct(getRule<number>("ifrs9.cbn.generalProvisionCapRwa"), 2)} of RWA (CBN 3.16(d))`,
                     },
-                    { label: "of which specific", value: money(specificProv), mono: true, hint: `${specificRates}; Lost haircut-adjusted (§6.7.3)` },
+                    { label: "of which specific", value: money(specificProv), mono: true, hint: `${specificRates}; Lost haircut-adjusted` },
                     { label: "Difference (prudential − IFRS 9)", value: money(diff), mono: true },
                     { label: "Entry required", value: diff > 0 ? "Transfer to regulatory risk reserve" : "Release from regulatory risk reserve" },
                   ]}

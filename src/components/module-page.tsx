@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Badge, ModuleHeader, PermissionGate, Stack } from "@credigit/web-ui";
+import { ModuleHeader, PermissionGate, Stack } from "@credigit/web-ui";
 import { allNavItems } from "@/lib/nav";
 import type { ModuleKey } from "@/lib/rbac/roles";
 import { useCan } from "@/lib/auth/session";
@@ -37,7 +37,7 @@ export function ModulePage({ module, title, description, actions, hideTabs, chil
         title={title ?? item?.label}
         description={description}
         phase={item?.phase}
-        badges={item?.prd ? <Badge variant="outline">PRD {item.prd}</Badge> : undefined}
+        badges={undefined}
         actions={actions}
         tabs={tabs}
         activeTab={activeTab}

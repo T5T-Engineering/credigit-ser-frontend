@@ -7,7 +7,7 @@ import { Alert, TextLink } from "@credigit/web-ui";
 export function ConfigNotice({ canEdit }: { canEdit: boolean; regulatory?: boolean }) {
   return canEdit ? (
     <Alert tone="info" title="Changes go through Operations">
-      Tenant configuration (PRD §4.0, §10.4) applies without a code release, but every change is an approval request: a second person approves it in{" "}
+      Tenant configuration applies without a code release, but every change is an approval request: a second person approves it in{" "}
       <TextLink href="/operations" as={Link}>
         Operations → Approvals
       </TextLink>{" "}
@@ -15,7 +15,7 @@ export function ConfigNotice({ canEdit }: { canEdit: boolean; regulatory?: boole
     </Alert>
   ) : (
     <Alert tone="warning" title="View only">
-      Your role can see this configuration but can&apos;t request changes. Only the System Admin edits tenant configuration (PRD §10.4); your access is logged.
+      Your role can see this configuration but can&apos;t request changes. Only the System Admin edits tenant configuration; your access is logged.
     </Alert>
   );
 }

@@ -26,10 +26,10 @@ const MODULE = "offer-letters";
 
 // ---------------------------------------------------------------- business rules
 defineRules([
-  { key: "offer-letters.validityDaysDefault", label: "Acceptance validity (default)", description: "Days an issued offer stays open for acceptance under seal before it lapses.", module: MODULE, category: "Acceptance", type: "duration", durationUnit: "days", default: 7, min: 1, max: 90, source: "PRD §7.3 Acceptance Validity (commonly 7 days)" },
+  { key: "offer-letters.validityDaysDefault", label: "Acceptance validity (default)", description: "Days an issued offer stays open for acceptance under seal before it lapses.", module: MODULE, category: "Acceptance", type: "duration", durationUnit: "days", default: 7, min: 1, max: 90, source: "Acceptance Validity (commonly 7 days)" },
   { key: "offer-letters.validityDaysMin", label: "Acceptance validity — minimum", description: "Shortest validity Legal may set on a letter.", module: MODULE, category: "Acceptance", type: "duration", durationUnit: "days", default: 1, min: 1, max: 30, source: DEMO },
   { key: "offer-letters.validityDaysMax", label: "Acceptance validity — maximum", description: "Longest validity Legal may set on a letter.", module: MODULE, category: "Acceptance", type: "duration", durationUnit: "days", default: 90, min: 1, max: 365, source: DEMO },
-  { key: "offer-letters.noticeDays", label: "Notice period (merge field)", description: "Value merged into {{notice.days}} in clauses (e.g. share-cover top-up).", module: MODULE, category: "Merge fields", type: "duration", durationUnit: "days", default: 10, min: 1, max: 90, source: "PRD §7.3 build note (notice-period days as a merge field) — demo value" },
+  { key: "offer-letters.noticeDays", label: "Notice period (merge field)", description: "Value merged into {{notice.days}} in clauses (e.g. share-cover top-up).", module: MODULE, category: "Merge fields", type: "duration", durationUnit: "days", default: 10, min: 1, max: 90, source: "build note (notice-period days as a merge field) — demo value" },
   { key: "offer-letters.referencePrefix", label: "Letter reference prefix", description: "Prefix of generated offer-letter references (followed by year and sequence).", module: MODULE, category: "Generation", type: "text", default: "HLB/CAD/OL", source: DEMO },
   { key: "offer-letters.minClauseTextLength", label: "Minimum clause text", description: "Characters required for a new, bespoke or edited clause.", module: MODULE, category: "Clause library", type: "number", unit: "characters", default: 20, min: 1, max: 500, source: DEMO },
   { key: "offer-letters.insuranceWarningDays", label: "Insurance-expiry warning window", description: "Pre-release check flags collateral insurance expiring within this many days.", module: MODULE, category: "Pre-release checks", type: "duration", durationUnit: "days", default: 30, min: 1, max: 365, source: DEMO },
@@ -37,27 +37,27 @@ defineRules([
   {
     key: "offer-letters.contingentTemplateProducts",
     label: "Products using the contingent-facilities template",
-    description: "Products whose letters merge into the “Contingent facilities” house template (PRD §7.0 per product line).",
+    description: "Products whose letters merge into the “Contingent facilities” house template (per product line).",
     module: MODULE,
     category: "Generation",
     type: "list",
     default: ["Bank guarantee", "Advance payment guarantee"],
-    source: "PRD §7.0 — tenant product-line templates (demo value)",
+    source: "tenant product-line templates (demo value)",
   },
   {
     key: "offer-letters.unsecuredCollateralTypes",
     label: "Collateral types that don't make a facility “secured”",
-    description: "Used when auto-tagging clauses that apply to secured facilities (PRD §6.1.5).",
+    description: "Used when auto-tagging clauses that apply to secured facilities.",
     module: MODULE,
     category: "Auto-tagging",
     type: "list",
     default: ["Personal guarantee", "Corporate guarantee", "Domiciliation of proceeds"],
     source: DEMO,
   },
-  { key: "offer-letters.signoffRequesterRoles", label: "Who sends letters to Legal", description: "Roles that submit a letter for Legal sign-off & issue, or request a re-issue.", module: MODULE, category: "Roles", type: "roles", default: ["account-officer", "credit-admin-officer"], source: "PRD §6.1.1 steps 13–14 (Account Officer presents; Credit Admin) — demo mapping" },
-  { key: "offer-letters.legalEditorRoles", label: "Who edits clauses on a letter", description: "Roles that add, remove or edit clauses while the letter is in Legal review.", module: MODULE, category: "Roles", type: "roles", default: ["legal-officer"], source: "PRD §4.1 Legal Officer / §7" },
-  { key: "offer-letters.acceptanceRecorderRoles", label: "Who records customer acceptance", description: "Roles that record the signed duplicate and Memorandum of Acceptance.", module: MODULE, category: "Roles", type: "roles", default: ["account-officer", "credit-admin-officer", "legal-officer"], source: "PRD §6.1.1 step 13 — demo mapping" },
-  { key: "offer-letters.libraryEditorRoles", label: "Who proposes clause-library and template changes", description: "Roles that propose new clauses, wording changes, retirements and house-template versions.", module: MODULE, category: "Roles", type: "roles", default: ["legal-officer"], source: "PRD §7.0–7.3 (Legal approves the text)" },
+  { key: "offer-letters.signoffRequesterRoles", label: "Who sends letters to Legal", description: "Roles that submit a letter for Legal sign-off & issue, or request a re-issue.", module: MODULE, category: "Roles", type: "roles", default: ["account-officer", "credit-admin-officer"], source: "steps 13–14 (Account Officer presents; Credit Admin) — demo mapping" },
+  { key: "offer-letters.legalEditorRoles", label: "Who edits clauses on a letter", description: "Roles that add, remove or edit clauses while the letter is in Legal review.", module: MODULE, category: "Roles", type: "roles", default: ["legal-officer"], source: "Legal Officer /" },
+  { key: "offer-letters.acceptanceRecorderRoles", label: "Who records customer acceptance", description: "Roles that record the signed duplicate and Memorandum of Acceptance.", module: MODULE, category: "Roles", type: "roles", default: ["account-officer", "credit-admin-officer", "legal-officer"], source: "demo mapping" },
+  { key: "offer-letters.libraryEditorRoles", label: "Who proposes clause-library and template changes", description: "Roles that propose new clauses, wording changes, retirements and house-template versions.", module: MODULE, category: "Roles", type: "roles", default: ["legal-officer"], source: "7.3 (Legal approves the text)" },
 ]);
 
 // ---------------------------------------------------------------- helpers
@@ -92,7 +92,7 @@ registerOperation<LetterSignoffPayload>({
   type: "offer-letters.letter.signoff",
   name: "Offer letter — Legal sign-off & issue",
   module: MODULE,
-  description: "Legal approves the conditions and covenants text and releases the letter to the Account Officer for customer presentation (PRD §4.1, §6.1.1 step 13–14, §7). Also used to re-issue a lapsed offer.",
+  description: "Legal approves the conditions and covenants text and releases the letter to the Account Officer for customer presentation. Also used to re-issue a lapsed offer.",
   defaultSteps: [step("legal", "Legal sign-off", ["legal-officer"], 48)],
   apply: async (p, { instance, actor }) => {
     const letter = useOfferLetterStore.getState().letters[p.letterId] ?? p.snapshot;
@@ -132,7 +132,7 @@ registerOperation<ClauseChangePayload>({
   type: "offer-letters.clause.change",
   name: "Clause library change",
   module: MODULE,
-  description: "Add, re-word, retire or reinstate an offer-letter library clause. The approved version stays in use until this is approved (PRD §7.1–7.3).",
+  description: "Add, re-word, retire or reinstate an offer-letter library clause. The approved version stays in use until this is approved.",
   // Second-person approval: another Legal Officer, or Head of Risk where the tenant has a single Legal Officer (see docs/OPEN-QUESTIONS.md OL-OPS-1).
   defaultSteps: [step("legal", "Legal approval", ["legal-officer", "head-of-risk"], 72)],
   apply: (p, { instance, actor }) => {
@@ -166,7 +166,7 @@ registerOperation<TemplateApprovalPayload>({
   type: "offer-letters.template.approve",
   name: "House template version",
   module: MODULE,
-  description: "Approve a new version of the tenant's offer-letter house template. New letters use it from approval; issued letters keep their version (PRD §7.0).",
+  description: "Approve a new version of the tenant's offer-letter house template. New letters use it from approval; issued letters keep their version.",
   defaultSteps: [step("legal", "Legal sign-off", ["legal-officer", "head-of-risk"], 72)],
   apply: (p, { instance, actor }) => {
     const s = useOfferLetterStore.getState();

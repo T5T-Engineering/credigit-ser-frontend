@@ -131,6 +131,7 @@ function RulesInner() {
                         .map((d) => (
                           <RuleRow
                             key={d.key}
+                            showKey={false}
                             rule={ruleSummary(d, valueOf(d), pending.get(d.key), lastChange(d.key))}
                             linkComponent={Link}
                             actions={

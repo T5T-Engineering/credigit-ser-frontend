@@ -260,7 +260,7 @@ export function AssessmentsPage() {
             value={String(counts.defensive)}
             icon={<ShieldAlert aria-hidden />}
             tone="danger"
-            hint="Mandatory CRO referral regardless of size (§6.2.6)"
+            hint="Mandatory CRO referral regardless of size"
           />
           <StatCard label="Neutral / Transitional" value={String(counts.neutral)} icon={<CircleDashed aria-hidden />} tone="neutral" hint="Mandatory Credit Analyst narrative" />
           <StatCard

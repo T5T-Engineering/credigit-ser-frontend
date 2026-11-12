@@ -158,7 +158,7 @@ export function makerChecks(userId: string, roleId: RoleId, app: Application | u
       id: "initiator",
       label: "Not the initiator or recommender",
       ok: !conflicts.has(userId),
-      detail: conflicts.has(userId) ? `You ${conflicts.get(userId)} — PRD §4.2 bars you from disbursing it` : "You did not initiate or recommend this facility",
+      detail: conflicts.has(userId) ? `You ${conflicts.get(userId)}.2 bars you from disbursing it` : "You did not initiate or recommend this facility",
     },
   ];
 }

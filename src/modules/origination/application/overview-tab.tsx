@@ -97,10 +97,10 @@ export function OverviewTab({ c }: { c: AppCtx }) {
               confidence={0.82}
               draft={memo?.text ?? draftMemo(c)}
               sources={[
-                { label: "Audited financial statements (OCR)", detail: "§5.4" },
-                { label: "CBA and other-bank statements", detail: "§6.1.4" },
-                { label: "Bureau and CRMS reports", detail: "§5.2" },
-                { label: "360 RAR position", detail: "§6.2" },
+                { label: "Audited financial statements (OCR)", detail: "" },
+                { label: "CBA and other-bank statements", detail: "" },
+                { label: "Bureau and CRMS reports", detail: "" },
+                { label: "360 RAR position", detail: "" },
               ]}
               signedOffBy={memo ? `Signed off by ${memo.by} on ${dateTime(memo.at)}${memo.edited ? " (edited)" : ""}` : undefined}
               signOffNote={canSign ? undefined : "AI output is advisory. The Credit Analyst or CCO must review, edit and sign off before it is used in the credit memo."}

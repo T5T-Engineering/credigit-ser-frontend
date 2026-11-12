@@ -187,7 +187,7 @@ export function RegisterSection() {
         exportFilename="enterprise-risk-register.csv"
         defaultPageSize={20}
       />
-      <Text variant="caption" tone="subtle">Responses follow ISO 31000 treatment options; stages follow COSO ERM’s identify-assess-respond-monitor cycle (§9.2).</Text>
+      <Text variant="caption" tone="subtle">Responses follow ISO 31000 treatment options; stages follow COSO ERM’s identify-assess-respond-monitor cycle.</Text>
 
       <Drawer
         open={!!selected}

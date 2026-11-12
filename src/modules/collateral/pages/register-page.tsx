@@ -174,7 +174,7 @@ export function CollateralRegisterPage() {
   return (
     <ModulePage
       module="collateral"
-      description="Collateral register — type, valuation, valuer, perfection status and haircut weighting (PRD §6.5, §6.7.3). Quoted shares are valued from the SEC/CSCS connector."
+      description="Collateral register — type, valuation, valuer, perfection status and haircut weighting. Quoted shares are valued from the SEC/CSCS connector."
       actions={
         can.manage ? (
           <Stack direction="horizontal" gap="small">

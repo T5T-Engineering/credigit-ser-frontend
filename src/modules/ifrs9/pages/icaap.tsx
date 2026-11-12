@@ -227,7 +227,7 @@ export function IcaapPage() {
     {
       metric: "Stressed CAR",
       formula: "(Qualifying capital − ΔECL × (1 − tax)) / (RWA + ΔRWA)",
-      sources: "Scenario PD multiplier, LGD add-on and FX devaluation (rules ifrs9.scenario.*) applied to the ECL engine (§6.7.2 inputs)",
+      sources: "Scenario PD multiplier, LGD add-on and FX devaluation (rules ifrs9.scenario.*) applied to the ECL engine (ECL inputs)",
       prd: "§6.7.4",
     },
   ];
@@ -281,7 +281,7 @@ export function IcaapPage() {
       <Stack gap="large">
         <DemoNote title="Demo capital base">
           Capital accounts and non-loan RWA are calibrated from the demo loan book (GL connector not yet live). The CAR formula, Tier 2 cap, minimum CAR and classification bands
-          are business rules sourced from PRD §6.7.4 and §9.1.
+          are business rules sourced from and.
         </DemoNote>
 
         <Grid columns={{ base: 1, lg: 12 }} gap="large">
@@ -330,7 +330,7 @@ export function IcaapPage() {
                       label: "Tier 2 eligible",
                       value: money(current.tier2),
                       mono: true,
-                      hint: current.tier2Capped ? "Capped at one-third of Tier 1 (§9.1)" : "Within one-third of Tier 1 cap (§9.1)",
+                      hint: current.tier2Capped ? "Capped at one-third of Tier 1" : "Within one-third of Tier 1 cap",
                     },
                     { label: "Credit RWA", value: money(base.creditRwa), mono: true },
                     { label: "Market RWA", value: money(base.marketRwa), mono: true },
@@ -375,7 +375,7 @@ export function IcaapPage() {
             <CardHeader>
               <Stack gap="xsmall">
                 <CardTitle>Supervisory-action checklist</CardTitle>
-                <CardDescription>Surfaced for the current classification (§6.7.4). Checklist items are tenant-configured (demo).</CardDescription>
+                <CardDescription>Surfaced for the current classification. Checklist items are tenant-configured (demo).</CardDescription>
               </Stack>
             </CardHeader>
             <CardContent>
@@ -395,7 +395,7 @@ export function IcaapPage() {
           <CardHeader>
             <Stack gap="xsmall">
               <CardTitle>Stress-testing workspace</CardTitle>
-              <CardDescription>Macro shock scenarios (external data feed, §5.5) applied to portfolio PD / LGD / EAD to project CAR impact. Severities are approved business rules.</CardDescription>
+              <CardDescription>Macro shock scenarios (external data feed) applied to portfolio PD / LGD / EAD to project CAR impact. Severities are approved business rules.</CardDescription>
             </Stack>
             {canEdit && (
               <Stack direction="horizontal" gap="small" wrap>

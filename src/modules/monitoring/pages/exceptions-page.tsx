@@ -160,7 +160,7 @@ function ExceptionsInner() {
   return (
     <ModulePage
       module="monitoring"
-      description="Every exception enters one tenant-configurable escalation protocol that runs until the exception is cured and evidenced — not merely acknowledged (PRD §6.4.4). Resolutions and out-of-cycle escalations are signed off through Operations."
+      description="Every exception enters one tenant-configurable escalation protocol that runs until the exception is cured and evidenced — not merely acknowledged. Resolutions and out-of-cycle escalations are signed off through Operations."
       actions={
         canEdit ? (
           <Button variant="secondary" iconBefore={<RefreshCw aria-hidden className="size-4" />} onClick={sweep} loading={sweeping} disabled={!exceptions.some((e) => slaLapsed(e, now))}>
