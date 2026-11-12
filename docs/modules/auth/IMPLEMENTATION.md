@@ -21,6 +21,8 @@ BACKEND SEAM: replace `accounts.ts` with Identity & Access API calls; keep MSAL.
 | `src/modules/auth/auth-shell.tsx` | Auth page layout wrapper |
 | `src/lib/auth/accounts.ts` | Accounts, challenges, policy, audit/notify/publish |
 | `src/lib/auth/msal.ts` | MSAL config and sign-in |
+| `src/lib/auth/backend-sso.ts` | Backend Microsoft sign-in (start → callback → token), backend tokens, `/identity/me`, backend logout |
+| `src/modules/auth/microsoft-callback-page.tsx` | `/callback/`: finishes the backend Microsoft sign-in |
 | `src/lib/auth/session.ts` | Session store, `useRole`, `useCan`, `useHydrated` |
 | `src/components/auth-guard.tsx` | Route guard, `demoSignIn`, `?demoRole=` |
 | `src/components/app-frame.tsx` | Idle-timeout warning and sign-out |
@@ -32,6 +34,7 @@ BACKEND SEAM: replace `accounts.ts` with Identity & Access API calls; keep MSAL.
 | `/login` | `LoginPage` | — (public) |
 | `/register` | `RegisterPage` | link from login |
 | `/verify?challenge=<id>` | `VerifyPage` | — |
+| `/callback?code=&state=` | `MicrosoftCallbackPage` (backend SSO; Entra redirect URI `<site>/callback/`) | — |
 | `/forgot-password` | `ForgotPasswordPage` | link from login |
 | `/reset-password` | `ResetPasswordPage` | — |
 | `/settings/password` | `ChangePasswordPage` | Administration → Settings → Password |
@@ -94,6 +97,7 @@ Public API (`accounts.ts`): `signInWithPassword`, `register`, `verifyCode`, `res
 | AUTH-FR-11 | — | — | Missing |
 | AUTH-FR-12 | `audit()`, `session.ts` | — | Partial (anonymous actions attributed to `account-officer` role) |
 | AUTH-FR-13 | `auth-guard.tsx` | smoke.spec | Done |
+| AUTH-FR-14 | `backend-sso.ts`, `microsoft-callback-page.tsx`, `login-page.tsx` | — (needs a live tenant; manual) | Done (env-gated) |
 
 ## 10. Gaps against the invariants
 - Inv. 7: shared demo password `DEMO_PASSWORD` is a literal in `accounts.ts` (demo credential, shipped to the client bundle).
@@ -109,5 +113,6 @@ Public API (`accounts.ts`): `signInWithPassword`, `register`, `verifyCode`, `res
 ## 11. Tech debt
 | TD id | Summary |
 |---|---|
+| TD-952 | Backend SSO tokens kept in `sessionStorage`; only the Microsoft sign-in uses the backend — the rest of the app still reads browser data |
 | TD-858 | Step-up OTP accepts any 6 digits (used by approvals; auth has no real step-up provider) |
 | — | No TD entry yet for `DEMO_PASSWORD`, browser-side accounts, or the unpublished `auth.session.started` event |
