@@ -43,6 +43,7 @@ import { useRule } from "@/lib/platform/rules";
 import { useAuditLog } from "@/modules/workspace/use-audit-log";
 import { ConfigNotice } from "./config-notice";
 import { AccessRequests } from "./access-requests";
+import { changeDirectoryUserRole, deactivateDirectoryUser, directoryEnabled, inviteDirectoryUser, reactivateDirectoryUser, useDirectoryUsers } from "./directory";
 import { PendingBadge, submitWithHooks, SubmitOutcome } from "./operation-ui";
 import { roleName } from "./rule-keys";
 import { useConfiguredRoles } from "./store";
@@ -68,7 +69,10 @@ export function UsersPage() {
 }
 
 function UsersView() {
-  const users = useUsers();
+  // The backend directory (users in the database) when the backend is configured; otherwise the app user list.
+  const localUsers = useUsers();
+  const directory = useDirectoryUsers();
+  const users = directoryEnabled ? directory.users : localUsers;
   const canEdit = useCan("admin", "edit");
   const me = useSession((s) => s.user);
   const { update } = useDbActions();
@@ -177,6 +181,11 @@ function UsersView() {
     >
       <Stack gap="large">
         <ConfigNotice canEdit={canEdit} />
+        {directory.error ? (
+          <Alert tone="warning" title="The user directory couldn't be loaded">
+            {directory.error}
+          </Alert>
+        ) : null}
         {mfaNotice ? <Alert tone="info">{mfaNotice}</Alert> : null}
         <AccessRequests canEdit={canEdit} />
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
@@ -295,7 +304,13 @@ function ConfirmModal({ pending, isSelf, onClose }: { pending: Pending; isSelf: 
     setBusy(true);
     const subject = { type: "User", id: user.id, title: user.name, href: `/admin?user=${user.id}` };
     const r = await submitWithHooks("admin.user.change", { action: kind, userId: user.id, to, reason: reason.trim() }, (ctx) =>
-      kind === "role"
+      directoryEnabled
+        ? kind === "role"
+          ? changeDirectoryUserRole(user.id, ctx.to!, ctx.reason)
+          : kind === "deactivate"
+            ? deactivateDirectoryUser(user.id, ctx.reason)
+            : reactivateDirectoryUser(user.id, ctx.reason)
+        : kind === "role"
         ? submitOperation<UserRoleChangePayload>(c.type, {
             title: `${c.verb} ${user.name}: ${roleName(user.roleId)} → ${roleName(ctx.to!)}`,
             subject,
@@ -392,7 +407,9 @@ function InviteModal({ open, onOpenChange, existingEmails }: { open: boolean; on
     setError(null);
     const user: User = { id: newId("USR"), name: name.trim(), email: email.trim(), roleId, branch, status: "Pending", mfa: false };
     const r = await submitWithHooks("admin.user.change", { action: "invite", user, reason: reason.trim() }, (ctx) =>
-      submitOperation<UserInvitePayload>("user.invite", {
+      directoryEnabled
+        ? inviteDirectoryUser({ email: ctx.user.email, name: ctx.user.name, roleId: ctx.user.roleId, branch: ctx.user.branch, reason: ctx.reason })
+        : submitOperation<UserInvitePayload>("user.invite", {
         title: `Invite ${ctx.user.name} as ${roleName(ctx.user.roleId)}`,
         subject: { type: "User", id: ctx.user.id, title: ctx.user.name, href: `/admin?user=${ctx.user.id}` },
         payload: { user: ctx.user, reason: ctx.reason },
