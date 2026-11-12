@@ -116,7 +116,7 @@ and a subscription reverts records when a request is returned, rejected or withd
 - Inv. 8: notification recipient roles are code lists in `platform.ts` / `actions.ts`; workflow step SLAs (48 h / 72 h) are literals in `defaultSteps` (same pattern as TD-127, no TD id here); fixed `+01:00` offset (TD-859).
 - Inv. 8: CP identified by literal `CP-02` (TD-853); repayment wording and demo rate in `merge.ts` (TD-852, TD-851).
 - Coupling: acceptance writes directly into the credit-admin store (`useCreditAdminStore.setCp`) and reuses `auditAs` from credit-admin instead of an event / API boundary.
-- Inv. 9 connector-ready: DMS / e-signature only as a hook point; no entry in a `docs/integration-points.md` (file doesn't exist in this repo).
+- Inv. 9 connector-ready: DMS / e-signature is recorded in [`docs/integration-points.md`](../../integration-points.md) (§8) — hook point only.
 - Duplication: covenant tagging also exists in `origination/logic.ts` `tagCovenants`.
 
 ## 11. Tech debt

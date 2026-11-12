@@ -24,7 +24,8 @@ import type { Task } from "@/lib/data/types";
 import { date, moneyShort } from "@/lib/format";
 import { publish } from "@/lib/platform/events";
 import { runHooks } from "@/lib/platform/hooks";
-import { currentStep, getDefinition, stepDueAt, useMyApprovalQueue, useMyRequests, type OperationInstance } from "@/lib/platform/operations";
+import { currentStep, stepDueAt, useMyApprovalQueue, useMyRequests, type OperationInstance } from "@/lib/platform/operations";
+import { safeDefinition } from "@/modules/operations/logic";
 import { useRule } from "@/lib/platform/rules";
 import { useScope } from "@/lib/platform/scope";
 import { isDueSoon, isOverdue, useApprovalsAwaiting, useRoleTasks } from "./data";
@@ -86,7 +87,7 @@ export function InboxPage() {
         id: `ops:${i.id}`,
         kind: "Operation",
         title: i.title,
-        detail: `${getDefinition(i.operationType).name} · step “${currentStep(i)?.name ?? "—"}” · requested by ${i.requestedBy.name}`,
+        detail: `${safeDefinition(i.operationType)?.name ?? i.operationType} · step “${currentStep(i)?.name ?? "—"}” · requested by ${i.requestedBy.name}`,
         module: "Operations",
         href: opHref(i),
         dueAt: due,
@@ -98,7 +99,7 @@ export function InboxPage() {
       id: `req:${i.id}`,
       kind: "Request",
       title: i.title,
-      detail: `${getDefinition(i.operationType).name} · ${openStatus(i) ? `waiting on “${currentStep(i)?.name ?? "—"}”` : i.status}`,
+      detail: `${safeDefinition(i.operationType)?.name ?? i.operationType} · ${openStatus(i) ? `waiting on “${currentStep(i)?.name ?? "—"}”` : i.status}`,
       module: "Operations",
       href: opHref(i),
       dueAt: stepDueAt(i) ?? i.completedAt ?? i.requestedAt,

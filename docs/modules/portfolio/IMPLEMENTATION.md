@@ -109,7 +109,7 @@ Used by other modules: `usePortfolioModel`, `useLimitMonitor`, `useActor`, selec
 - Invariant 9 (scoped / audited): limit monitoring runs per browser on page view, so alerts depend on who opens which page and may repeat across users; audit row uses a literal `system-admin` role id for the system actor.
 - Invariant 8: `portfolio.projection-adopted` recipient role (`portfolio-mis-officer`) is a code literal without TD id; report catalogue, CBN sector map, unmapped-obligor 100 % risk weight and simulated latencies are recorded (TD-501…506).
 - Invariant 9 (notified): return within limit is not notified (PM3, by design); report generation / plan upload send no notification.
-- Invariant 9 (connector-ready): CBA, GL, projection engine and CBN return filing are not recorded — no `docs/integration-points.md`; release filing exists only as a hook point.
+- Invariant 9 (connector-ready): CBA, GL, projection engine and CBN return filing are recorded in [`docs/integration-points.md`](../../integration-points.md) (§1, §4, §5, §12); release filing is a hook point only.
 - Domain commands sit in page components (no service seam).
 - No unit tests.
 

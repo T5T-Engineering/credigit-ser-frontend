@@ -87,7 +87,7 @@ export function toApprovalTiers(chain: ApprovalStep[], users: User[]): ApprovalT
 
 // ---------------------------------------------------------------- Operations instance → library shapes
 
-const uiStatus: Record<OperationStatus, UiOperationStatus> = { Pending: "pending", "In progress": "in_progress", Approved: "approved", Rejected: "rejected", Returned: "returned", Cancelled: "cancelled" };
+const uiStatus: Record<OperationStatus, UiOperationStatus> = { Pending: "pending", "In progress": "in_progress", Approved: "approved", Rejected: "rejected", Returned: "returned", Cancelled: "cancelled", Failed: "rejected" /* TD-960 */ };
 export const toUiOperationStatus = (s: OperationStatus) => uiStatus[s];
 
 function decisionKind(d: StepDecision, recommend: boolean): OperationDecisionKind {

@@ -49,9 +49,9 @@ const runTones: Record<ReportRunStatus, "info" | "warning" | "success" | "brand"
 };
 const SUBMITTABLE: ReportRunStatus[] = ["AI-drafted — awaiting validation", "Validated", "Returned for correction"];
 type Scope = "all" | "mine" | "decide";
-/** The Board Risk Committee pack is approved from the executive Board pack page (executive.brc-pack.approve). */
+/** The Board Risk Committee pack has one flow: Enterprise risk → BRC pack (enterprise-risk.brc-pack.approval). */
 const BOARD_PACK_REPORT = "RPT-BRC";
-const BOARD_PACK_HREF = "/executive/board-pack";
+const BOARD_PACK_HREF = "/enterprise-risk/brc-pack";
 
 /** Period label for a new run, from the report cadence and the as-at date. */
 function periodFor(cadence: ReportDef["cadence"]): string {

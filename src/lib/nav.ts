@@ -59,10 +59,6 @@ export const navigation: NavGroup[] = [
         icon: Gauge,
         phase: 1,
         prd: "§6.11, §3 row 19",
-        pages: [
-          { label: "Cockpit", href: "/executive" },
-          { label: "Board Risk Committee pack", href: "/executive/board-pack" },
-        ],
       },
       {
         module: "ai-console",

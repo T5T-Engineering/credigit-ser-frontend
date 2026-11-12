@@ -44,6 +44,10 @@ The "Operations" workflow is the single approval engine required by invariant 9:
 | OPS-FR-13 | Event catalogue + event log (wildcard subscriptions) and hook-point catalogue + handlers are browsable; enabling / disabling an extension goes through `extension.toggle`. | Invariant 9 (extensible) |
 | OPS-FR-14 | Every transition (submit, decision, final status, rule / workflow / template / extension change, notification sent) writes to the audit log. | PRD §10.1, §10.3 |
 | OPS-FR-15 | Event and hook points must be reachable by external systems (outbound webhooks / message publisher, inbound APIs). | Invariant 9 (externally reachable) — not met in the prototype |
+| OPS-FR-16 | An operation item (`/operations/item?id=`) is visible only to its requester, anyone who decided a step, holders of a role named as approver / adjudicator in any of its (snapshotted) steps, and Operations oversight (`operations: "edit"` today; permission `operations.oversight.view` once the IAM catalogue lands). Anyone else sees "no access"; the denied attempt is audited and published (`operations.request.access-denied`). | Invariant 9 (user-scoped), invariant 12 |
+| OPS-FR-17 | Final approval is atomic: the instance becomes **Approved** only after `apply` succeeds. If `apply` throws, the instance becomes **Failed** (reason = error), the failure is audited (before / after status), published (`operations.request.failed`) and the requester and the deciding approver are notified (`operations.apply-failed`). A failed request is closed; the requester resubmits after the cause is fixed. | Invariant 9 (audited, notified); backend ADR-0005 parity |
+| OPS-FR-18 | Notifications addressed to users (`notify({ toUserIds })`) are personal: one in-app notification per addressed user, shown only to that user. Role broadcasts (`toRoles`) stay visible to the whole role. Read state is per user (`readBy`); marking read is audited and published (`platform.notification.read`). | Invariant 9 (user-scoped, audited) |
+| OPS-FR-19 | The item page shows the route snapshotted on the instance (`instance.steps`), not the live definition, and decides "needs step-up" with the engine rule (`requiresStepUp`: `amountNgn` above threshold) as well as the largest amount in the payload. | OPS-FR-02, OPS-FR-05 |
 
 ## 4. Business rules and parameters
 
@@ -78,6 +82,7 @@ Also registered in `core.ts` but owned by other modules: `session.*`, `auth.*` (
 |---|---|---|
 | `operations.approval-requested` | Submission / next step reached / co-signer pending / adjudication | Active users holding an acting role, minus requester and prior deciders |
 | `operations.request-completed` | Approved / rejected / returned / cancelled | Requester |
+| `operations.apply-failed` | Final approval recorded but `apply` threw (instance → Failed) | Requester + deciding approver (personal) |
 | `operations.sla-overdue` | Eligible approver opens an overdue item (once per step) | Acting roles of the current step |
 | `operations.workflow-changed` | `workflow.change` applied | System Admin, Head of Risk, CRO |
 | `operations.template-changed` | `template.change` applied | System Admin, Head of Risk |
@@ -93,7 +98,10 @@ Also registered in `core.ts` but owned by other modules: `session.*`, `auth.*` (
 | event | `operations.request.submitted` | Instance created | `operationType`, `subject` |
 | event | `operations.step.decided` | Decision recorded | `stepId`, `decision`, `roleId` |
 | event | `operations.step.dissent` | Co-signers split | `stepId`, `adjudicator` |
-| event | `operations.request.approved` / `.rejected` / `.returned` / `.cancelled` | Final status | `operationType`, `subject` |
+| event | `operations.request.approved` / `.rejected` / `.returned` / `.cancelled` | Final status (approved only after `apply` succeeded) | `operationType`, `subject` |
+| event | `operations.request.failed` | `apply` threw after final approval | `operationType`, `subject`, `error` |
+| event | `operations.request.access-denied` | A user without visibility opened an item | `operationId` |
+| event | `platform.notification.read` | A user marked notifications read | `count` |
 | event | `operations.workflow.changed` | Workflow override applied | `version`, `steps`, `enabled` |
 | event | `operations.template.changed` | Template override applied | — |
 | event | `operations.template.tested` | Template test sent | `templateId` |
@@ -121,7 +129,7 @@ Also registered in `core.ts` but owned by other modules: `session.*`, `auth.*` (
 ## 9. Non-functional
 
 - Audit: every transition audited by the engine (`useDb.log`), but entries carry no before/after state snapshot of the instance and no "where" (device / IP) (PRD §10.1).
-- User scope: queue filtered by `canDecide`; requests by requester; event log and outbox filtered unless `operations: "edit"`.
+- User scope: queue filtered by `canDecide`; requests by requester; item page by `canViewOperation` (OPS-FR-16); personal notifications by addressee (OPS-FR-18); event log and outbox filtered unless `operations: "edit"`.
 - Tenant isolation: actor carries `tenantId`; single demo tenant, no tenant filter on stores.
 - Security: step-up is a UI flag (`stepUpVerified`); backend verifies from token claims (ADR-0005, BE-02).
 - Bounded browser logs: 500 events, 300 outbox items (demo only; backend keeps the full outbox).

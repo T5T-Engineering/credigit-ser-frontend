@@ -4,7 +4,7 @@
 |---|---|
 | Status | Prototype (demo data) — engine complete in the browser; backend parity per ADR-0005 |
 | Requirements | [REQUIREMENTS.md](REQUIREMENTS.md) |
-| Last updated | 2026-11-12 (commit 0e09af1) |
+| Last updated | 2026-11-12 (feature/fe-gaps) |
 
 ## 1. Design overview
 
@@ -29,10 +29,10 @@ flowchart LR
 
 | Path | Role |
 |---|---|
-| `src/lib/platform/operations.ts` | Engine: `registerOperation`, `getDefinition`, `saveDefinition`, `submitOperation`, `decideOperation`, `cancelOperation`, `canDecide`, `actingRoles`, `requiresStepUp`, `stepDueAt`, `instanceSteps`, hooks `useMyApprovalQueue`, `useMyRequests`, `useOperation`, `usePendingFor` |
+| `src/lib/platform/operations.ts` | Engine: `registerOperation`, `getDefinition`, `saveDefinition`, `submitOperation`, `decideOperation`, `cancelOperation`, `canDecide`, `canViewOperation`, `actingRoles`, `requiresStepUp`, `stepDueAt`, `instanceSteps`, hooks `useMyApprovalQueue`, `useMyRequests`, `useOperation`, `usePendingFor` |
 | `src/lib/platform/core.ts` | Platform rules, `rule.change`, `access.request`, `workflow.change`, `template.change`, `requestRuleChange`, `roleLimit`, core templates / events / hooks |
 | `src/lib/platform/rules.ts` | `defineRules`, `getRule`, `useRule`, `validateRuleValue`, `applyRuleValue`, `resetRules`, store `credigit.ser.rules` |
-| `src/lib/platform/notifications.ts` | `defineTemplates`, `getTemplate`, `fill`, `renderEmail` (branded, email-safe HTML from live brand tokens), `notify`, store `credigit.ser.notifications` |
+| `src/lib/platform/notifications.ts` | `defineTemplates`, `getTemplate`, `fill`, `renderEmail` (branded, email-safe HTML from live brand tokens), `notify` (role broadcast + one personal notification per addressed user), `notificationVisibleTo`, `isNotificationRead`, `markNotificationsRead`, `useMyNotifications`, store `credigit.ser.notifications` |
 | `src/lib/platform/events.ts` | `defineEvents`, `publish`, `subscribe`, `matches` (wildcards), `setSubscriptionEnabled`, store `credigit.ser.events` |
 | `src/lib/platform/hooks.ts` | `defineHookPoints`, `registerHook`, `runHooks` (priority order, veto on `.before`, enrich via `ctx`) |
 | `src/lib/platform/scope.ts` | `currentActor()` (System actor for background work), `useScope()` |
@@ -59,10 +59,11 @@ Public API for modules: the engine functions listed in §2 (documented in FRONTE
 
 | Store (localStorage key) | Entity | Key fields |
 |---|---|---|
-| `credigit.ser.operations` | `OperationInstance` | `id`, `operationType`, `definitionVersion`, `title`, `subject {type,id,title,href}`, `payload`, `summary[]`, `amountNgn`, `steps[]` (snapshot), `requestedBy`, `status` (Pending / In progress / Approved / Rejected / Returned / Cancelled), `stepIndex`, `awaitingAdjudication`, `decisions[]`, `stepStartedAt`, `completedAt`, `reason` |
+| `credigit.ser.operations` | `OperationInstance` | `id`, `operationType`, `definitionVersion`, `title`, `subject {type,id,title,href}`, `payload`, `summary[]`, `amountNgn`, `steps[]` (snapshot), `requestedBy`, `status` (Pending / In progress / Approved / Rejected / Returned / Cancelled / Failed), `stepIndex`, `awaitingAdjudication`, `decisions[]`, `stepStartedAt`, `completedAt`, `reason` |
 | same | `definitions` (tenant overrides) | `WorkflowDefinition {operationType, name, module, enabled, version, steps[]}`; `WorkflowStep {id, name, approverRoles[], mode, slaHours, adjudicatorRole?}` |
 | `credigit.ser.rules` | `values`, `history[]` | `RuleChange {key, before, after, byId, byName, at, reason, operationId}` |
 | `credigit.ser.notifications` | `overrides`, `outbox[]` (≤ 300) | `OutboxItem {templateId, to, subject, html, status}` |
+| `credigit.ser.db` (spine) | `Notification` | `roleIds[]` (role broadcast; empty = everyone), `userIds[]` (personal — only these users), `readBy[]` (per-user read state; legacy `read` flag for seed rows) |
 | `credigit.ser.events` | `log[]` (≤ 500), `enabled`, `lastRun` | `DomainEvent {name, module, subject, payload, actorId, at, deliveredTo}` |
 | in memory | operation handlers, rule / template / event / hook definitions, subscriptions, hook handlers | registered at module load |
 
@@ -83,7 +84,7 @@ Public API for modules: the engine functions listed in §2 (documented in FRONTE
 
 | Key | Where checked |
 |---|---|
-| none (named keys) | Not used in the frontend. Gating is `useCan("operations", "edit")` (role → module access in `src/lib/rbac/roles.ts`) in rules, workflows, notifications, events pages; `testSendRoles` rule for template tests; `canDecide` (step roles + SoD) for decisions; requester check for withdraw. |
+| none (named keys) | Not used in the frontend. Gating is `useCan("operations", "edit")` (role → module access in `src/lib/rbac/roles.ts`) in rules, workflows, notifications, events pages; `testSendRoles` rule for template tests; `canDecide` (step roles + SoD) for decisions; requester check for withdraw; `canViewOperation` (requester / decider / step role / oversight = `operations: "edit"`, future `operations.oversight.view`, TD-961) for the item page. |
 
 ## 7. Workflows, notifications, events, hooks wired
 
@@ -92,6 +93,9 @@ Public API for modules: the engine functions listed in §2 (documented in FRONTE
 | `rule.change`, `workflow.change`, `template.change`, `access.request` (§5) | `src/lib/platform/core.ts` |
 | `extension.toggle` (§5) | `src/modules/operations/platform.ts`; submitted from `events-page.tsx` |
 | `operations.approval-requested`, `operations.request-completed` (§6) | `operations.ts` `notifyApprovers`, `finalise` |
+| `operations.apply-failed` + `operations.request.failed` (OPS-FR-17) | `operations.ts` `finalise` (apply in try/catch; status Approved only after success); template in `core.ts` |
+| `operations.request.access-denied` (OPS-FR-16) | `item-page.tsx` (audited + published once per view) |
+| `platform.notification.read` (OPS-FR-18) | `notifications.ts` `markNotificationsRead` (bell in `app-frame.tsx`, dashboard inbox) |
 | `operations.sla-overdue` + `operations.sla.breached` (§6, §7) | `item-page.tsx` `useEffect` (only when an eligible approver opens an overdue item) |
 | `rules.changed`, `operations.workflow-changed`, `operations.template-changed` | `core.ts` operation `apply` |
 | `operations.extension-toggled` | `operations/platform.ts` `apply` |
@@ -110,6 +114,7 @@ Public API for modules: the engine functions listed in §2 (documented in FRONTE
 | `e2e/credit/approval.spec.ts` | Co-signer dissent → CCO adjudicates → next tier, step-up, SoD (FR-03, 04, 05) |
 | `e2e/platform/rbac.spec.ts` | Operations view-only for Account Officer, direct URLs gated |
 | `e2e/risk/pages-load.spec.ts` | Every nav page loads per role |
+| `e2e/platform/operations-scope.spec.ts` | Item page hidden from an unrelated role, visible to requester / approver / oversight (FR-16); personal notification only reaches the addressee (FR-18); apply failure → Failed, not Approved (FR-17) |
 | Unit tests | None (vitest configured, no test files) |
 
 ## 9. Requirements traceability
@@ -125,26 +130,28 @@ Public API for modules: the engine functions listed in §2 (documented in FRONTE
 | OPS-FR-07 | `decideOperation`, `cancelOperation` | approval | Done |
 | OPS-FR-08 | approvals / requests / item pages | rule-change | Done |
 | OPS-FR-09 | `item-page.tsx` effect | — | Partial (no sweep; fires only on view) |
-| OPS-FR-10 | `workflow.change`, step snapshot | operations-config | Partial (timeline reads live definition, see §10) |
+| OPS-FR-10 | `workflow.change`, step snapshot | operations-config | Done (timeline and item page read `instanceSteps`) |
 | OPS-FR-11 | `rules.ts`, `rule.change`, rules page | rule-change | Done |
 | OPS-FR-12 | `notifications.ts`, `template.change`, notifications page | operations-config | Partial (email not sent) |
 | OPS-FR-13 | `events.ts`, `hooks.ts`, events page, `extension.toggle` | operations-config | Done |
-| OPS-FR-14 | `audit()` in `operations.ts`, `notify` log | rule-change | Partial (no before/after snapshot, no "where") |
-| OPS-FR-15 | — | — | Missing |
+| OPS-FR-14 | `audit()` in `operations.ts`, `notify` log | rule-change | Partial (final status audited with before / after status; no full instance snapshot, no "where") |
+| OPS-FR-15 | — | — | Missing (TD-963) |
+| OPS-FR-16 | `canViewOperation`, `item-page.tsx` guard | operations-scope | Done |
+| OPS-FR-17 | `finalise` | operations-scope | Done |
+| OPS-FR-18 | `notify`, `notificationVisibleTo`, `markNotificationsRead` | operations-scope, rule-change | Done |
+| OPS-FR-19 | `timelineSteps(instance)`, item page `highValue` | approval | Done |
 
 ## 10. Gaps against the invariants
 
 - **Inv 12:** no named permission keys; actions gated by `useCan("operations", "edit")` (CRO, Head of Risk, System Admin) — System Admin is not granted every permission; PRD §10.4 says configuration is "editable only by the System Admin" (W1).
-- **Inv 9 user-scoped:** `/operations/item?id=` renders any instance (payload, summary, decisions) to any signed-in user — no requester / approver / oversight check.
-- **Inv 9 user-scoped:** `notify({ toUserIds })` stores the in-app notification with the recipients' **role ids** (`notifications.ts`), so every member of that role sees it; read state is shared per notification.
-- **Inv 9 notified / workflow:** no SLA sweep — overdue steps escalate only when an eligible approver opens the item; no escalation roles beyond the acting roles (backend ADR-0009 has a job + `operations.slaEscalationRoles`).
-- **Inv 8:** literals without a TD id — default step approvers and SLA hours of `rule.change` (24/24 h), `workflow.change` / `template.change` / `access.request` (48 h) in `core.ts` (TD-127 records the same pattern only for ifrs9 / market-risk); notification recipient roles in `rule.change`, `workflow.change`, `template.change` `apply`; `LOG_LIMIT` 500, `OUTBOX_LIMIT` 300; 30 s UI clock.
-- **Inv 9 workflow:** `logic.ts` `timelineSteps` and `item-page.tsx` `currentStep` read the **live** definition (`def.steps`) instead of the instance snapshot (`instanceSteps`), so an in-flight request shows the wrong route after a workflow change.
-- **Step-up consistency:** engine uses `instance.amountNgn`; item page decides "high value" with `largestAmount(payload)`; verification is a client flag.
-- **Atomicity:** `finalise` sets status Approved before `handler.apply`; an `apply` error leaves an Approved instance whose change never happened.
+- **Inv 9 user-scoped:** oversight visibility of items still uses the role → module map (`operations: "edit"`), not a named permission (TD-961, IAM work).
+- **Inv 9 notified / workflow (TD-962):** no SLA sweep — overdue steps escalate only when an eligible approver opens the item; no escalation roles beyond the acting roles (backend ADR-0009 has a job + `operations.slaEscalationRoles`).
+- **Inv 8 (TD-966):** literals — default step approvers and SLA hours of `rule.change` (24/24 h), `workflow.change` / `template.change` / `access.request` (48 h) in `core.ts` (TD-127 records the same pattern only for ifrs9 / market-risk); notification recipient roles in `rule.change`, `workflow.change`, `template.change` `apply`; `LOG_LIMIT` 500, `OUTBOX_LIMIT` 300; 30 s UI clock.
+- **Step-up:** verification is a client flag (TD-858 pattern).
+- **Failed status in library cards (TD-960):** `@credigit/web-ui` `OperationStatus` has no "failed"; `WorkflowInstanceCard` shows a Failed request as "rejected" (item page badge shows "Failed").
 - **Inv 9 audited:** engine audit entries have no before/after state of the instance and no device / IP ("where").
-- **Inv 9 externally reachable:** events and hooks are in-browser only — no outbound webhook / message publisher and no inbound APIs; subscriptions are not persisted.
-- **Inv 9 connector-ready:** repo has no `docs/integration-points.md`.
+- **Inv 9 externally reachable (TD-963):** events and hooks are in-browser only — no outbound webhook / message publisher and no inbound APIs; subscriptions are not persisted.
+- **Inv 9 connector-ready:** connector points are recorded in [`docs/integration-points.md`](../../integration-points.md); there is no Connectors framework yet (TD-967).
 - **TD-128:** module-owned rules can bypass module workflows through generic `rule.change`.
 - **Tests:** no unit tests of the engine state machine (backend has `OperationInstanceTests`).
 
@@ -156,3 +163,8 @@ Public API for modules: the engine functions listed in §2 (documented in FRONTE
 | TD-128 | RAS / ICAAP rules changeable one key at a time through `rule.change`, bypassing module workflows |
 | TD-113 | Credit approvals registered as one type per route length (engine reads steps per type; backend ADR-0011 fixes with per-instance routes) |
 | TD-804 / TD-110 | Chart-flow shown read-only from static `chartFlow` in admin rules view |
+| TD-960 | Library has no "failed" operation status (card shows rejected) |
+| TD-961 | Item oversight visibility by role → module map until `operations.oversight.view` |
+| TD-962 | No SLA sweep scheduler |
+| TD-963 | Events / hooks in-browser only — no outbound webhooks or inbound APIs |
+| TD-966 | Core operation default approvers / SLAs / recipient roles are literals |

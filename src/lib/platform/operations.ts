@@ -17,7 +17,7 @@
  */
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { roleById, type RoleId } from "../rbac/roles";
+import { canAccess, roleById, type RoleId } from "../rbac/roles";
 import { useDb, newId } from "../data/store";
 import { publish, type EventSubject } from "./events";
 import { runHooks } from "./hooks";
@@ -47,7 +47,8 @@ export type WorkflowDefinition = {
   steps: WorkflowStep[];
 };
 
-export type OperationStatus = "Pending" | "In progress" | "Approved" | "Rejected" | "Returned" | "Cancelled";
+/** "Failed": the final step approved but `apply` threw — the change was not made (OPS-FR-17). */
+export type OperationStatus = "Pending" | "In progress" | "Approved" | "Rejected" | "Returned" | "Cancelled" | "Failed";
 
 export type StepDecision = {
   stepId: string;
@@ -183,6 +184,25 @@ export function canDecide(instance: OperationInstance, actor: Pick<Actor, "id" |
   return { ok: true };
 }
 
+/**
+ * Whether an actor may see an operation (item page, OPS-FR-16): the requester, anyone who decided a step,
+ * holders of a role named as approver / adjudicator in any snapshotted step, and Operations oversight.
+ * Oversight is the role → module map (`operations: "edit"`) until the IAM permission
+ * `operations.oversight.view` replaces it (TD-961).
+ */
+export function canViewOperation(instance: OperationInstance, actor: Pick<Actor, "id" | "roleId">): boolean {
+  if (instance.requestedBy.id === actor.id) return true;
+  if (instance.decisions.some((d) => d.actorId === actor.id)) return true;
+  let steps: WorkflowStep[] = [];
+  try {
+    steps = instanceSteps(instance);
+  } catch {
+    steps = instance.steps ?? [];
+  }
+  if (steps.some((s) => s.approverRoles.includes(actor.roleId) || s.adjudicatorRole === actor.roleId)) return true;
+  return canAccess(roleById[actor.roleId], "operations", "edit");
+}
+
 function audit(actor: Actor, action: string, instance: OperationInstance, before?: string, after?: string) {
   useDb.getState().log({ actorId: actor.id, actorName: actor.name, roleId: actor.roleId, action, entityType: `Operation · ${instance.operationType}`, entityId: instance.id, before, after });
 }
@@ -248,7 +268,8 @@ export async function submitOperation<P>(type: string, input: SubmitInput<P>): P
   publish("operations.request.submitted", { module: "operations", subject: { type: "Operation", id: instance.id, title: instance.title, href: `/operations/item?id=${instance.id}` }, payload: { operationType: type, subject: input.subject } });
 
   if (!def.enabled || def.steps.length === 0) {
-    await finalise(instance.id, actor, "Approved", "Applied directly — workflow disabled or has no steps.");
+    const final = await finalise(instance.id, actor, "Approved", "Applied directly — workflow disabled or has no steps.");
+    if (final === "Failed") return { ok: false, reason: get(instance.id)!.reason ?? "Applying the change failed." };
     return { ok: true, instance: get(instance.id)!, applied: true };
   }
   notifyApprovers(instance);
@@ -256,22 +277,51 @@ export async function submitOperation<P>(type: string, input: SubmitInput<P>): P
   return { ok: true, instance, applied: false };
 }
 
-async function finalise(id: string, actor: Actor, status: "Approved" | "Rejected" | "Returned" | "Cancelled", reason?: string) {
+/**
+ * Close an instance. For "Approved" the handler's `apply` runs FIRST; the instance becomes Approved only if
+ * it succeeds. If `apply` throws, the instance becomes "Failed" (audited, published, requester + decider
+ * notified) and the change is not made (OPS-FR-17). Returns the final status.
+ */
+async function finalise(id: string, actor: Actor, status: "Approved" | "Rejected" | "Returned" | "Cancelled", reason?: string): Promise<OperationStatus> {
   const instance = get(id)!;
   const handler = handlers.get(instance.operationType)!;
+  const beforeStatus = instance.status;
   const completedAt = new Date().toISOString();
+  const name = getDefinition(instance.operationType).name;
+  const href = `/operations/item?id=${id}`;
+
+  if (status === "Approved") {
+    try {
+      // The handler sees the instance as it will be once approved; the store changes only after success.
+      await handler.apply(instance.payload, { instance: { ...instance, status: "Approved", completedAt, reason }, actor });
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      update(id, { status: "Failed", completedAt, reason: `Approved, but applying the change failed: ${error}` });
+      const failed = get(id)!;
+      audit(actor, `Apply failed: ${name}`, failed, beforeStatus, `Failed — ${error}`);
+      publish("operations.request.failed", { module: "operations", subject: { type: "Operation", id, title: failed.title, href }, payload: { operationType: failed.operationType, subject: failed.subject, error } });
+      notify({
+        templateId: "operations.apply-failed",
+        toUserIds: [...new Set([failed.requestedBy.id, actor.id])],
+        href,
+        data: { title: failed.title, operation: name, decidedBy: actor.name, error },
+      });
+      return "Failed";
+    }
+  }
+
   update(id, { status, completedAt, reason });
   const done = get(id)!;
-  if (status === "Approved") await handler.apply(done.payload, { instance: done, actor });
   if (status === "Rejected") handler.onReject?.(done.payload, { instance: done, actor });
-  audit(actor, `${status}: ${getDefinition(done.operationType).name}`, done, undefined, reason);
-  publish(`operations.request.${status.toLowerCase()}`, { module: "operations", subject: { type: "Operation", id, title: done.title, href: `/operations/item?id=${id}` }, payload: { operationType: done.operationType, subject: done.subject } });
+  audit(actor, `${status}: ${name}`, done, beforeStatus, reason ? `${status} — ${reason}` : status);
+  publish(`operations.request.${status.toLowerCase()}`, { module: "operations", subject: { type: "Operation", id, title: done.title, href }, payload: { operationType: done.operationType, subject: done.subject } });
   notify({
     templateId: "operations.request-completed",
     toUserIds: [done.requestedBy.id],
-    href: `/operations/item?id=${id}`,
-    data: { title: done.title, operation: getDefinition(done.operationType).name, outcome: status.toLowerCase(), decidedBy: actor.name, reason: reason ?? "" },
+    href,
+    data: { title: done.title, operation: name, outcome: status.toLowerCase(), decidedBy: actor.name, reason: reason ?? "" },
   });
+  return status;
 }
 
 export type DecideResult = { ok: true; instance: OperationInstance } | { ok: false; reason: string };

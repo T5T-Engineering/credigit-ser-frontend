@@ -40,6 +40,8 @@ const statusMap: Record<OperationStatus, UiOperationStatus> = {
   Rejected: "rejected",
   Returned: "returned",
   Cancelled: "cancelled",
+  // TD-960: the library has no "failed" status yet; the item page badge shows "Failed".
+  Failed: "rejected",
 };
 export const uiStatus = (s: OperationStatus) => statusMap[s];
 
@@ -75,9 +77,14 @@ export function safeDueAt(i: OperationInstance): string | undefined {
   }
 }
 
-/** Build the OperationTimeline steps (incl. decisions and adjudication) from an instance + its definition. */
+/** Steps of an instance: the snapshot taken at submission, else the (live) definition for old records. */
+export function stepsOf(i: OperationInstance, def: WorkflowDefinition | undefined): WorkflowStep[] {
+  return i.steps ?? def?.steps ?? [];
+}
+
+/** Build the OperationTimeline steps (incl. decisions and adjudication) from an instance's snapshotted route. */
 export function timelineSteps(i: OperationInstance, def: WorkflowDefinition | undefined): OperationStep[] {
-  const steps = def?.steps ?? [];
+  const steps = stepsOf(i, def);
   const finalStatus = statusMap[i.status];
   return steps.map((s, idx) => {
     const decisions = i.decisions
@@ -258,7 +265,7 @@ export const MS_PER_HOUR = 3_600_000;
 /** Name of the current step (with adjudication marker) for open instances. */
 export function currentStepName(i: OperationInstance, def: WorkflowDefinition | undefined): string | undefined {
   if (!isOpen(i)) return undefined;
-  const step = def?.steps[i.stepIndex];
+  const step = stepsOf(i, def)[i.stepIndex];
   if (!step) return undefined;
   return i.awaitingAdjudication && step.adjudicatorRole ? `${step.name} — adjudication by ${roleName(step.adjudicatorRole)}` : step.name;
 }

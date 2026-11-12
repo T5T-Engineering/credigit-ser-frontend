@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { KeyRound, SearchX, Undo2 } from "lucide-react";
+import { KeyRound, Lock, SearchX, Undo2 } from "lucide-react";
 import {
   Accordion,
   AccordionItem,
@@ -40,7 +40,8 @@ import { useAudit } from "@/lib/data/hooks";
 import { dateTime, money } from "@/lib/format";
 import { publish, useEventStore } from "@/lib/platform/events";
 import { notify } from "@/lib/platform/notifications";
-import { actingRoles, cancelOperation, canDecide, decideOperation, useOperation, type OperationInstance } from "@/lib/platform/operations";
+import { useDb } from "@/lib/data/store";
+import { actingRoles, cancelOperation, canDecide, canViewOperation, decideOperation, requiresStepUp, useOperation, type OperationInstance } from "@/lib/platform/operations";
 import { useRule } from "@/lib/platform/rules";
 import { useScope } from "@/lib/platform/scope";
 import {
@@ -53,6 +54,7 @@ import {
   roleOptions,
   safeDefinition,
   safeDueAt,
+  stepsOf,
   timelineSteps,
   toUiSteps,
   useDefinitions,
@@ -60,7 +62,7 @@ import {
   useOpsHydrated,
 } from "./logic";
 
-const statusTones = { Pending: "neutral", "In progress": "info", Approved: "success", Rejected: "danger", Returned: "warning", Cancelled: "neutral" } as const;
+const statusTones = { Pending: "neutral", "In progress": "info", Approved: "success", Rejected: "danger", Returned: "warning", Cancelled: "neutral", Failed: "danger" } as const;
 const toEngine: Record<DecisionAction, "approve" | "reject" | "return"> = { approve: "approve", decline: "reject", return: "return", recommend: "approve" };
 
 /** Operations → operation detail (`/operations/item?id=`). */
@@ -84,6 +86,36 @@ function ItemInner() {
           icon={<SearchX aria-hidden />}
           title="Operation not found"
           description={id ? `No operation with reference ${id} exists in this tenant.` : "No operation reference was given."}
+          action={
+            <Button as={Link} href="/operations" variant="tertiary">
+              Back to approvals
+            </Button>
+          }
+        />
+      </ModulePage>
+    );
+  return <Guarded instance={instance} />;
+}
+
+/** OPS-FR-16: only the requester, deciders, step-role holders and Operations oversight see an item. */
+function Guarded({ instance }: { instance: OperationInstance }) {
+  const { actor } = useScope();
+  const allowed = canViewOperation(instance, actor);
+  const reported = useRef<string | null>(null);
+  useEffect(() => {
+    const key = `${instance.id}:${actor.id}:${actor.roleId}`;
+    if (allowed || reported.current === key) return;
+    reported.current = key;
+    useDb.getState().log({ actorId: actor.id, actorName: actor.name, roleId: actor.roleId, action: "Access denied: operation item", entityType: `Operation · ${instance.operationType}`, entityId: instance.id });
+    publish("operations.request.access-denied", { module: "operations", subject: { type: "Operation", id: instance.id }, payload: { operationId: instance.id } });
+  }, [allowed, instance.id, instance.operationType, actor.id, actor.name, actor.roleId]);
+  if (!allowed)
+    return (
+      <ModulePage module="operations" title="Operation" hideTabs>
+        <EmptyState
+          icon={<Lock aria-hidden />}
+          title="You don't have access to this operation"
+          description="Only the requester, the approvers on its route and Operations oversight can open it."
           action={
             <Button as={Link} href="/operations" variant="tertiary">
               Back to approvals
@@ -118,12 +150,14 @@ function Detail({ instance: i }: { instance: OperationInstance }) {
   const overdue = !!due && now > 0 && new Date(due).getTime() < now;
   const decide = canDecide(i, actor);
   const amount = largestAmount(i.payload);
-  const highValue = amount !== undefined && amount > threshold;
+  // Same rule as the engine (instance.amountNgn), plus the largest amount in the payload (OPS-FR-19).
+  const highValue = requiresStepUp(i) || (amount !== undefined && amount > threshold);
   const open = isOpen(i);
   const mine = i.requestedBy.id === actor.id;
-  const currentStep = def?.steps[i.stepIndex];
+  const route = stepsOf(i, def);
+  const currentStep = route[i.stepIndex];
 
-  // SLA breach: escalate once per step when an approver opens an overdue item (event + notification).
+  // SLA breach: escalate once per step when an approver opens an overdue item (event + notification). TD-962: no sweep job yet.
   const breachKey = `${i.id}:${currentStep?.id}:${i.stepStartedAt}`;
   const alreadyEscalated = log.some((e) => e.name === "operations.sla.breached" && (e.payload as { key?: string })?.key === breachKey);
   useEffect(() => {
@@ -162,7 +196,7 @@ function Detail({ instance: i }: { instance: OperationInstance }) {
     }));
 
   const facts = payloadFacts(i.payload);
-  const completed = def?.steps.slice(0, open || i.status !== "Approved" ? i.stepIndex : def.steps.length).map((s) => s.id) ?? [];
+  const completed = route.slice(0, open || i.status !== "Approved" ? i.stepIndex : route.length).map((s) => s.id);
 
   async function onDecide({ decision, comment }: { decision: DecisionAction; comment: string }) {
     // DecisionPanel only reaches here for a high-value approval after StepUpAuthDialog verified the code.
@@ -225,12 +259,12 @@ function Detail({ instance: i }: { instance: OperationInstance }) {
                 <CardHeader>
                   <div>
                     <CardTitle>Approval route</CardTitle>
-                    <CardDescription>{def ? `${def.name} — ${def.steps.length} step(s). ${def.description}` : "The workflow definition for this operation type is no longer registered."}</CardDescription>
+                    <CardDescription>{def ? `${def.name} — ${route.length} step(s), as captured when submitted. ${def.description}` : "The workflow definition for this operation type is no longer registered."}</CardDescription>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <Stack gap="large">
-                    {def ? <WorkflowDiagram steps={toUiSteps(def.steps)} roleOptions={roleOptions} currentStepId={open ? currentStep?.id : undefined} completedStepIds={completed} label={`${def.name} workflow`} /> : null}
+                    {route.length ? <WorkflowDiagram steps={toUiSteps(route)} roleOptions={roleOptions} currentStepId={open ? currentStep?.id : undefined} completedStepIds={completed} label={`${def?.name ?? i.operationType} workflow`} /> : null}
                     {steps.length ? <OperationTimeline steps={steps} now={now || undefined} warnWithinMs={warnHours * MS_PER_HOUR} /> : <Text tone="muted">Applied directly — the workflow had no steps or was disabled.</Text>}
                   </Stack>
                 </CardContent>
@@ -301,7 +335,7 @@ function Detail({ instance: i }: { instance: OperationInstance }) {
                 onDecide={onDecide}
               />
             ) : (
-              <Alert tone={open ? "info" : i.status === "Approved" ? "success" : i.status === "Rejected" ? "danger" : "warning"} title={open ? "No decision needed from you" : `${i.status}${i.completedAt ? ` · ${dateTime(i.completedAt)}` : ""}`}>
+              <Alert tone={open ? "info" : i.status === "Approved" ? "success" : i.status === "Rejected" || i.status === "Failed" ? "danger" : "warning"} title={open ? "No decision needed from you" : `${i.status}${i.completedAt ? ` · ${dateTime(i.completedAt)}` : ""}`}>
                 {open
                   ? `${decide.reason ?? ""} Waiting on ${actingRoles(i).map(roleName).join(", ") || "—"}.`
                   : (i.reason ?? "This operation is closed.")}

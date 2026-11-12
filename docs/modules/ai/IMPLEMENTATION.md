@@ -94,7 +94,7 @@ Exported: `AI` module key, `aiKeys`, `consoleScopeFor`, `PLATFORM_INTENTS`, `sub
 - Inv. 9 (workflow / audit): removing a schedule is direct (audited + published, but no Operations step and any console user can remove any schedule).
 - Inv. 9 (user-scoped): query log shows only the actor's queries, but saved schedules are global; activity "mine" by role, not by user.
 - Inv. 9 (notified): no notification when an AI output is signed off / rejected, nor to the accountable role when a new AI output is pending.
-- Inv. 9 (connector-ready): NL service, AI output registry and report delivery not recorded in `docs/integration-points.md` (file doesn't exist).
+- Inv. 9 (connector-ready): NL service, AI output registry and report delivery are recorded in [`docs/integration-points.md`](../../integration-points.md) (§7, §11); all simulated.
 - Inv. 8: intent keywords / sector aliases are a code map (TD-905); `PLATFORM_INTENTS` list is code; schedule approver roles and 24 h SLA are literals.
 - Coupling: AI imports `logAudit` / `useRuleValues` from `operational-risk/shared` instead of a platform helper.
 - Scheduled reports never execute (no scheduler).

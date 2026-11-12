@@ -112,7 +112,7 @@ Exports used elsewhere: `useOpRisk`, `netLoss`, `useKriReadings`, `shared.ts` he
 - Invariant 9 (workflow): KRI universe changes (designation, owner, formula) — required by §6.9.1 governance — have no Operations workflow.
 - Invariant 8: `rcsaCycle` name / dates, `LAST_MONTH`, Basel event types, business lines and KRI definitions are code literals without TD ids (only TD-901 / TD-904 recorded); op-loss appetite thresholds are owned by executive rules (TD-508).
 - Design: domain commands sit in page components, not a service seam (harder to move to the backend).
-- Invariant 9 (connector-ready): HRIS, SIEM, CRM, IT-monitoring, CBA-log connectors not recorded — no `docs/integration-points.md`.
+- Invariant 9 (connector-ready): HRIS, security, SIEM, CRM, IT-monitoring and CBA-log sources are recorded in [`docs/integration-points.md`](../../integration-points.md) (§9); simulated.
 - No unit tests.
 
 ## 11. Tech debt

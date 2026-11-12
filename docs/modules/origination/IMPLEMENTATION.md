@@ -132,7 +132,7 @@ pages/* + application/*  →  actions.ts (hooks · audit · publish · notify)  
 - Inv. 8: notification recipient roles are code lists in `actions.ts` (e.g. `["bdm", "legal-officer"]`, `["credit-analyst", "cro"]`); TD-604 covers only monitoring / collateral.
 - Inv. 8: demo bureau / bank names in `data.ts` (`"CRC Credit Bureau"`, `"FirstCentral Credit Bureau"`, other-bank names) — demo data, no TD id; CON1 (§5) assumed generic labels.
 - Inv. 9 user scope: "All applications" shows every application to any origination viewer; no branch / portfolio scoping.
-- Inv. 9 connector-ready: CBA, other-bank, OCR and bureau / CRMS calls are in-module simulators, not the Connectors framework; no `docs/integration-points.md` in this repo.
+- Inv. 9 connector-ready: CBA, other-bank, OCR and bureau / CRMS calls are recorded in [`docs/integration-points.md`](../../integration-points.md) (§1, §2, §8); in-module simulators, no Connectors framework yet (TD-967).
 - Inv. 9 notified: limit-exception and override requests rely only on the generic `operations.approval-requested`; no origination notification on `approval.withdrawn`.
 - Inv. 9 workflow: limit breach does not block submission for approval (vetoed at decision time) — differs from PRD "blocks progression" reading and backend (BE-27).
 - Duplication: covenant auto-tagging exists in both `logic.ts` `tagCovenants` and `offer-letters/store.ts` `autoTag`.

@@ -89,7 +89,7 @@ Page compositions over `@credigit/web-ui` (`BrandProvider` / `useBrand`, preset 
 - **Inv 9 notified:** only System Admin is told a tenant-wide brand changed; other users are not notified.
 - **Inv 9 audited:** demo reset writes no before state; personal previews are audited but publish no event.
 - **Inv 9 extensible:** no hook point around demo reset; brand hooks run in the page component, not a service.
-- **Inv 9 tenant / backend:** approved brand and presets are browser data (`localStorage`, TD-801) — no tenant configuration API; `docs/integration-points.md` missing.
+- **Inv 9 tenant / backend:** approved brand and presets are browser data (`localStorage`, TD-801) — no tenant configuration API (recorded in [`docs/integration-points.md`](../../integration-points.md), §10).
 - **Tests:** no unit tests.
 
 ## 11. Tech debt

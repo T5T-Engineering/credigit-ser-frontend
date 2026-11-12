@@ -78,7 +78,7 @@ Static connector catalogue (`data.ts`) merged with persisted overrides and manua
 
 ## 10. Gaps against the invariants
 - Invariant 12: no catalogue permission keys checked; `useCan("connectors","edit")` module-level gate; export not gated.
-- Invariant 9 (connector-ready): there is no Connectors framework other modules plug into — collateral (CSCS prices), credit-admin (CRMS) and origination (bureau) simulate their own calls; `docs/integration-points.md` does not exist.
+- Invariant 9 (connector-ready): every connector point is recorded in [`docs/integration-points.md`](../../integration-points.md), but there is no Connectors framework yet (TD-967) — collateral (CSCS prices), credit-admin (CRMS) and origination (bureau) simulate their own calls.
 - Invariant 9 (extensible / externally reachable): events are in-app only; no outbound webhook / inbound API seam documented.
 - Invariant 9 (notified): no notification on run completion after a failure (recovery), on stale data past SLA, or on config request submission (approver reached only via Operations task).
 - Invariant 8: schedule labels in the catalogue and default freshness SLAs live in `data.ts` (defaults for rules — acceptable); simulated run duration/outcomes (TD-601); downstream engine names in `projections` are literals.

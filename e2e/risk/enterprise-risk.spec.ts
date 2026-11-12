@@ -17,6 +17,12 @@ test.describe("Enterprise risk — Board Risk Committee pack", () => {
     const packId = (await packHeading.textContent())!.trim();
     await expect(page.getByText("Draft", { exact: true }).first()).toBeVisible();
 
+    // Business rule enterprise-risk.brcPack.requiresAdoptedSummary: submit stays disabled until the AI summary is adopted.
+    await expect(page.getByText("Adopt the executive summary first")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Submit to CRO" })).toBeDisabled();
+    await page.getByRole("button", { name: "Accept", exact: true }).click();
+    await expect(page.getByText("Adopt the executive summary first")).toHaveCount(0);
+
     await page.getByRole("button", { name: "Submit to CRO" }).click();
     await expect(page.getByText(/sent for approval/i).first()).toBeVisible();
     await expect(page.getByText("Submitted to CRO", { exact: true }).first()).toBeVisible();
@@ -29,6 +35,14 @@ test.describe("Enterprise risk — Board Risk Committee pack", () => {
     await switchRole(page, "head-of-risk", "/enterprise-risk/brc-pack/");
     await expect(page.getByText(packId).first()).toBeVisible();
     await expect(page.getByText("Approved for BRC", { exact: true }).first()).toBeVisible();
+    watch.assertClean();
+  });
+
+  test("the old executive board-pack route redirects to the single BRC pack flow", async ({ page }) => {
+    const watch = watchErrors(page);
+    await signInAs(page, "head-of-risk", "/executive/board-pack/");
+    await expect(page).toHaveURL(/\/enterprise-risk\/brc-pack/, { timeout: 20_000 });
+    await expect(page.getByText("Board Risk Committee pack builder", { exact: true })).toBeVisible();
     watch.assertClean();
   });
 

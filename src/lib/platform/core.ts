@@ -57,6 +57,7 @@ export function roleLimit(roleId: RoleId): number | null {
 }
 
 // ---------------------------------------------------------------- operations
+// TD-966: default approvers, SLA hours and recipient roles below are literals (tenant-editable in Operations → Workflows).
 const step = (id: string, name: string, approverRoles: RoleId[], slaHours: number, mode: "any" | "all" = "any", adjudicatorRole?: RoleId): WorkflowStep => ({ id, name, approverRoles, mode, slaHours, adjudicatorRole });
 
 type RuleChangePayload = { key: string; value: RuleValue; reason: string };
@@ -171,6 +172,22 @@ defineTemplates([
     ],
   }),
   tpl({
+    id: "operations.apply-failed",
+    name: "Approved change could not be applied",
+    module: "operations",
+    trigger: "operations.request.failed",
+    subject: "Action needed — approved request could not be applied: {{title}}",
+    inApp: "{{operation}} was approved by {{decidedBy}} but applying it failed: {{error}}",
+    body: "<p>The request <strong>{{title}}</strong> ({{operation}}) received its final approval from {{decidedBy}}, but applying the change failed, so <strong>nothing was changed</strong>.</p><ul><li>Error: {{error}}</li></ul><p>The request is closed as <strong>Failed</strong>. Fix the cause and submit it again.</p>",
+    tone: "danger",
+    variables: [
+      { name: "title", description: "Operation title", example: "Step-up threshold: 100000000 → 150000000" },
+      { name: "operation", description: "Operation type name", example: "Business rule change" },
+      { name: "decidedBy", description: "Final approver", example: "Chinedu Okafor" },
+      { name: "error", description: "Why applying failed", example: "Rule value out of bounds." },
+    ],
+  }),
+  tpl({
     id: "operations.workflow-changed",
     name: "Workflow changed",
     module: "operations",
@@ -250,10 +267,13 @@ defineEvents([
   { name: "operations.request.submitted", module: "operations", description: "An operation was submitted for approval." },
   { name: "operations.step.decided", module: "operations", description: "An approver recorded a decision on a step." },
   { name: "operations.step.dissent", module: "operations", description: "Co-signers split; the step awaits its adjudicator." },
-  { name: "operations.request.approved", module: "operations", description: "An operation was fully approved and applied." },
+  { name: "operations.request.approved", module: "operations", description: "An operation was fully approved and its change applied successfully." },
   { name: "operations.request.rejected", module: "operations", description: "An operation was rejected." },
   { name: "operations.request.returned", module: "operations", description: "An operation was returned to the requester." },
   { name: "operations.request.cancelled", module: "operations", description: "The requester withdrew an operation." },
+  { name: "operations.request.failed", module: "operations", description: "An operation was fully approved but applying it failed; nothing was changed." },
+  { name: "operations.request.access-denied", module: "operations", description: "A user without visibility tried to open an operation item." },
+  { name: "platform.notification.read", module: "platform", description: "A user marked in-app notifications as read." },
   { name: "operations.workflow.changed", module: "operations", description: "An approved workflow definition change was applied." },
   { name: "operations.template.changed", module: "operations", description: "An approved notification template change was applied." },
   { name: "rules.rule.changed", module: "operations", description: "A business rule value changed (after approval)." },

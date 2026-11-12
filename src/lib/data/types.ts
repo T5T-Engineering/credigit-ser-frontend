@@ -234,8 +234,12 @@ export type Notification = {
   createdAt: ISODate;
   read: boolean;
   href?: string;
-  /** Restrict to roles; empty = everyone. */
+  /** Role broadcast: restrict to roles; empty = everyone (ignored when `userIds` is set). */
   roleIds: RoleId[];
+  /** Personal notification: only these users see it (OPS-FR-18). */
+  userIds?: ID[];
+  /** Users who have read it (per-user read state). `read` is the legacy flag for seed rows. */
+  readBy?: ID[];
 };
 
 export type AuditEvent = {

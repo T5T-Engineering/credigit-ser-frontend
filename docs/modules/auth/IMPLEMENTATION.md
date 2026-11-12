@@ -103,7 +103,7 @@ Public API (`accounts.ts`): `signInWithPassword`, `register`, `verifyCode`, `res
 - Inv. 12: Baseline / `identity.password.change` / `identity.step-up.verify` keys not checked.
 - PRD §4.2: device binding and IP allow-list rules exist but are not enforced at sign-in.
 - Security: password hashing (single SHA-256) and accounts in localStorage are prototype-only.
-- Inv. 9 (connector-ready): Entra ID and email/OTP delivery not recorded in `docs/integration-points.md` (file doesn't exist).
+- Inv. 9 (connector-ready): Entra ID (built), Identity API and e-mail / OTP delivery are recorded in [`docs/integration-points.md`](../../integration-points.md) (§6, §7); OTP delivery simulated.
 - Inv. 8: registration branch list comes from seed (`branches`), not tenant configuration.
 
 ## 11. Tech debt

@@ -94,7 +94,7 @@ Backend seam: replace store writes and `apply` with the disbursement API and CBA
 - Invariant 9 (end-to-end): applications created in the prototype never produce a facility, so they can't be disbursed (TD-951).
 - Step-up is client-side only (TD-858); CBA posting simulated (TD-857).
 - Module reuses `credit-admin/common.ts` helpers — cross-module coupling rather than a shared lib.
-- Invariant 9 (connector-ready): CBA posting and step-up provider are not recorded in `docs/integration-points.md` (file doesn't exist yet) and don't go through the Connectors framework.
+- Invariant 9 (connector-ready): CBA posting and the step-up provider are recorded in [`docs/integration-points.md`](../../integration-points.md) (§1, §6); simulated, no Connectors framework yet (TD-967).
 - No unit tests for `conflictedPeople` / `makerChecks` / `checkerChecks`.
 
 ## 11. Tech debt

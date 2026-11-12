@@ -52,7 +52,7 @@ import {
 import { ModulePage } from "@/components/module-page";
 import { useRole, useSession } from "@/lib/auth/session";
 import { canAccess, roleById, type Role } from "@/lib/rbac/roles";
-import { useApplications, useAudit, useDbActions, useLookups, useNotifications, useObligors, useTenant, useUsers } from "@/lib/data/hooks";
+import { useApplications, useAudit, useLookups, useObligors, useTenant, useUsers } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { Application, ApprovalStep } from "@/lib/data/types";
 import { chartFlow } from "@/lib/workflow";
@@ -61,6 +61,7 @@ import { flowTierOf, useOpenAdminOperations, useRoleLimit } from "@/modules/admi
 import { publish } from "@/lib/platform/events";
 import { runHooks } from "@/lib/platform/hooks";
 import { currentStep, stepDueAt, useMyApprovalQueue, useMyRequests, type OperationInstance } from "@/lib/platform/operations";
+import { markNotificationsRead, useMyNotifications } from "@/lib/platform/notifications";
 import { useRule, useRulesStore } from "@/lib/platform/rules";
 import { useScope } from "@/lib/platform/scope";
 import { classTone, isDueSoon, isOverdue, nowMs, DAY, useApprovalsAwaiting, usePortfolioSnapshot, useRoleTasks, useWorkspaceStore } from "./data";
@@ -88,9 +89,8 @@ export function DashboardPage() {
   const apps = useApplications();
   const obligors = useObligors();
   const audit = useAudit();
-  const notifications = useNotifications();
+  const notifications = useMyNotifications();
   const lookups = useLookups();
-  const { update } = useDbActions();
   const awaiting = useApprovalsAwaiting(role.id);
   const tasks = useRoleTasks(role.id);
   const snap = usePortfolioSnapshot();
@@ -225,7 +225,6 @@ export function DashboardPage() {
 
   // ---------------------------------------------------------------- notifications & activity
   const myNotifications: AppNotification[] = notifications
-    .filter((n) => n.roleIds.length === 0 || n.roleIds.includes(role.id))
     .slice(0, 5)
     .map((n) => ({ id: n.id, title: n.title, body: n.body, tone: n.tone, read: n.read, href: n.href, time: ago(n.createdAt) }));
 
@@ -296,8 +295,8 @@ export function DashboardPage() {
               <CardContent>
                 <NotificationList
                   notifications={myNotifications}
-                  onMarkRead={(id) => update("notifications", id, { read: true })}
-                  onMarkAllRead={() => myNotifications.forEach((n) => update("notifications", n.id, { read: true }))}
+                  onMarkRead={(id) => markNotificationsRead([id])}
+                  onMarkAllRead={() => markNotificationsRead(notifications.map((n) => n.id))}
                   linkComponent={Link}
                   emptyMessage="You're all caught up."
                 />

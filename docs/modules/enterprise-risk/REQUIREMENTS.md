@@ -38,7 +38,7 @@ Enterprise-level aggregation over the Risk Data Spine (no new transactional capt
 | ERM-FR-07 | Policy-currency tracker: credit, project-finance, real-estate, SME, agriculture and retail-financing policies reviewed at least every 3 years; due-soon / overdue status. | §6.10 |
 | ERM-FR-08 | Enterprise risk register (inherent/residual, owner, response, COSO stage, heat map) with review recording. | Assumption ER3 (§9.2 COSO/ISO 31000) |
 | ERM-FR-09 | Risk acceptance (Tolerate) routed through Operations. | Assumption ERM2 |
-| ERM-FR-10 | Head of Risk compiles a BRC pack (selectable sections, AI-drafted executive summary) and submits it to the CRO for approval; notified on approval. | §4.1, §6.11; assumption ER4 |
+| ERM-FR-10 | The single Board Risk Committee pack flow (consolidated from the former executive builder): Head of Risk compiles a BRC pack (selectable sections, AI-drafted executive summary) and submits it to the CRO for approval; submission needs the AI summary adopted when rule `enterprise-risk.brcPack.requiresAdoptedSummary` is on; the requester is notified on return / rejection and the notify roles on approval; a returned or withdrawn request puts the pack back to Draft. `/executive/board-pack` redirects here. | §4.1, §6.11, §6.12; assumptions ER4, EX1 |
 | ERM-FR-11 | AI-drafted summary is labelled and adopted only after human sign-off. | §6.12 |
 | ERM-FR-12 | Lines-of-defence view mapping roles to the three lines. | §9.2; assumption ER5 |
 
@@ -55,6 +55,7 @@ Enterprise-level aggregation over the Risk Data Spine (no new transactional capt
 | `enterprise-risk.appetite.amberEscalationRoles` | Amber escalation targets | `["cro"]` | §6.10 — demo mapping |
 | `enterprise-risk.appetite.redEscalationRoles` | Red escalation targets | `["cro","board"]` | §6.10 / §6.11 — demo mapping |
 | `enterprise-risk.brc.packReadyRoles` | Notified when BRC pack approved | `["board","head-of-risk","cro"]` | §6.11 — demo mapping |
+| `enterprise-risk.brcPack.requiresAdoptedSummary` | Pack can't be submitted until its AI-drafted summary is adopted | true | §6.12 — tenant choice (carried over from the former executive rule) |
 | `operational-risk.loss.annualNetLimitNgn` (operational-risk rule) | Annual loss limit for RA-10 | ₦1.2bn (owned by operational-risk) | §6.9 |
 
 ## 5. Workflows (Operations)
@@ -62,7 +63,7 @@ Enterprise-level aggregation over the Risk Data Spine (no new transactional capt
 |---|---|---|---|
 | `enterprise-risk.ras.change` | RAS limit/tolerance change requested | CRO review (`cro`, 72 h) → Board approval (`board`, 168 h) | §4.3, §6.10; ERM1 |
 | `enterprise-risk.risk.acceptance` | Request to tolerate a risk | CRO / MD approval (`cro`, `md`, any, 72 h) | ERM2 |
-| `enterprise-risk.brc-pack.approval` | Head of Risk submits pack | CRO approval (`cro`, 72 h); reject → Draft | §6.11; ER4 |
+| `enterprise-risk.brc-pack.approval` | Head of Risk submits pack | CRO approval (`cro`, 72 h); reject / return / withdraw → Draft | §6.11; ER4, EX1 |
 | `ai.output.sign-off` (ai module) | BRC executive summary sign-off | Accountable role decides (no extra steps) | §6.12 |
 
 ## 6. Notifications
@@ -70,6 +71,7 @@ Enterprise-level aggregation over the Risk Data Spine (no new transactional capt
 |---|---|---|
 | `enterprise-risk.appetite-breach` | Amber/Red metric escalated | Rule `amberEscalationRoles` / `redEscalationRoles` |
 | `enterprise-risk.brc-pack-ready` | BRC pack approved for circulation | Rule `enterprise-risk.brc.packReadyRoles` |
+| `enterprise-risk.brc-pack-returned` | BRC pack rejected or returned by the approver | Requester (personal) |
 | `operations.*` (core) | Approval requested / completed | Approvers / requester |
 
 ## 7. Events and hook points
@@ -82,6 +84,8 @@ Enterprise-level aggregation over the Risk Data Spine (no new transactional capt
 | event | `enterprise-risk.circular.assessed` / `.circular.linked` / `.policy.reviewed` | Regulatory tracker actions | policyId |
 | hook | `enterprise-risk.appetite.escalate.before` / `.after` | Around escalation | metric, roles, actor · before can veto / enrich targets |
 | hook | `enterprise-risk.brc-pack.compile.before` / `.after` | Around pack compile | pack, actor · before can veto / add sections |
+| hook | `enterprise-risk.brc-pack.submit.before` / `.after` | Around pack submission | pack, actor · built-in veto `enterprise-risk.brc-pack-needs-adopted-summary` |
+| subscriber | `operations.request.returned` / `.cancelled` → `enterprise-risk.brc-pack-reopen` | Pack request returned / withdrawn | pack back to Draft |
 | subscriber | `ai.output.signed-off` → `enterprise-risk.adopt-brc-summary` | AI summary signed off | writes adopted text to the pack |
 
 ## 8. Integration points
@@ -110,4 +114,4 @@ Enterprise-level aggregation over the Risk Data Spine (no new transactional capt
 | ER5 | Lines-of-defence placement of unplaced roles | Only PRD-named roles shown |
 | ERM1 | Approval route for RAS changes | CRO review → Board |
 | ERM2 | Who approves risk acceptance | CRO, or MD when the CRO requested it |
-| EX1 | Does the BRC pack need MD / Board secretary approval? | Not in this module; see executive |
+| EX1 | Does the BRC pack need MD / Board secretary approval? | No — one CRO step (tenant can add steps in Operations → Workflows). The former executive flow (CRO or Head of Risk) was retired. |

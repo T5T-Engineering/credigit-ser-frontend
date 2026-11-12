@@ -109,7 +109,7 @@ pages/*.tsx ──► service.ts ──► useDb (spine) + useCollateralStore
 - Invariant 12: no catalogue permission keys checked; actions gated by hard-coded role ids in `collateralAbilities` (role-name check, also violates invariant 8) and module-level `useCan`.
 - Invariant 9 (extensible): no hook points around register, defect report/cure, legal search, genuineness, vault/check-out, insurance renewal, document upload, reminders or price refresh.
 - Invariant 9 (audited): all service commands audit; reminder sweeps are audited as one batch entry (count only, not per collateral).
-- Invariant 9 (connector-ready): SEC/CSCS and the monitoring exception hand-off are not recorded in `docs/integration-points.md` (file does not exist yet); price refresh is a local simulator, not a Connectors-framework call.
+- Invariant 9 (connector-ready): SEC / CSCS is recorded in [`docs/integration-points.md`](../../integration-points.md) (§3); price refresh is a local simulator, no Connectors framework yet (TD-967).
 - Invariant 9 (notified): no notification on valuation verified, perfection completed, legal sign-off accepted, or valuation recorded (verifier is reached only through the Operations task).
 - Invariant 8: notification recipient roles are code lists (TD-604); simulator constants (TD-601); seed shapes (TD-603); default approvers are proposals (TD-602).
 - Margin shortfall does not auto-raise a margin call (PRD §5.7 "automatically raises"); no scheduled reminder/revaluation sweep.

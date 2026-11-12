@@ -12,8 +12,8 @@
 ## 1. Purpose and scope
 Executive cockpit aggregating the outputs of the Phase 1 and Phase 2 modules (§3 row 19): the CRO dashboard (risk-appetite scorecard, 360 RAR posture distribution, limit heat-map, wallet mix, peer/momentum flags, IFRS 9 stage migration, WARR vs appetite, CAR, liquidity and NOP, operational KRI scorecard and losses, share-margin status — each tile drilling down to the owning module) and the Head of Risk dashboard (cross-functional exception feed, Board Risk Committee pack builder). Includes the AI-drafted executive risk summary with sign-off.
 
-- In scope: cockpit tiles and KRI table, escalations awaiting the viewer, exception feed, executive summary sign-off, BRC pack build → submit → approve.
-- Out of scope: calculating the figures (owned by portfolio, ifrs9, market-risk, operational-risk, collateral, credit-analysis); the enterprise-risk module's own BRC pack flow (see Gaps).
+- In scope: cockpit tiles and KRI table, escalations awaiting the viewer, exception feed, executive summary sign-off, BRC pack readiness checklist with a link to the one BRC pack flow.
+- Out of scope: calculating the figures (owned by portfolio, ifrs9, market-risk, operational-risk, collateral, credit-analysis); building, submitting and approving the BRC pack — consolidated into the enterprise-risk module (`/enterprise-risk/brc-pack`, operation `enterprise-risk.brc-pack.approval`). The old `/executive/board-pack` route redirects there.
 
 ## 2. Users and permissions
 | Role | What they do here | Permission keys |
@@ -36,7 +36,7 @@ Executive cockpit aggregating the outputs of the Phase 1 and Phase 2 modules (§
 | EXE-FR-08 | Each tile drills down to the owning module. | §6.11 |
 | EXE-FR-09 | Head of Risk: consolidated cross-functional exception feed (Credit, Market, Liquidity, Operational, Collateral) and escalations awaiting the viewer. | §6.11 Head of Risk dashboard; §4.1 |
 | EXE-FR-10 | AI-drafted executive risk summary, labelled, signed off by CRO / Head of Risk through Operations before use. | §6.12; PF7 |
-| EXE-FR-11 | Board Risk Committee pack builder: build draft, submit for approval, approve / reject; submission requires the period's summary to be signed off (configurable). | §6.11, §6.6.6; EX1 |
+| EXE-FR-11 | The cockpit shows the BRC pack readiness checklist and the status of the latest pack from the single enterprise-risk BRC pack flow, with a link to it; `/executive/board-pack` redirects to `/enterprise-risk/brc-pack`. (Build / submit / approve: ERM-FR-10.) | §6.11, §6.6.6; EX1, ER4 |
 
 ## 4. Business rules and parameters
 | Rule key | Meaning | Default | Source |
@@ -52,31 +52,23 @@ Executive cockpit aggregating the outputs of the Phase 1 and Phase 2 modules (§
 | `executive.varLimitNgn` | 1-day 99% VaR limit | ₦600m | §6.8.1 — demo (TD-508) |
 | `executive.opLossAppetitePct` | Op-loss appetite (% gross income) | 0.5% | §6.9 — demo (TD-508) |
 | `executive.quotedEquityHaircutPct` | Quoted-equity haircut for margin status | 20% | §6.7.3 / §5.7 (TD-508) |
-| `executive.brcPack.requiresSignedSummary` | Pack submission needs a signed-off summary | true | §6.12 — tenant choice |
 | `executive.summary.notifyRoles` | Notified on summary sign-off | cro, head-of-risk, md | Demo |
-| `executive.brcPack.notifyRoles` | Notified on pack approval | cro, head-of-risk, md, board, portfolio-mis-officer | Demo |
 
 ## 5. Workflows (Operations)
 | Operation type | Trigger | Steps · approvers · SLA | Source |
 |---|---|---|---|
 | `executive.summary.signoff` | Summary submitted | 1 step · `cro`, `head-of-risk` (any) · 24 h; requester can't approve | §6.11, §6.12 |
-| `executive.brc-pack.approve` | Pack submitted | 1 step · `cro`, `head-of-risk` (any) · 48 h; reject → "Returned for correction" | §6.6.6, §6.11; EX1 |
 
 ## 6. Notifications
 | Template id | When | Recipients |
 |---|---|---|
 | `executive.summary-signed-off` | Summary signed off | Rule `executive.summary.notifyRoles` + requester |
-| `executive.brc-pack-approved` | Pack approved | Rule `executive.brcPack.notifyRoles` |
-| `executive.brc-pack-returned` | Pack rejected | Requester |
 
 ## 7. Events and hook points
 | Kind (event / hook) | Name | When | Payload / can veto? |
 |---|---|---|---|
 | event | `executive.summary.submitted` / `.summary.signedOff` | Summary lifecycle | period, operationId |
-| event | `executive.brcPack.built` / `.submitted` / `.approved` / `.rejected` | Pack lifecycle | period, operationId, reason |
 | hook | `executive.summary.submit.before` / `.after` | Around summary submission | key, period, headline, actor · before can veto / enrich |
-| hook | `executive.brcPack.build.before` / `.after` | Around pack build | period, actor · before can veto / add sections |
-| hook | `executive.brcPack.submit.before` / `.after` | Around pack submission | summaryKey, run · built-in veto `executive.pack-needs-signed-summary` |
 | subscriber | `operations.request.*` → `executive.operations-closed` | Pack request returned / withdrawn | resets run to "Returned for correction" |
 
 ## 8. Integration points
@@ -97,6 +89,6 @@ Executive cockpit aggregating the outputs of the Phase 1 and Phase 2 modules (§
 | ID | Question | Current assumption |
 |---|---|---|
 | PF7 | Executive module view-only for all roles, yet CRO / Head of Risk sign off and build the pack | CRO and Head of Risk now have `executive: "edit"` |
-| EX1 | Does the BRC pack need MD / Board secretary approval after CRO / Head of Risk? | One step, CRO or Head of Risk; signed summary required |
-| ER4 | BRC pack contents, approval chain and format (enterprise-risk) | Separate flow in enterprise-risk (CRO approves) |
+| EX1 | Does the BRC pack need MD / Board secretary approval after CRO / Head of Risk? | Consolidated flow `enterprise-risk.brc-pack.approval`: one step, CRO (tenant-editable in Operations → Workflows); adopted AI summary required (rule `enterprise-risk.brcPack.requiresAdoptedSummary`) |
+| ER4 | BRC pack contents, approval chain and format (enterprise-risk) | One flow, owned by enterprise-risk (Head of Risk compiles → CRO approves) |
 | MR1 / MR3 (market-risk) | NOP / VaR limits, CBN liquidity minimum | Duplicated here as executive rules (TD-508) |

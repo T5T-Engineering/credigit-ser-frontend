@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Executive governance state shared by the cockpit and the Board Risk Committee pack page: executive-summary
- * sign-off and the BRC pack, both routed through the Operations workflow (see ./platform.ts).
+ * Executive governance state for the cockpit: executive-summary sign-off (Operations workflow, ./platform.ts)
+ * and the readiness of the Board Risk Committee pack, whose one flow lives in enterprise-risk.
  */
 import { useCallback } from "react";
 import { format, getQuarter } from "date-fns";
@@ -14,11 +14,10 @@ import { getDefinition, stepApproverLabel, usePendingFor } from "@/lib/platform/
 import { useScope } from "@/lib/platform/scope";
 import { useSubmitOperation } from "@/modules/portfolio/components/governance";
 import { useActor } from "@/modules/portfolio/hooks";
-import { usePortfolioStore, type ReportRunStatus } from "@/modules/portfolio/store";
-import { PACK_HREF, type PackApprovalPayload, type SummarySignOffPayload } from "./platform";
+import { usePortfolioStore } from "@/modules/portfolio/store";
+import { useErm } from "@/modules/enterprise-risk/store";
+import type { SummarySignOffPayload } from "./platform";
 
-const PACK_REPORT_ID = "RPT-BRC";
-const PACK_SUBMITTABLE: ReportRunStatus[] = ["AI-drafted — awaiting validation", "Validated", "Returned for correction"];
 
 /** Current board-reporting period (quarter of the as-at date). */
 export const boardPeriod = () => `Q${getQuarter(DEMO_NOW)} ${format(DEMO_NOW, "yyyy")}`;
@@ -31,13 +30,9 @@ export function useExecutiveGovernance() {
   const period = boardPeriod();
   const summaryKey = `exec-summary:${period}`;
   const signOff = usePortfolioStore((s) => s.signOffs[summaryKey]);
-  const runs = usePortfolioStore((s) => s.runs);
-  const addRun = usePortfolioStore((s) => s.addRun);
-  const updateRun = usePortfolioStore((s) => s.updateRun);
   const summaryPending = usePendingFor("ExecutiveSummary", summaryKey);
-  const packRuns = runs.filter((r) => r.reportId === PACK_REPORT_ID);
-  const brcRun = packRuns.find((r) => r.period.startsWith(period));
-  const packPending = usePendingFor("BoardPack", brcRun?.id ?? "-");
+  // Latest pack from the single BRC pack flow (enterprise-risk).
+  const latestPack = useErm((s) => s.packs[0] as (typeof s.packs)[number] | undefined);
   const signers = getDefinition("executive.summary.signoff").steps.map(stepApproverLabel).join(" → ");
 
   const submitSummary = useCallback(
@@ -64,50 +59,6 @@ export function useExecutiveGovernance() {
     [summaryKey, period, me, toast, submit, actor],
   );
 
-  const buildPack = useCallback(async () => {
-    const draftPeriod = `${period} (draft)`;
-    const hook = await runHooks("executive.brcPack.build.before", { period: draftPeriod, actor: me });
-    if (!hook.ok) {
-      toast({ title: "Pack not built", description: `${hook.vetoedBy}: ${hook.reason}`, tone: "danger" });
-      return;
-    }
-    const id = `RUN-${Date.now().toString(36).toUpperCase()}`;
-    addRun({ id, reportId: PACK_REPORT_ID, period: hook.ctx.period, status: "AI-drafted — awaiting validation", generatedAt: new Date().toISOString(), generatedBy: actor.name, generatedById: me.id, reconciled: true });
-    actor.log("Built Board Risk Committee pack", "Report", id, undefined, hook.ctx.period);
-    publish("executive.brcPack.built", { module: "executive", subject: { type: "BoardPack", id, title: `Board Risk Committee pack — ${hook.ctx.period}`, href: PACK_HREF }, payload: { period: hook.ctx.period } });
-    await runHooks("executive.brcPack.build.after", { runId: id, period: hook.ctx.period });
-  }, [period, me, toast, addRun, actor]);
-
-  const submitPack = useCallback(async () => {
-    if (!brcRun || !PACK_SUBMITTABLE.includes(brcRun.status)) return;
-    const hook = await runHooks("executive.brcPack.submit.before", { summaryKey, run: brcRun, actor: me });
-    if (!hook.ok) {
-      toast({ title: "Can't submit pack", description: `${hook.vetoedBy}: ${hook.reason}`, tone: "danger" });
-      return;
-    }
-    const before = brcRun.status;
-    updateRun(brcRun.id, { status: "Submitted for release", validatedBy: actor.name, validatedById: me.id, returnReason: undefined });
-    const res = await submit<PackApprovalPayload>("executive.brc-pack.approve", {
-      title: `Approve Board Risk Committee pack — ${brcRun.period}`,
-      subject: { type: "BoardPack", id: brcRun.id, title: `Board Risk Committee pack — ${brcRun.period}`, href: PACK_HREF },
-      payload: { runId: brcRun.id, period: brcRun.period },
-      summary: [
-        { label: "Period", value: brcRun.period },
-        { label: "Run", value: brcRun.id },
-        { label: "Executive summary", value: signOff ? `Signed off by ${signOff.by}` : "Not signed off" },
-        { label: "Prepared by", value: brcRun.generatedBy },
-      ],
-    });
-    if (!res.ok) {
-      updateRun(brcRun.id, { status: before });
-      return;
-    }
-    if (!res.applied) updateRun(brcRun.id, { operationId: res.instance.id });
-    actor.log("Submitted Board Risk Committee pack for approval", "Report", brcRun.id, before, "Submitted for release");
-    publish("executive.brcPack.submitted", { module: "executive", subject: { type: "BoardPack", id: brcRun.id, title: `Board Risk Committee pack — ${brcRun.period}`, href: PACK_HREF }, payload: { operationId: res.instance.id } });
-    await runHooks("executive.brcPack.submit.after", { runId: brcRun.id, operationId: res.instance.id });
-  }, [brcRun, summaryKey, me, toast, updateRun, actor, submit, signOff]);
-
   const packItems: ChecklistItem[] = [
     { id: "appetite", title: "Risk appetite scorecard", description: "Actual vs Board-approved thresholds (§6.10)", status: "met", owner: "Head of Risk" },
     { id: "conc", title: "Concentration — Top 20 and sectoral limits", description: "§6.6.2–6.6.3", status: "met", owner: "Portfolio & MIS Officer" },
@@ -125,12 +76,7 @@ export function useExecutiveGovernance() {
     summaryPending,
     submitSummary,
     signers,
-    packRuns,
-    brcRun,
-    packPending,
+    latestPack,
     packItems,
-    buildPack,
-    submitPack,
-    canSubmitPack: !!brcRun && PACK_SUBMITTABLE.includes(brcRun.status),
   };
 }
