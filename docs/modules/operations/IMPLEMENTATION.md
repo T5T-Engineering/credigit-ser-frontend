@@ -84,7 +84,7 @@ Public API for modules: the engine functions listed in §2 (documented in FRONTE
 
 | Key | Where checked |
 |---|---|
-| none (named keys) | Not used in the frontend. Gating is `useCan("operations", "edit")` (role → module access in `src/lib/rbac/roles.ts`) in rules, workflows, notifications, events pages; `testSendRoles` rule for template tests; `canDecide` (step roles + SoD) for decisions; requester check for withdraw; `canViewOperation` (requester / decider / step role / oversight = `operations: "edit"`, future `operations.oversight.view`, TD-961) for the item page. |
+| `rules.rules.request-change`, `operations.workflows.request-change`, `notifications.templates.request-change`, `notifications.templates.test`, `operations.extensions.toggle`, `operations.catalogue.export`, `notifications.outbox.view`, `notifications.outbox.export`, `operations.items.decide`, `operations.items.withdraw`, `operations.oversight.view` | Pages via `useCan(key)` (`@/lib/iam/permissions`); `canDecide` also requires `operations.items.decide` (never bypasses step roles / SoD); `canViewOperation` oversight = `operations.oversight.view` (TD-961 closed). |
 
 ## 7. Workflows, notifications, events, hooks wired
 
@@ -144,11 +144,9 @@ Public API for modules: the engine functions listed in §2 (documented in FRONTE
 ## 10. Gaps against the invariants
 
 - **Inv 12:** no named permission keys; actions gated by `useCan("operations", "edit")` (CRO, Head of Risk, System Admin) — System Admin is not granted every permission; PRD §10.4 says configuration is "editable only by the System Admin" (W1).
-- **Inv 9 user-scoped:** oversight visibility of items still uses the role → module map (`operations: "edit"`), not a named permission (TD-961, IAM work).
 - **Inv 9 notified / workflow (TD-962):** no SLA sweep — overdue steps escalate only when an eligible approver opens the item; no escalation roles beyond the acting roles (backend ADR-0009 has a job + `operations.slaEscalationRoles`).
 - **Inv 8 (TD-966):** literals — default step approvers and SLA hours of `rule.change` (24/24 h), `workflow.change` / `template.change` / `access.request` (48 h) in `core.ts` (TD-127 records the same pattern only for ifrs9 / market-risk); notification recipient roles in `rule.change`, `workflow.change`, `template.change` `apply`; `LOG_LIMIT` 500, `OUTBOX_LIMIT` 300; 30 s UI clock.
 - **Step-up:** verification is a client flag (TD-858 pattern).
-- **Failed status in library cards (TD-960):** `@credigit/web-ui` `OperationStatus` has no "failed"; `WorkflowInstanceCard` shows a Failed request as "rejected" (item page badge shows "Failed").
 - **Inv 9 audited:** engine audit entries have no before/after state of the instance and no device / IP ("where").
 - **Inv 9 externally reachable (TD-963):** events and hooks are in-browser only — no outbound webhook / message publisher and no inbound APIs; subscriptions are not persisted.
 - **Inv 9 connector-ready:** connector points are recorded in [`docs/integration-points.md`](../../integration-points.md); there is no Connectors framework yet (TD-967).
@@ -163,8 +161,8 @@ Public API for modules: the engine functions listed in §2 (documented in FRONTE
 | TD-128 | RAS / ICAAP rules changeable one key at a time through `rule.change`, bypassing module workflows |
 | TD-113 | Credit approvals registered as one type per route length (engine reads steps per type; backend ADR-0011 fixes with per-instance routes) |
 | TD-804 / TD-110 | Chart-flow shown read-only from static `chartFlow` in admin rules view |
-| TD-960 | Library has no "failed" operation status (card shows rejected) |
-| TD-961 | Item oversight visibility by role → module map until `operations.oversight.view` |
+| TD-960 | Closed — library `failed` status mapped |
+| TD-961 | Closed — oversight by `operations.oversight.view` |
 | TD-962 | No SLA sweep scheduler |
 | TD-963 | Events / hooks in-browser only — no outbound webhooks or inbound APIs |
 | TD-966 | Core operation default approvers / SLAs / recipient roles are literals |

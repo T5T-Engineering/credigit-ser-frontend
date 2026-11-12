@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
-import { BrandProvider, brandBootScript } from "@credigit/web-ui";
+import { brandBootScript, brandStorageKey } from "@credigit/web-ui";
+import { TenantBrandProvider } from "@/components/tenant-brand-provider";
+import { deploymentTenantId } from "@/lib/tenant";
 import { PlatformProvider } from "@/components/platform-provider";
 import "./globals.css";
 
@@ -24,12 +26,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en-GB" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: brandBootScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: brandBootScript(brandStorageKey(deploymentTenantId)) }} />
       </head>
       <body className="bg-bg font-sans text-fg antialiased">
-        <BrandProvider>
+        <TenantBrandProvider>
           <PlatformProvider>{children}</PlatformProvider>
-        </BrandProvider>
+        </TenantBrandProvider>
       </body>
     </html>
   );

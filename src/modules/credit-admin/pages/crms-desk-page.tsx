@@ -25,7 +25,7 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { useObligors } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { newId } from "@/lib/data/store";
@@ -48,7 +48,11 @@ export function CrmsDeskPage() {
   const { searches, batches, reports } = useCrms(rows);
   const { actor } = useScope();
   const deskRoles = useRule<RoleId[]>("credit-admin.cpConfirmerRoles");
-  const canEdit = useCan("credit-admin", "edit") && deskRoles.includes(actor.roleId);
+  const isDesk = deskRoles.includes(actor.roleId);
+  const canSearch = useCan("credit-admin.crms-searches.run") && isDesk;
+  const canSubmitBatch = useCan("credit-admin.crms-batches.submit") && isDesk;
+  const canResolve = useCan("credit-admin.crms-exceptions.resolve") && isDesk;
+  const canExport = useCan("credit-admin.registers.export");
   const recentDays = useRule<number>("credit-admin.crmsRecentWindowDays");
   const cadence = useRule<string>("credit-admin.crmsReportingCadence");
   const [result, setResult] = useState<ActionResult | null>(null);
@@ -107,7 +111,7 @@ export function CrmsDeskPage() {
       header: "Action",
       exportable: false,
       cell: (r) =>
-        r.status === "Exception" && canEdit ? (
+        r.status === "Exception" && canResolve ? (
           <Button
             size="small"
             variant="tertiary"
@@ -134,7 +138,7 @@ export function CrmsDeskPage() {
       module="credit-admin"
       description="CBN Credit Risk Management System desk — search requests and results per obligor (CBN 3.7(d)) and facility reporting (PRD §6.3.3)."
       actions={
-        canEdit ? (
+        canSearch ? (
           <Button iconBefore={<Search aria-hidden className="size-4" />} onClick={() => setSearchOpen(true)}>
             New CRMS search
           </Button>
@@ -192,7 +196,7 @@ export function CrmsDeskPage() {
                     { id: "purpose", label: "Purpose" },
                   ]}
                   defaultSort={{ id: "requested", direction: "desc" }}
-                  exportFilename="crms-search-log.csv"
+                  exportFilename={canExport ? "crms-search-log.csv" : undefined}
                   emptyState={<EmptyState icon={<FileSearch aria-hidden />} title="No searches" description="CRMS searches appear here once requested." />}
                   mobileCard={(s) => (
                     <Stack gap="small">
@@ -220,7 +224,7 @@ export function CrmsDeskPage() {
                     <Text variant="small" tone="muted">
                       Facilities are reported to CRMS once disbursed. Exceptions must be resolved in the source record before they can be submitted.
                     </Text>
-                    {canEdit ? (
+                    {canSubmitBatch ? (
                       <Button iconBefore={<Send aria-hidden className="size-4" />} disabled={pendingReports.length === 0} onClick={() => setSubmitOpen(true)}>
                         Submit batch to CRMS
                       </Button>
@@ -235,7 +239,7 @@ export function CrmsDeskPage() {
                     linkComponent={Link}
                     searchable
                     filters={[{ id: "status", label: "CRMS status", defaultValue: "Exception" }]}
-                    exportFilename="crms-reporting-queue.csv"
+                    exportFilename={canExport ? "crms-reporting-queue.csv" : undefined}
                     emptyState={<EmptyState title="Nothing in this view" description="No facilities match the selected CRMS status." />}
                   />
                 </Stack>

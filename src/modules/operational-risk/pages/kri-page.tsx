@@ -34,7 +34,7 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { dateTime } from "@/lib/format";
 import { publish } from "@/lib/platform/events";
@@ -54,7 +54,11 @@ import { bestLag, pearson, ragLabel, roleNames, round, useAuditLog, useRuleValue
 const ragOrder = { red: 0, amber: 1, green: 2 } as const;
 
 export function KriPage() {
-  const canEdit = useCan("operational-risk", "edit");
+  const canSignOffCommentary = useCan("operational-risk.kri-commentary.sign-off");
+  const canRequestThresholdChange = useCan("operational-risk.kri-thresholds.request-change");
+  const canAcknowledge = useCan("operational-risk.kris.acknowledge");
+  const holdsEscalate = useCan("operational-risk.kris.escalate");
+  const canExport = useCan("operational-risk.registers.export");
   const { actor } = useScope();
   useRuleValues(); // re-render when any rule (thresholds, escalation roles) changes
   const signedOff = useOpRisk((s) => s.commentarySignedOffBy);
@@ -79,8 +83,8 @@ export function KriPage() {
   const reds = readings.filter((k) => k.rag === "red");
   const changes = useOperationsOfType(["operational-risk.kri.threshold-change"]);
   const pending = changes.filter((c) => c.status === "Pending" || c.status === "In progress");
-  /** Escalation is open to the module's editors and to every role on the escalation ladder. */
-  const canEscalate = canEdit || myLevelSet.size > 0;
+  /** Escalation is open to holders of the escalate permission and to every role on the escalation ladder. */
+  const canEscalate = holdsEscalate || myLevelSet.size > 0;
 
   const byCategory = indicatorCategories.map((c) => readings.filter((k) => k.category === c.name));
   const attr = kris.find((k) => k.id === "KRI-HC-01")!.history;
@@ -240,7 +244,7 @@ export function KriPage() {
             ]}
             signedOffBy={signedOff ? `Adopted by ${signedOff}` : undefined}
             onAccept={
-              canEdit && !signedOff
+              canSignOffCommentary && !signedOff
                 ? async () => {
                     const r = await submitAiSignOff({ activityId: "AIA-KRI-COMMENTARY", item: "KRI trend & correlation commentary", module: "Operational risk", href: "/operational-risk", decision: "Signed off", accountable: "operational-risk-analyst" });
                     setOutcome(r);
@@ -282,7 +286,7 @@ export function KriPage() {
             ]}
             defaultSort={{ id: "rag", direction: "asc" }}
             onRowClick={(k) => setSelectedId(k.id)}
-            exportFilename="kri-register.csv"
+            exportFilename={canExport ? "kri-register.csv" : undefined}
             defaultPageSize={20}
           />
         </Stack>
@@ -312,8 +316,8 @@ export function KriPage() {
         footer={
           selected && (
             <div className="flex flex-wrap justify-end gap-2">
-              {canEdit && <Button variant="tertiary" iconBefore={<SlidersHorizontal aria-hidden />} onClick={() => setProposeFor(selected)}>Propose threshold change</Button>}
-              {canEdit && selected.rag !== "green" && !selected.acknowledged?.acknowledgedBy && <Button variant="secondary" onClick={() => acknowledge(selected)}>Acknowledge</Button>}
+              {canRequestThresholdChange && <Button variant="tertiary" iconBefore={<SlidersHorizontal aria-hidden />} onClick={() => setProposeFor(selected)}>Propose threshold change</Button>}
+              {canAcknowledge && selected.rag !== "green" && !selected.acknowledged?.acknowledgedBy && <Button variant="secondary" onClick={() => acknowledge(selected)}>Acknowledge</Button>}
               {canEscalate && selected.rag === "red" && selected.level < 4 && <Button iconBefore={<ArrowUpRight aria-hidden />} onClick={() => void escalate(selected)}>Escalate to Level {selected.level + 1}</Button>}
             </div>
           )

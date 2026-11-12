@@ -21,7 +21,7 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { dateTime, money, moneyShort, number, pct } from "@/lib/format";
 import { publish } from "@/lib/platform/events";
@@ -70,7 +70,10 @@ type PreviewTable = { columns: Array<{ id: string; header: string; numeric?: boo
 
 export function ReportsPage() {
   const model = usePortfolioModel();
-  const canEdit = useCan("portfolio", "edit");
+  const canGenerate = useCan("portfolio.reports.generate");
+  const canSubmitReport = useCan("portfolio.reports.submit");
+  const canDownload = useCan("portfolio.reports.download");
+  const canExport = useCan("portfolio.data.export");
   const actor = useActor();
   const { actor: me } = useScope();
   const { toast } = useToast();
@@ -168,7 +171,7 @@ export function ReportsPage() {
     { id: "actions", header: "Actions", exportable: false, cell: (r) => (
       <span className="flex flex-wrap gap-2">
         <Button size="small" variant="tertiary" iconBefore={<FileText size={14} aria-hidden />} onClick={() => setPreview({ report: r, run: lastRun(r.id) })}>Preview</Button>
-        {canEdit ? <Button size="small" variant="secondary" iconBefore={<Play size={14} aria-hidden />} onClick={() => void generate(r)}>Generate</Button> : null}
+        {canGenerate ? <Button size="small" variant="secondary" iconBefore={<Play size={14} aria-hidden />} onClick={() => void generate(r)}>Generate</Button> : null}
       </span>
     ) },
   ];
@@ -187,7 +190,7 @@ export function ReportsPage() {
         <Button size="small" variant="tertiary" onClick={() => setPreview({ report: reportCatalogue.find((x) => x.id === r.reportId)!, run: r })}>Open</Button>
         {r.reportId === BOARD_PACK_REPORT ? (
           <Button as={Link} href={BOARD_PACK_HREF} size="small" variant="secondary">Board pack</Button>
-        ) : canEdit && SUBMITTABLE.includes(r.status) ? (
+        ) : canSubmitReport && SUBMITTABLE.includes(r.status) ? (
           <Button size="small" variant="primary" iconBefore={<Send size={14} aria-hidden />} disabled={blockOnBreak && !r.reconciled} onClick={() => void submitForRelease(r)}>
             Validate &amp; submit
           </Button>
@@ -228,7 +231,7 @@ export function ReportsPage() {
           description="Every generation, validation and release is written to the audit log. Export the register as CSV."
           actions={<SegmentedControl label="Runs shown" size="small" value={scope} onChange={setScope} options={[{ value: "all", label: "All runs" }, { value: "mine", label: "My runs" }, { value: "decide", label: `Awaiting my decision (${toDecide.size})` }]} />}
         >
-          <DataTable label="Report runs" data={visibleRuns} columns={runColumns} getRowId={(r) => r.id} defaultPageSize={10} exportFilename="report-run-register.csv" filters={[{ id: "status", label: "Status" }]} />
+          <DataTable label="Report runs" data={visibleRuns} columns={runColumns} getRowId={(r) => r.id} defaultPageSize={10} exportFilename={canExport ? "report-run-register.csv" : undefined} filters={[{ id: "status", label: "Status" }]} />
         </Panel>
       </Stack>
 
@@ -248,7 +251,7 @@ export function ReportsPage() {
               <Alert tone="danger" title="Returned for correction">{preview.run.returnReason || "The approver didn't release this run."} Correct it and submit again.</Alert>
             ) : null}
             {preview.run ? <PendingApproval subjectType="ReportRun" subjectId={preview.run.id} /> : null}
-            {preview.run && canEdit && SUBMITTABLE.includes(preview.run.status) && preview.run.reportId !== BOARD_PACK_REPORT ? (
+            {preview.run && canSubmitReport && SUBMITTABLE.includes(preview.run.status) && preview.run.reportId !== BOARD_PACK_REPORT ? (
               <div>
                 <Button size="small" variant="primary" iconBefore={<Send size={14} aria-hidden />} disabled={blockOnBreak && !preview.run.reconciled} onClick={() => void submitForRelease(preview.run!).then(() => setPreview(null))}>
                   Validate &amp; submit for release
@@ -270,7 +273,7 @@ export function ReportsPage() {
               data={table.rows}
               getRowId={(_, i) => String(i)}
               defaultPageSize={10}
-              exportFilename={`${preview.report.id.toLowerCase()}-${(preview.run?.period ?? "preview").replace(/\W+/g, "-").toLowerCase()}.csv`}
+              exportFilename={canDownload ? `${preview.report.id.toLowerCase()}-${(preview.run?.period ?? "preview").replace(/\W+/g, "-").toLowerCase()}.csv` : undefined}
               exportLabel="Download CSV"
               columns={table.columns.map((c) => ({ id: c.id, header: c.header, accessor: (r: Record<string, string | number>) => r[c.id], numeric: c.numeric, cell: (r: Record<string, string | number>) => (typeof r[c.id] === "number" && c.numeric ? fmt(c.id, r[c.id] as number) : String(r[c.id] ?? "")) }))}
             />

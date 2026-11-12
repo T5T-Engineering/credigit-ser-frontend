@@ -24,7 +24,7 @@ import {
   TextLink,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { number, pct } from "@/lib/format";
 import { useOperationsStore } from "@/lib/platform/operations";
 import { useRule } from "@/lib/platform/rules";
@@ -34,7 +34,8 @@ import { requestConfigChange, runConnector } from "../service";
 import { fmtAge, fmtLag, fmtLatency, useConnectorViews, useLoadedAt, type ConnectorView } from "../views";
 
 export function ConnectorsPage() {
-  const canEdit = useCan("connectors", "edit");
+  const canRun = useCan("connectors.connectors.run");
+  const canConfigure = useCan("connectors.config.request-change");
   const loadedAt = useLoadedAt();
   const views = useConnectorViews(loadedAt);
   const warnRatio = useRule<number>("connectors.freshness.warnRatio");
@@ -139,13 +140,13 @@ export function ConnectorsPage() {
                   Schedule: {v.scheduleNow} · SLA {fmtLag(v.freshnessSlaMin * 60)}
                 </Text>
                 <Stack direction="horizontal" gap="small">
-                  {canEdit && (
+                  {canRun && (
                     <Button size="small" variant="secondary" iconBefore={<Play aria-hidden className="size-4" />} onClick={() => runNow(v)} loading={v.isRunning} disabled={!v.enabled || v.isRunning}>
                       Run now
                     </Button>
                   )}
                   <Button size="small" variant="tertiary" iconBefore={<Settings2 aria-hidden className="size-4" />} onClick={() => setConfigId(v.id)}>
-                    {canEdit ? "Configure" : "Configuration"}
+                    {canConfigure ? "Configure" : "Configuration"}
                   </Button>
                 </Stack>
               </Stack>
@@ -160,7 +161,7 @@ export function ConnectorsPage() {
       {config && (
         <ConfigDrawer
           v={config}
-          canEdit={canEdit}
+          canEdit={canConfigure}
           onClose={() => setConfigId(null)}
           onSubmitted={(text) => {
             setNotice({ tone: "info", text });

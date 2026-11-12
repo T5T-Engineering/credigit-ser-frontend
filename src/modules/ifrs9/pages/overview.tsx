@@ -26,7 +26,7 @@ import {
   useToast,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { date, dateTime, money, pct } from "@/lib/format";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { publish } from "@/lib/platform/events";
@@ -42,7 +42,7 @@ import { useEcl } from "../use-ecl";
 
 export function Ifrs9OverviewPage() {
   const { input, rows } = useEcl();
-  const canEdit = useCan("ifrs9", "edit");
+  const canPostReserve = useCan("ifrs9.ecl.post");
   const audit = useAuditLog();
   const { toast } = useToast();
   const submitOperation = useSubmitOperation();
@@ -289,7 +289,7 @@ export function Ifrs9OverviewPage() {
                 <PendingNotice subjectType="Ifrs9ReserveTransfer" subjectId={period}>
                   The entry posts to Finance when the workflow completes.
                 </PendingNotice>
-                {canEdit && !pendingPost && (
+                {canPostReserve && !pendingPost && (
                   <div>
                     <Button onClick={() => void postReserve()}>{lastPosting ? "Request re-post" : "Submit entry for approval"}</Button>
                   </div>

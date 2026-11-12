@@ -28,7 +28,7 @@ import {
   useToast,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { date, dateTime } from "@/lib/format";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { publish } from "@/lib/platform/events";
@@ -56,7 +56,9 @@ export function Ifrs9ModelsPage() {
   const setModelStatus = useIfrs9((s) => s.setModelStatus);
   const aiSignOff = useIfrs9((s) => s.aiSignOff);
   const signOffAi = useIfrs9((s) => s.signOffAi);
-  const canEdit = useCan("ifrs9", "edit");
+  const canSubmitModel = useCan("ifrs9.models.submit");
+  const canReviewFinding = useCan("ifrs9.model-findings.review");
+  const canExport = useCan("ifrs9.data.export");
   const actor = useActorName();
   const audit = useAuditLog();
   const { toast } = useToast();
@@ -72,7 +74,7 @@ export function Ifrs9ModelsPage() {
   const pendingOp = (m: RiskModel) => instances.find((i) => i.subject.type === "RiskModel" && i.subject.id === m.id && (i.status === "Pending" || i.status === "In progress"));
   const overdue = models.filter((m) => new Date(nextReviewOf(m, interval)) < DEMO_NOW && m.status !== "Retired");
   const mine = instances.filter((i) => i.operationType === "ifrs9.model.approval" && i.requestedBy.id === actor.id);
-  const canSubmit = (m: RiskModel) => canEdit && (m.status === "Approved" || m.status === "Validation findings") && !pendingOp(m);
+  const canSubmit = (m: RiskModel) => canSubmitModel && (m.status === "Approved" || m.status === "Validation findings") && !pendingOp(m);
 
   const startSubmit = (m: RiskModel) => {
     setSubmitFor(m);
@@ -163,7 +165,7 @@ export function Ifrs9ModelsPage() {
                 { id: "param", label: "Parameter", columnId: "param" },
                 { id: "status", label: "Status", columnId: "status" },
               ]}
-              exportFilename="model-register"
+              exportFilename={canExport ? "model-register" : undefined}
               mobileCard={(m) => (
                 <Stack gap="xsmall">
                   <Stack direction="horizontal" justify="between" align="center">
@@ -282,7 +284,7 @@ export function Ifrs9ModelsPage() {
               sources={[{ label: "Loan Review work-out register" }, { label: "Collateral register — realised recoveries" }, { label: "MDL-LGD-UNS validation report" }]}
               signedOffBy={aiSignOff["lgd-drift"]}
               onAccept={
-                canEdit
+                canReviewFinding
                   ? () => {
                       const by = `${actor.name}, ${dateTime(new Date())}`;
                       signOffAi("lgd-drift", `Accepted by ${by}`);
@@ -292,7 +294,7 @@ export function Ifrs9ModelsPage() {
                   : undefined
               }
               onDismiss={
-                canEdit
+                canReviewFinding
                   ? () => {
                       signOffAi("lgd-drift", `Dismissed by ${actor.name}, ${dateTime(new Date())}`);
                       audit("Dismissed AI-flagged model finding", "RiskModel", "MDL-LGD-UNS", "AI-flagged", "Dismissed");

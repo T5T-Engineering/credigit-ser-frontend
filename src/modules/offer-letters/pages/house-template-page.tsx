@@ -24,7 +24,7 @@ import {
   Textarea,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { useApplications, useCollateral, useFacilities, useObligors, useTenant, useUsers } from "@/lib/data/hooks";
 import { date } from "@/lib/format";
 import { canDecide, decideOperation, usePendingFor } from "@/lib/platform/operations";
@@ -55,7 +55,9 @@ export function HouseTemplatePage() {
   const templates = useTemplates();
   const { actor: scopeActor } = useScope();
   const editorRoles = useRule<RoleId[]>("offer-letters.libraryEditorRoles");
-  const canEdit = useCan("offer-letters", "edit") && editorRoles.includes(scopeActor.roleId);
+  const isEditorRole = editorRoles.includes(scopeActor.roleId);
+  const canEdit = useCan("offer-letters.template.update") && isEditorRole;
+  const canSubmit = useCan("offer-letters.template.submit") && isEditorRole;
   const actor = useActor();
   const [line, setLine] = useState<HouseTemplate["productLine"]>("All products");
   const [focus, setFocus] = useState<string | undefined>();
@@ -122,13 +124,15 @@ export function HouseTemplatePage() {
                 >
                   Discard draft
                 </Button>
-                <Button
-                  iconBefore={<Send aria-hidden className="size-4" />}
-                  disabled={!working!.changeNote.trim()}
-                  onClick={() => void submitTemplate(working!, current).then((r) => setNotice(r.ok ? { tone: "success", text: r.message } : { tone: "danger", text: r.reason }))}
-                >
-                  Submit for Legal sign-off
-                </Button>
+                {canSubmit ? (
+                  <Button
+                    iconBefore={<Send aria-hidden className="size-4" />}
+                    disabled={!working!.changeNote.trim()}
+                    onClick={() => void submitTemplate(working!, current).then((r) => setNotice(r.ok ? { tone: "success", text: r.message } : { tone: "danger", text: r.reason }))}
+                  >
+                    Submit for Legal sign-off
+                  </Button>
+                ) : null}
               </>
             ) : null}
             {pending && mayDecide && working ? (

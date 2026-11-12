@@ -1,6 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 
-export const DEMO_PASSWORD = "Credigit@2026!";
+/** Password the specs set for seeded users (no demo password ships in the bundle — AUTH-FR-18). */
+export const TEST_PASSWORD = "E2e-Pass#2026z";
 
 /** Navigations can hit a first-time route compile on the dev server. */
 export const NAV = { timeout: 45_000 };
@@ -8,7 +9,7 @@ export const NAV = { timeout: 45_000 };
 /** Sample seeded email shown in the demo hint on the sign-in page. */
 export async function sampleEmail(page: Page): Promise<string> {
   await gotoHydrated(page, "/login/");
-  const hint = page.getByRole("alert").filter({ hasText: /prototype sign-in/i }).or(page.getByText(/any demo user signs in with password/i)).first();
+  const hint = page.getByRole("status").or(page.getByRole("alert")).filter({ hasText: /prototype sign-in/i }).first();
   await expect(hint).toBeVisible();
   const text = (await hint.textContent()) ?? "";
   const m = text.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/);
@@ -56,6 +57,21 @@ export async function enterDemoCode(page: Page) {
   await input.click();
   await page.keyboard.type(code!); // auto-submits on the last digit
   return code!;
+}
+
+/** "Set or reset your password" with the on-screen demo code (seeded users have no password until they set one). */
+export async function setPasswordViaReset(page: Page, email: string, password: string) {
+  await gotoHydrated(page, "/forgot-password/");
+  await page.getByLabel(/work email/i).fill(email);
+  await page.getByRole("button", { name: /send code/i }).click();
+  await expect(page).toHaveURL(/\/verify\//, NAV);
+  await expect(page.getByRole("heading", { name: /enter your reset code/i })).toBeVisible();
+  await enterDemoCode(page);
+  await expect(page).toHaveURL(/reset-password/, NAV);
+  await page.getByLabel(/^new password/i).fill(password);
+  await page.getByLabel(/confirm new password/i).fill(password);
+  await page.getByRole("button", { name: /reset password/i }).click();
+  await expect(page).toHaveURL(/notice=password-reset/, NAV);
 }
 
 /** Full password + OTP sign-in from the login page. */

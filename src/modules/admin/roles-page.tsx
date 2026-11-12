@@ -26,7 +26,8 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
+import { adminExport } from "./iam-service";
 import { allNavItems } from "@/lib/nav";
 import { roleById, type ModuleKey, type RoleId } from "@/lib/rbac/roles";
 import { moneyShort } from "@/lib/format";
@@ -46,7 +47,9 @@ const isOpen = (s: string) => s === "Pending" || s === "In progress";
 
 /** Admin → Roles & limits (PRD §4.0–4.2): default role set, tiers, sign-on limits, per-role session rules, clone role. */
 export function RolesPage() {
-  const canEdit = useCan("admin", "edit");
+  // Names, limits and session rules are business rules (rule.change); cloning / deleting custom roles are role commands.
+  const canEdit = useCan("rules.rules.request-change");
+  const canExport = useCan("identity.roles.export");
   const configured = useConfiguredRoles();
   const instances = useOperationsStore((s) => s.instances);
   const pendingSubjects = useMemo(() => new Set(instances.filter((i) => isOpen(i.status)).map((i) => `${i.subject.type}:${i.subject.id}`)), [instances]);
@@ -120,7 +123,8 @@ export function RolesPage() {
               onRowClick={(r) => setSelectedId(r.id)}
               defaultPageSize={30}
               pageSizeOptions={[]}
-              exportFilename="roles-and-limits.csv"
+              exportFilename={canExport ? "roles-and-limits.csv" : undefined}
+              onExport={adminExport("roles")}
               mobileCard={(r) => (
                 <div className="flex flex-col gap-1">
                   <span className="font-semibold">{r.name}</span>
@@ -145,6 +149,8 @@ export function RolesPage() {
 type Outcome = { label: string; result: SubmitResult };
 
 function RoleDrawer({ role, canEdit, onClose, tiered }: { role: ConfiguredRole; canEdit: boolean; onClose: () => void; tiered: ConfiguredRole[] }) {
+  const canClone = useCan("identity.roles.create");
+  const canDelete = useCan("identity.roles.delete");
   const minReason = useRule<number>("operations.minCommentLength");
   const apex = role.limitNgn !== null && !Number.isFinite(role.limitNgn);
   const hasLimit = role.limitNgn !== null && !apex;
@@ -251,23 +257,30 @@ function RoleDrawer({ role, canEdit, onClose, tiered }: { role: ConfiguredRole; 
       title={role.name}
       description={`${role.group}${role.tier ? ` · Tier ${role.tier}` : ""} · ${role.authority}`}
       footer={
-        canEdit ? (
+        canEdit || canClone || canDelete ? (
           <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="text" as={Link} href={`/admin/permissions?role=${encodeURIComponent(role.id)}`}>
+              Permissions
+            </Button>
             {role.custom ? (
-              <Button variant="danger" iconBefore={<Trash2 aria-hidden className="size-4" />} onClick={() => void remove()}>
+              canDelete ? <Button variant="danger" iconBefore={<Trash2 aria-hidden className="size-4" />} onClick={() => void remove()}>
                 Request delete
-              </Button>
-            ) : (
+              </Button> : null
+            ) : canEdit ? (
               <Button variant="text" iconBefore={<RotateCcw aria-hidden className="size-4" />} onClick={restoreDefaults}>
                 Restore defaults
               </Button>
-            )}
-            <Button variant="tertiary" iconBefore={<Copy aria-hidden className="size-4" />} onClick={() => void clone()}>
-              Request clone
-            </Button>
-            <Button loading={busy} onClick={() => void save()}>
-              Submit for approval
-            </Button>
+            ) : null}
+            {canClone ? (
+              <Button variant="tertiary" iconBefore={<Copy aria-hidden className="size-4" />} onClick={() => void clone()}>
+                Request clone
+              </Button>
+            ) : null}
+            {canEdit ? (
+              <Button loading={busy} onClick={() => void save()}>
+                Submit for approval
+              </Button>
+            ) : null}
           </div>
         ) : undefined
       }
@@ -322,7 +335,7 @@ function RoleDrawer({ role, canEdit, onClose, tiered }: { role: ConfiguredRole; 
           {!role.custom ? pendingKey(ruleKeys.ipAllowList(role.id)) : null}
           <Switch label="Multi-factor authentication" description="Mandatory for every role (PRD §4, §10.1)." checked disabled />
         </Stack>
-        {canEdit ? (
+        {canEdit || canClone || canDelete ? (
           <Field label="Reason for the change" htmlFor="role-reason" required description="Shown to approvers in Operations and kept in the audit log.">
             <Textarea id="role-reason" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
           </Field>

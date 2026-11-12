@@ -27,7 +27,7 @@ import {
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { allNavItems } from "@/lib/nav";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { definitionList, submitOperation, usePendingFor, type WorkflowDefinition } from "@/lib/platform/operations";
 import { useRule } from "@/lib/platform/rules";
 import { fromUiSteps, roleOptions, stepApproverSummary, toUiSteps, useDefinitions } from "./logic";
@@ -38,7 +38,7 @@ const moduleLabel = (m: string) => allNavItems.find((n) => n.module === m)?.labe
 export function WorkflowsPage() {
   useDefinitions();
   const defs = definitionList();
-  const canEdit = useCan("operations", "edit");
+  const canEdit = useCan("operations.workflows.request-change");
   const [search, setSearch] = useState("");
   const [moduleFilter, setModuleFilter] = useState("");
   const [editing, setEditing] = useState<WorkflowDefinition | null>(null);

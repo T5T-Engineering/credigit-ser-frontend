@@ -24,7 +24,7 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { date } from "@/lib/format";
 import { canDecide, decideOperation, useOperationsStore, usePendingFor } from "@/lib/platform/operations";
 import { useRule } from "@/lib/platform/rules";
@@ -57,7 +57,8 @@ export function ClauseLibraryPage() {
   const letters = useOfferLetters();
   const { actor } = useScope();
   const editorRoles = useRule<RoleId[]>("offer-letters.libraryEditorRoles");
-  const canEdit = useCan("offer-letters", "edit") && editorRoles.includes(actor.roleId);
+  const canEdit = useCan("offer-letters.clauses.request-change") && editorRoles.includes(actor.roleId);
+  const canExport = useCan("offer-letters.clauses.export");
   const instances = useOperationsStore((s) => s.instances);
   const awaitingMe = instances.filter((i) => i.operationType === "offer-letters.clause.change" && canDecide(i, actor).ok).length;
   const [lib, setLib] = useState<ClauseLibrary | "all">("all");
@@ -144,7 +145,7 @@ export function ClauseLibraryPage() {
               </Button>
             ) : undefined
           }
-          exportFilename="offer-letter-clause-library.csv"
+          exportFilename={canExport ? "offer-letter-clause-library.csv" : undefined}
           defaultPageSize={25}
           mobileCard={(c) => (
             <Stack gap="xsmall">

@@ -32,7 +32,7 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { newId } from "@/lib/data/store";
 import { branches, DEMO_NOW } from "@/lib/data/seed";
 import { date, money, moneyShort, pct } from "@/lib/format";
@@ -51,7 +51,10 @@ const statusTones = { Reported: "info", "Under investigation": "warning", Remedi
 const statusFlow: LossEventStatus[] = ["Reported", "Under investigation", "Remediation", "Closed"];
 
 export function LossEventsPage() {
-  const canEdit = useCan("operational-risk", "edit");
+  const canLog = useCan("operational-risk.loss-events.create");
+  const canUpdate = useCan("operational-risk.loss-events.update");
+  const canRequestClosure = useCan("operational-risk.loss-events.request-closure");
+  const canExport = useCan("operational-risk.registers.export");
   const { actor } = useScope();
   const allEvents = useOpRisk((s) => s.lossEvents);
   const { addLossEvent, updateLossEvent } = useOpRisk.getState();
@@ -140,7 +143,7 @@ export function LossEventsPage() {
     <ModulePage
       module="operational-risk"
       description="Lagging loss-event register — operational losses and near misses with root cause, business line and monetary impact, checked continuously against the Operational Risk Loss Limit Framework."
-      actions={canEdit ? <Button iconBefore={<FilePlus2 aria-hidden />} onClick={() => setLogOpen(true)}>Log loss event</Button> : undefined}
+      actions={canLog ? <Button iconBefore={<FilePlus2 aria-hidden />} onClick={() => setLogOpen(true)}>Log loss event</Button> : undefined}
     >
       <Stack gap="large">
         {flash && <Alert tone={flash.tone} title={flash.title}>{flash.text}</Alert>}
@@ -214,7 +217,7 @@ export function LossEventsPage() {
           ]}
           defaultSort={{ id: "discoveredAt", direction: "desc" }}
           onRowClick={(e) => setOpenId(e.id)}
-          exportFilename="loss-event-register.csv"
+          exportFilename={canExport ? "loss-event-register.csv" : undefined}
         />
       </Stack>
 
@@ -224,8 +227,8 @@ export function LossEventsPage() {
         title={selected?.title ?? ""}
         description={selected ? `${selected.id} · ${selected.eventType}` : undefined}
         footer={
-          selected && canEdit && selected.status !== "Closed" ? (
-            <ClosureActions event={selected} onMove={moveStatus} onClose={requestClosure} />
+          selected && (canUpdate || canRequestClosure) && selected.status !== "Closed" ? (
+            <ClosureActions event={selected} onMove={moveStatus} onClose={requestClosure} canMove={canUpdate} canClose={canRequestClosure} />
           ) : undefined
         }
       >
@@ -259,7 +262,7 @@ export function LossEventsPage() {
                 { label: "Closure approved by", value: selected.closedBy },
               ]}
             />
-            {canEdit && selected.status !== "Closed" && !selected.nearMiss && (
+            {canUpdate && selected.status !== "Closed" && !selected.nearMiss && (
               <RecoveryForm
                 event={selected}
                 onSave={(amount) => {
@@ -300,9 +303,24 @@ export function LossEventsPage() {
   );
 }
 
-function ClosureActions({ event, onMove, onClose }: { event: LossEvent; onMove: (e: LossEvent, to: LossEventStatus) => void; onClose: (e: LossEvent) => Promise<void> }) {
+function ClosureActions({
+  event,
+  onMove,
+  onClose,
+  canMove,
+  canClose,
+}: {
+  event: LossEvent;
+  onMove: (e: LossEvent, to: LossEventStatus) => void;
+  onClose: (e: LossEvent) => Promise<void>;
+  /** Holds operational-risk.loss-events.update (moves the event along the status flow). */
+  canMove: boolean;
+  /** Holds operational-risk.loss-events.request-closure (routes closure and write-off to Operations). */
+  canClose: boolean;
+}) {
   const next = statusFlow[statusFlow.indexOf(event.status) + 1]!;
   const pending = usePendingFor("LossEvent", event.id);
+  if (next === "Closed" ? !canClose : !canMove) return null;
   return (
     <div className="flex flex-wrap justify-end gap-2">
       {next === "Closed" ? (

@@ -37,7 +37,7 @@ import {
   type BrandConfig,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useRole } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { runHooks } from "@/lib/platform/hooks";
 import { submitOperation, usePendingFor, type SubmitResult } from "@/lib/platform/operations";
 import { useRule } from "@/lib/platform/rules";
@@ -65,18 +65,18 @@ export function BrandingPage() {
 
 function Branding() {
   const { brand, updateBrand, resetBrand } = useBrand();
-  const role = useRole();
   const log = useAuditLog();
   const params = useSearchParams();
-  const requesterRoles = useRule<string[]>("settings.brand.requesterRoles");
   const personalPreview = useRule<boolean>("settings.brand.personalPreview");
   const approved = useBrandingStore((s) => s.approved);
   const approvedAt = useBrandingStore((s) => s.approvedAt);
   const approvedBy = useBrandingStore((s) => s.approvedBy);
   const pending = usePendingFor("Branding", "tenant");
   const [submitOpen, setSubmitOpen] = useState(false);
-  const canRequest = Boolean(role && requesterRoles.includes(role.id));
-  const canEdit = canRequest || personalPreview;
+  // Invariant 12: the tenant brand request and the personal preview are permission-guarded; the tenant rule can still turn previews off.
+  const canRequest = useCan("settings.branding.request-change");
+  const canPreview = useCan("settings.branding.preview");
+  const canEdit = canRequest || (canPreview && personalPreview);
   const tenantBrand = approved ?? defaultBrand;
   const previewing = brandFingerprint(brand) !== brandFingerprint(tenantBrand);
 
@@ -103,11 +103,11 @@ function Branding() {
   const pendingBrand = (pending?.payload as BrandChangePayload | undefined)?.brand;
   useEffect(() => {
     const preset = brandPresets.find((p) => p.id === presetId);
-    if (preset && preset.id !== "credigit") updateBrand(preset.brand);
-  }, [presetId, updateBrand]);
+    if (canPreview && preset && preset.id !== "credigit") updateBrand(preset.brand);
+  }, [canPreview, presetId, updateBrand]);
   useEffect(() => {
-    if (previewPending && pendingBrand) updateBrand(pendingBrand);
-  }, [previewPending, pendingBrand, updateBrand]);
+    if (canPreview && previewPending && pendingBrand) updateBrand(pendingBrand);
+  }, [canPreview, previewPending, pendingBrand, updateBrand]);
 
   const discard = () => (approved ? updateBrand(approved) : resetBrand());
 
@@ -123,7 +123,7 @@ function Branding() {
           ) : (
             "Credigit defaults (Baloo 2) — no tenant brand has been approved yet."
           )}{" "}
-          Changes for every user need a {requesterRoles.length ? "System Admin request" : "request"} and one approval in{" "}
+          Changes for every user need a request and one approval in{" "}
           <TextLink href="/operations" as={Link}>
             Operations
           </TextLink>
@@ -135,11 +135,16 @@ function Branding() {
             {(pending.payload as BrandChangePayload).summary} — requested by {pending.requestedBy.name} {ago(pending.requestedAt)}.{" "}
             <TextLink href={`/operations/item?id=${pending.id}`} as={Link}>
               Open request
-            </TextLink>{" "}
-            ·{" "}
-            <TextLink href="/settings/branding?preview=pending" as={Link}>
-              Preview it live
             </TextLink>
+            {canPreview ? (
+              <>
+                {" "}
+                ·{" "}
+                <TextLink href="/settings/branding?preview=pending" as={Link}>
+                  Preview it live
+                </TextLink>
+              </>
+            ) : null}
           </Alert>
         ) : null}
 
@@ -173,7 +178,7 @@ function Branding() {
           ) : (
             <Card>
               <CardContent>
-                <Text tone="muted">Your role can view the tenant brand. Personal previews are turned off for this tenant (rule settings.brand.personalPreview).</Text>
+                <Text tone="muted">{canPreview ? "You can view the tenant brand. Personal previews are turned off for this tenant (rule settings.brand.personalPreview)." : "You can view the tenant brand. Personal previews need the settings.branding.preview permission."}</Text>
               </CardContent>
             </Card>
           )}

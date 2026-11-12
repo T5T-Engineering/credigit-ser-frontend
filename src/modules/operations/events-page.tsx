@@ -30,7 +30,7 @@ import {
   type HookSubscription,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { dateTime } from "@/lib/format";
 import { eventCatalogue, subscriptionList, useEventStore, type EventDefinition } from "@/lib/platform/events";
 import { hookList, hookPointCatalogue, runHooks, type HookPointDefinition } from "@/lib/platform/hooks";
@@ -61,7 +61,7 @@ export function EventsPage() {
 function LogTab() {
   const log = useEventStore((s) => s.log);
   const { actor } = useScope();
-  const canSeeAll = useCan("operations", "edit");
+  const canSeeAll = useCan("operations.oversight.view");
   // User scope: platform owners see every event; others see events they caused.
   const scoped = canSeeAll ? log : log.filter((e) => e.actorId === actor.id);
   const events: DomainEventEntry[] = scoped.map((e) => ({
@@ -91,6 +91,7 @@ function LogTab() {
 
 function CatalogueTab() {
   const rows = eventCatalogue();
+  const canExport = useCan("operations.catalogue.export");
   const columns: DataTableColumn<EventDefinition>[] = [
     { id: "name", header: "Event", accessor: "name", sortable: true, cell: (e) => <span className="font-mono text-sm font-semibold">{e.name}</span> },
     { id: "module", header: "Module", accessor: "module", sortable: true },
@@ -107,7 +108,7 @@ function CatalogueTab() {
       searchPlaceholder="Search events"
       filters={[{ id: "module", label: "Module", columnId: "module" }]}
       defaultPageSize={20}
-      exportFilename="event-catalogue.csv"
+      exportFilename={canExport ? "event-catalogue.csv" : undefined}
       exportLabel="Export CSV"
       emptyState={<EmptyState title="No events declared" description="Modules declare events with defineEvents() in platform.ts." />}
       mobileCard={(e) => (
@@ -160,7 +161,7 @@ function SubscriptionsTab() {
   const enabled = useEventStore((s) => s.enabled);
   const lastRun = useEventStore((s) => s.lastRun);
   const instances = useOperationsStore((s) => s.instances);
-  const canEdit = useCan("operations", "edit");
+  const canEdit = useCan("operations.extensions.toggle");
   const minComment = useRule<number>("operations.minCommentLength");
   const { actor } = useScope();
   const { toast } = useToast();

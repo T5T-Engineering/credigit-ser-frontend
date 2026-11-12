@@ -39,7 +39,7 @@ import {
   type ChecklistItem,
   type StepItem,
 } from "@credigit/web-ui";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { useApplications, useCollateral, useFacilities, useObligors, useTenant, useUsers } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { newId } from "@/lib/data/store";
@@ -86,7 +86,7 @@ function LetterRoute() {
   const applicationId = params.get("applicationId");
   const letters = useOfferLetters();
   const apps = useApplications();
-  const allowed = useCan("offer-letters");
+  const allowed = useCan("offer-letters.letters.view");
   const letter = letters.find((l) => (id ? l.id === id : applicationId ? l.id === letterIdFor(applicationId) : false));
 
   if (!allowed) return <PermissionGate allowed={false} description="Your role doesn't include the Offer Letter Engine. Switch role from the user menu to see it.">{null}</PermissionGate>;
@@ -149,15 +149,19 @@ function LetterRecord({ letter }: { letter: OfferLetter }) {
   const actor = useActor();
   const { actor: scopeActor } = useScope();
   const roleId = scopeActor.roleId;
-  const canEdit = useCan("offer-letters", "edit");
-  const canView = useCan("offer-letters");
+  const canEdit = useCan("offer-letters.letters.update");
+  const canSubmit = useCan("offer-letters.letters.submit");
+  const canReissue = useCan("offer-letters.letters.request-reissue");
+  const canRecord = useCan("offer-letters.letters.record-acceptance");
   const editorRoles = useRule<RoleId[]>("offer-letters.legalEditorRoles");
   const requesterRoles = useRule<RoleId[]>("offer-letters.signoffRequesterRoles");
   const recorderRoles = useRule<RoleId[]>("offer-letters.acceptanceRecorderRoles");
   const pending = usePendingFor("OfferLetter", letter.id);
   const isLegal = editorRoles.includes(roleId);
-  const canRequest = canView && requesterRoles.includes(roleId);
-  const canRecordAcceptance = canView && recorderRoles.includes(roleId);
+  const isRequester = requesterRoles.includes(roleId);
+  const canRequestSignoff = canSubmit && isRequester;
+  const canRequestReissue = canReissue && isRequester;
+  const canRecordAcceptance = canRecord && recorderRoles.includes(roleId);
   const mayDecide = pending ? canDecide(pending, scopeActor).ok : false;
   const status = displayStatus(letter);
   const editable = canEdit && isLegal && (letter.status === "Draft" || letter.status === "Legal review");
@@ -185,7 +189,7 @@ function LetterRecord({ letter }: { letter: OfferLetter }) {
 
   const actions = (
     <Stack direction="horizontal" gap="small" wrap className="print:hidden">
-      {canRequest && !pending && (letter.status === "Draft" || letter.status === "Legal review") ? (
+      {canRequestSignoff && !pending && (letter.status === "Draft" || letter.status === "Legal review") ? (
         <Button iconBefore={<Send aria-hidden className="size-4" />} onClick={() => void submitForSignoff(letter, info, "issue").then(report)}>
           Send to Legal for sign-off
         </Button>
@@ -195,7 +199,7 @@ function LetterRecord({ letter }: { letter: OfferLetter }) {
           {reissuePending ? "Sign off re-issue" : "Legal sign-off & issue"}
         </Button>
       ) : null}
-      {canRequest && !pending && status === "Expired" ? (
+      {canRequestReissue && !pending && status === "Expired" ? (
         <Button iconBefore={<RotateCcw aria-hidden className="size-4" />} onClick={() => void submitForSignoff(letter, info, "reissue").then(report)}>
           Request re-issue
         </Button>
@@ -254,7 +258,7 @@ function LetterRecord({ letter }: { letter: OfferLetter }) {
       ) : null}
       {status === "Expired" ? (
         <Alert tone="danger" title="This offer has lapsed">
-          It was issued on {date(letter.issuedAt!)} with a {letter.validityDays}-day validity and was not accepted by {date(expiresAt(letter)!)} (PRD §7.3 Acceptance validity). {canRequest ? "Request a re-issue to restart the validity period — Legal signs it off through Operations." : "The Account Officer can request a re-issue, signed off by Legal."}
+          It was issued on {date(letter.issuedAt!)} with a {letter.validityDays}-day validity and was not accepted by {date(expiresAt(letter)!)} (PRD §7.3 Acceptance validity). {canRequestReissue ? "Request a re-issue to restart the validity period — Legal signs it off through Operations." : "The Account Officer can request a re-issue, signed off by Legal."}
         </Alert>
       ) : null}
       {!editable && (letter.status === "Draft" || letter.status === "Legal review") ? (

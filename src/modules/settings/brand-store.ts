@@ -11,6 +11,7 @@ import { useEffect } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { useBrand, type BrandConfig } from "@credigit/web-ui";
+import { deploymentTenantId } from "@/lib/tenant";
 
 type BrandingState = {
   /** Approved tenant brand; null = Credigit defaults. */
@@ -25,7 +26,7 @@ type BrandingState = {
 };
 
 export const useBrandingStore = create<BrandingState>()(
-  persist((): BrandingState => ({ approved: null, version: 0, appliedVersion: 0 }), { name: "credigit.brand.tenant", storage: createJSONStorage(() => localStorage) }),
+  persist((): BrandingState => ({ approved: null, version: 0, appliedVersion: 0 }), { name: `credigit.brand.tenant.${deploymentTenantId}`, storage: createJSONStorage(() => localStorage) }),
 );
 
 /** Only the "brand.change" operation (on approval) calls this. */

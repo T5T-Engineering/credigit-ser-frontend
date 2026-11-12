@@ -5,6 +5,7 @@
 import { Faker, en, en_NG } from "@faker-js/faker";
 import { addDays, addMonths, subDays, subMonths } from "date-fns";
 import { roles, type RoleId } from "../rbac/roles";
+import { DEMO_TENANT_ID } from "../tenant";
 import { buildApprovalChain, settleChain } from "../workflow";
 import type {
   Application,
@@ -29,7 +30,7 @@ import type {
 export const DEMO_NOW = new Date("2026-11-10T09:00:00+01:00");
 
 export const tenant: Tenant = {
-  id: "TEN-001",
+  id: DEMO_TENANT_ID,
   name: "Harbourline Bank Plc (demo tenant)",
   shortName: "Harbourline Bank",
   type: "Commercial bank",

@@ -34,7 +34,8 @@ import {
   type KanbanColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan, useRole } from "@/lib/auth/session";
+import { useRole } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { useLookups } from "@/lib/data/hooks";
 import { dateTime, moneyShort, number } from "@/lib/format";
 import { useOperationsStore } from "@/lib/platform/operations";
@@ -74,7 +75,12 @@ export function ExceptionsPage() {
 function ExceptionsInner() {
   const exceptions = useMonitoring((s) => s.exceptions);
   const { obligor, user } = useLookups();
-  const canEdit = useCan("monitoring", "edit");
+  const canReview = useCan("monitoring.exceptions.review");
+  const canEscalate = useCan("monitoring.exceptions.escalate");
+  const canResolve = useCan("monitoring.exceptions.resolve");
+  const canSweep = useCan("monitoring.escalation-sweep.run");
+  const canExport = useCan("monitoring.registers.export");
+  const canMove = canReview || canEscalate || canResolve;
   const { actor } = useScope();
   const ladder = useLadder();
   const params = useSearchParams();
@@ -123,8 +129,9 @@ function ExceptionsInner() {
     const to = statusOfColumn(toColumn);
     if (!e || !to || e.status === to) return;
     if (pendingOps.has(id)) return setNotice({ tone: "info", text: `${id} is awaiting sign-off (${pendingOps.get(id)!.id}) — decide it in Operations first.` });
-    if (to === "Resolved") return setDialog({ kind: "resolve", id });
-    if (to === "Escalated") return setDialog({ kind: "escalate", id });
+    if (to === "Resolved") return canResolve ? setDialog({ kind: "resolve", id }) : undefined;
+    if (to === "Escalated") return canEscalate ? setDialog({ kind: "escalate", id }) : undefined;
+    if (!canReview) return;
     changeExceptionStatus(id, to as "Raised" | "Under review");
   };
 
@@ -162,7 +169,7 @@ function ExceptionsInner() {
       module="monitoring"
       description="Every exception enters one tenant-configurable escalation protocol that runs until the exception is cured and evidenced — not merely acknowledged (PRD §6.4.4). Resolutions and out-of-cycle escalations are signed off through Operations."
       actions={
-        canEdit ? (
+        canSweep ? (
           <Button variant="secondary" iconBefore={<RefreshCw aria-hidden className="size-4" />} onClick={sweep} loading={sweeping} disabled={!exceptions.some((e) => slaLapsed(e, now))}>
             Run escalation sweep
           </Button>
@@ -214,7 +221,7 @@ function ExceptionsInner() {
             />
           </Stack>
           {view === "board" ? (
-            <KanbanBoard className="[&_[role=listitem]]:w-auto [&_[role=listitem]]:min-w-64 [&_[role=listitem]]:flex-1" label="Exception workflow" columns={columns} cards={cards} onMove={canEdit ? (id, to) => move(id, to) : undefined} onCardClick={(c) => setOpenId(c.id)} emptyColumnMessage="Nothing here" />
+            <KanbanBoard className="[&_[role=listitem]]:w-auto [&_[role=listitem]]:min-w-64 [&_[role=listitem]]:flex-1" label="Exception workflow" columns={columns} cards={cards} onMove={canMove ? (id, to) => move(id, to) : undefined} onCardClick={(c) => setOpenId(c.id)} emptyColumnMessage="Nothing here" />
           ) : (
             <DataTable
               label="Exception-ageing report"
@@ -230,7 +237,7 @@ function ExceptionsInner() {
                 { id: "level", label: "Level", options: [1, 2, 3, 4].map((l) => ({ value: String(l), label: `Level ${l}` })), filterFn: (r, v) => String(r.level) === v },
               ]}
               onRowClick={(r) => setOpenId(r.id)}
-              exportFilename="exception-ageing-report.csv"
+              exportFilename={canExport ? "exception-ageing-report.csv" : undefined}
             />
           )}
         </Stack>
@@ -276,7 +283,9 @@ function ExceptionsInner() {
           e={selected}
           name={obligor.get(selected.obligorId)?.name ?? selected.obligorId}
           assignee={selected.assigneeId ? user.get(selected.assigneeId)?.name : undefined}
-          canEdit={canEdit}
+          canReview={canReview}
+          canEscalate={canEscalate}
+          canResolve={canResolve}
           lapsed={slaLapsed(selected, now)}
           pending={pendingOps.has(selected.id)}
           onClose={closeDrawer}
@@ -295,7 +304,9 @@ function ExceptionDrawer({
   e,
   name,
   assignee,
-  canEdit,
+  canReview,
+  canEscalate,
+  canResolve,
   lapsed,
   pending,
   onClose,
@@ -306,7 +317,9 @@ function ExceptionDrawer({
   e: MonitoringException;
   name: string;
   assignee?: string;
-  canEdit: boolean;
+  canReview: boolean;
+  canEscalate: boolean;
+  canResolve: boolean;
   lapsed: boolean;
   pending: boolean;
   onClose: () => void;
@@ -326,21 +339,25 @@ function ExceptionDrawer({
       description={name}
       size="large"
       footer={
-        canEdit && !resolved && !pending ? (
+        (canReview || canEscalate || canResolve) && !resolved && !pending ? (
           <>
-            {e.status === "Raised" && (
+            {canReview && e.status === "Raised" && (
               <Button variant="tertiary" onClick={onReview}>
                 Start review
               </Button>
             )}
-            <Button variant="secondary" iconBefore={<ArrowUpCircle aria-hidden className="size-4" />} onClick={onEscalate}>
-              {e.level >= 4 ? "Request Level 4 re-notification" : `Request escalation to Level ${e.level + 1}`}
-            </Button>
-            <Button iconBefore={<CheckCircle2 aria-hidden className="size-4" />} onClick={onResolve}>
-              Submit curing evidence
-            </Button>
+            {canEscalate ? (
+              <Button variant="secondary" iconBefore={<ArrowUpCircle aria-hidden className="size-4" />} onClick={onEscalate}>
+                {e.level >= 4 ? "Request Level 4 re-notification" : `Request escalation to Level ${e.level + 1}`}
+              </Button>
+            ) : null}
+            {canResolve ? (
+              <Button iconBefore={<CheckCircle2 aria-hidden className="size-4" />} onClick={onResolve}>
+                Submit curing evidence
+              </Button>
+            ) : null}
           </>
-        ) : canEdit && resolved ? (
+        ) : canReview && resolved ? (
           <Button variant="tertiary" onClick={() => changeExceptionStatus(e.id, "Raised")}>
             Re-open
           </Button>

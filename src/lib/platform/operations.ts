@@ -17,7 +17,8 @@
  */
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { canAccess, roleById, type RoleId } from "../rbac/roles";
+import { roleById, type RoleId } from "../rbac/roles";
+import { actorHasPermission } from "../iam/permissions";
 import { useDb, newId } from "../data/store";
 import { publish, type EventSubject } from "./events";
 import { runHooks } from "./hooks";
@@ -177,6 +178,8 @@ export function actingRoles(instance: OperationInstance): RoleId[] {
 
 /** Whether an actor may decide the instance now (role match + segregation of duties). */
 export function canDecide(instance: OperationInstance, actor: Pick<Actor, "id" | "roleId">): { ok: boolean; reason?: string } {
+  // Invariant 12: deciding needs the permission — and the permission never bypasses eligibility, four-eyes or SoD below.
+  if (!actorHasPermission(actor, "operations.items.decide")) return { ok: false, reason: "Your permissions don't include deciding Operations requests (operations.items.decide)." };
   if (instance.requestedBy.id === actor.id) return { ok: false, reason: "You requested this operation, so someone else must decide it (segregation of duties)." };
   // Four eyes across steps: one person decides at most one step of a request.
   if (!handlers.get(instance.operationType)?.allowRepeatApprover && instance.decisions.some((d) => d.actorId === actor.id)) return { ok: false, reason: "You already decided an earlier step of this request — a different person must decide this one." };
@@ -186,9 +189,8 @@ export function canDecide(instance: OperationInstance, actor: Pick<Actor, "id" |
 
 /**
  * Whether an actor may see an operation (item page, OPS-FR-16): the requester, anyone who decided a step,
- * holders of a role named as approver / adjudicator in any snapshotted step, and Operations oversight.
- * Oversight is the role → module map (`operations: "edit"`) until the IAM permission
- * `operations.oversight.view` replaces it (TD-961).
+ * holders of a role named as approver / adjudicator in any snapshotted step, and holders of the Operations oversight
+ * permission `operations.oversight.view` (was TD-961).
  */
 export function canViewOperation(instance: OperationInstance, actor: Pick<Actor, "id" | "roleId">): boolean {
   if (instance.requestedBy.id === actor.id) return true;
@@ -200,7 +202,7 @@ export function canViewOperation(instance: OperationInstance, actor: Pick<Actor,
     steps = instance.steps ?? [];
   }
   if (steps.some((s) => s.approverRoles.includes(actor.roleId) || s.adjudicatorRole === actor.roleId)) return true;
-  return canAccess(roleById[actor.roleId], "operations", "edit");
+  return actorHasPermission(actor, "operations.oversight.view");
 }
 
 function audit(actor: Actor, action: string, instance: OperationInstance, before?: string, after?: string) {

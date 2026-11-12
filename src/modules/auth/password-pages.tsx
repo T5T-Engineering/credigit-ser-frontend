@@ -4,8 +4,10 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { KeyRound, LockKeyhole, MailQuestion } from "lucide-react";
-import { Alert, AuthCard, Button, Card, CardContent, Field, Input, Logo, PasswordInput, PasswordStrength, Stack, Text, evaluatePassword } from "@credigit/web-ui";
-import { changePassword, passwordPolicy, requestPasswordReset, resetPassword } from "@/lib/auth/accounts";
+import { Alert, AuthCard, Button, Card, CardContent, Field, Input, Logo, PasswordInput, PasswordStrength, Stack, Text, evaluatePassword, type PasswordRule } from "@credigit/web-ui";
+import { useCan } from "@/lib/iam/permissions";
+import { usePasswordRules } from "@/lib/auth/auth-config";
+import { changeMyPassword, forgotPassword, resetPassword } from "@/lib/auth/service";
 import { useSession } from "@/lib/auth/session";
 import { getRule } from "@/lib/platform/rules";
 import { ModulePage } from "@/components/module-page";
@@ -28,9 +30,10 @@ export function ForgotPasswordPage() {
       return;
     }
     setLoading(true);
-    const { challengeId } = await requestPasswordReset(email);
+    const { challengeId, error: failure } = await forgotPassword(email);
     setLoading(false);
-    if (challengeId) router.push(`/verify/?challenge=${challengeId}`);
+    if (failure) setError(failure);
+    else if (challengeId) router.push(`/verify/?challenge=${encodeURIComponent(challengeId)}`);
     else setSent(true); // Same message either way, so we don't reveal which emails have accounts.
   };
 
@@ -39,8 +42,8 @@ export function ForgotPasswordPage() {
       <AuthCard
         logo={<Logo size="small" />}
         icon={<MailQuestion />}
-        title="Forgot your password?"
-        description="Enter your work email and we'll send you a one-time code to reset it."
+        title="Set or reset your password"
+        description="First time here, or forgot your password? Enter your work email and we'll send you a one-time code."
         back={{ label: "Back to sign in", href: "/login/" }}
         linkComponent={Link}
       >
@@ -74,7 +77,7 @@ function NewPasswordFields({ value, confirm, onValue, onConfirm, errors }: { val
       <Field label="New password" required error={errors.password}>
         <PasswordInput autoComplete="new-password" value={value} onChange={(e) => onValue(e.target.value)} />
       </Field>
-      <PasswordStrength value={value} rules={passwordPolicy()} />
+      <PasswordStrength value={value} rules={usePasswordRules()} />
       <Field label="Confirm new password" required error={errors.confirm}>
         <PasswordInput autoComplete="new-password" value={confirm} onChange={(e) => onConfirm(e.target.value)} />
       </Field>
@@ -82,9 +85,9 @@ function NewPasswordFields({ value, confirm, onValue, onConfirm, errors }: { val
   );
 }
 
-function validateNew(password: string, confirm: string) {
+function validateNew(password: string, confirm: string, policy: PasswordRule[]) {
   const errors: { password?: string; confirm?: string } = {};
-  if (!evaluatePassword(password, passwordPolicy()).valid) errors.password = "Your password doesn't meet all the requirements.";
+  if (!evaluatePassword(password, policy).valid) errors.password = "Your password doesn't meet all the requirements.";
   if (confirm !== password) errors.confirm = "Passwords don't match.";
   return errors;
 }
@@ -93,6 +96,7 @@ function validateNew(password: string, confirm: string) {
 export function ResetPasswordPage() {
   const router = useRouter();
   const token = useSearchParams().get("token") ?? "";
+  const policy = usePasswordRules();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [errors, setErrors] = useState<{ password?: string; confirm?: string; form?: string }>({});
@@ -100,7 +104,7 @@ export function ResetPasswordPage() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const next = validateNew(password, confirm);
+    const next = validateNew(password, confirm, policy);
     setErrors(next);
     if (Object.keys(next).length) return;
     setLoading(true);
@@ -135,6 +139,8 @@ export function ResetPasswordPage() {
 export function ChangePasswordPage() {
   const user = useSession((s) => s.user)!;
   const account = useAccounts((s) => s.accounts[user.email.toLowerCase()]);
+  const policy = usePasswordRules();
+  const canChange = useCan("identity.password.change");
   const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -144,12 +150,12 @@ export function ChangePasswordPage() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const next: typeof errors = validateNew(password, confirm);
+    const next: typeof errors = validateNew(password, confirm, policy);
     if (!current) next.current = "Enter your current password.";
     setErrors(next);
     if (Object.keys(next).length) return;
     setLoading(true);
-    const result = await changePassword(user.email, current, password);
+    const result = await changeMyPassword(user.email, current, password);
     setLoading(false);
     if (!result.ok) {
       setErrors({ current: result.error });
@@ -166,7 +172,11 @@ export function ChangePasswordPage() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,560px)_1fr]">
         <Card padding="large" radius="large">
           <CardContent>
-            {user.source === "microsoft" ? (
+            {!canChange ? (
+              <Alert tone="info" title="Not available">
+                Your role doesn&apos;t include changing the password here (permission identity.password.change).
+              </Alert>
+            ) : user.source === "microsoft" ? (
               <Alert tone="info" title="Your password is managed by Microsoft">
                 You sign in with Microsoft. Change your password in your organisation&apos;s Microsoft account settings.
               </Alert>
@@ -180,7 +190,7 @@ export function ChangePasswordPage() {
                   ) : null}
                   {user.source === "demo" ? (
                     <Alert tone="info" title="Demo session">
-                      Demo users&apos; current password is the shared demo password shown on the sign-in page.
+                      Demo users without a password set one with &ldquo;Set or reset your password&rdquo; on the sign-in page.
                     </Alert>
                   ) : null}
                   <Field label="Current password" required error={errors.current}>

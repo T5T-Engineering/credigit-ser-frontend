@@ -8,7 +8,8 @@ import { Alert, Button, EmptyState, EntityHeader, Field, Skeleton, Stack, Tabs, 
 import { ModulePage } from "@/components/module-page";
 import { useApplications, useFacilities, useLookups, useObligor, useObligors } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
-import { useCan, useHydrated } from "@/lib/auth/session";
+import { useHydrated } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { usePendingFor } from "@/lib/platform/operations";
 import { useRule, useRulesStore } from "@/lib/platform/rules";
 import { useScope } from "@/lib/platform/scope";
@@ -81,7 +82,10 @@ function AssessmentRoute() {
 const TABS = ["overview", "parameters", "trend", "peers", "advisory"];
 
 function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor; initialTab: string; initialEdit: boolean }) {
-  const canEdit = useCan("credit-analysis", "edit");
+  const canAdjust = useCan("credit-analysis.enrichment.request-change");
+  const canRefresh = useCan("credit-analysis.assessments.refresh");
+  // The advisory tab guards both the advisory-note sign-off and the gating-override request with one flag.
+  const canAdvise = useCan(["credit-analysis.advisory-notes.sign-off", "credit-analysis.gating-overrides.request"]);
   const { actor } = useScope();
   const { sector, user: userById } = useLookups();
   const allObligors = useObligors();
@@ -95,7 +99,7 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
   const staleAfter = useRule<number>("credit-analysis.staleAfterDays");
   const minRationale = useRule<number>("credit-analysis.enrichment.minRationale");
 
-  const startInEdit = initialEdit && canEdit && !pendingEnrichment;
+  const startInEdit = initialEdit && canAdjust && !pendingEnrichment;
   const [tab, setTab] = useState(startInEdit ? "parameters" : initialTab);
   const [editing, setEditing] = useState(startInEdit);
   const [draft, setDraft] = useState<Record<string, string>>(() => (startInEdit ? Object.fromEntries(Object.entries(saved).map(([k, v]) => [k, String(v.score)])) : {}));
@@ -234,14 +238,18 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
             },
           ]}
           actions={
-            canEdit && !editing ? (
+            (canAdjust || canRefresh) && !editing ? (
               <>
-                <Button variant="tertiary" iconBefore={<Pencil aria-hidden />} onClick={startEdit} disabled={!!pendingEnrichment}>
-                  Adjust enrichment inputs
-                </Button>
-                <Button iconBefore={<RefreshCw aria-hidden />} loading={refreshing} onClick={refresh}>
-                  Refresh assessment
-                </Button>
+                {canAdjust ? (
+                  <Button variant="tertiary" iconBefore={<Pencil aria-hidden />} onClick={startEdit} disabled={!!pendingEnrichment}>
+                    Adjust enrichment inputs
+                  </Button>
+                ) : null}
+                {canRefresh ? (
+                  <Button iconBefore={<RefreshCw aria-hidden />} loading={refreshing} onClick={refresh}>
+                    Refresh assessment
+                  </Button>
+                ) : null}
               </>
             ) : undefined
           }
@@ -282,7 +290,7 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
         {stale && !editing && (
           <Alert tone="warning" title={`Assessment is ${age} days old`}>
             Older than the {staleAfter}-day refresh cycle (tenant parameter).{" "}
-            {canEdit ? "Refresh to re-read the CBA, bureau/CRMS, NGX corpus and macro feeds." : "A Credit Analyst can refresh it."}
+            {canRefresh ? "Refresh to re-read the CBA, bureau/CRMS, NGX corpus and macro feeds." : "A Credit Analyst can refresh it."}
           </Alert>
         )}
         {a.position.neutral && (
@@ -380,7 +388,7 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
             {
               id: "advisory",
               label: "Advisory",
-              content: <AdvisoryTab a={a} cell={cell} wallet={wallet} benchmarks={benchmarks} trends={trends} gating={gating} canEdit={canEdit} editing={editing} committedLabel={committed.position.label} />,
+              content: <AdvisoryTab a={a} cell={cell} wallet={wallet} benchmarks={benchmarks} trends={trends} gating={gating} canEdit={canAdvise} editing={editing} committedLabel={committed.position.label} />,
             },
           ]}
         />

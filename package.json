@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "sync:permissions": "node scripts/sync-permissions.mjs"
   },
   "dependencies": {
     "@azure/msal-browser": "5.29.0",

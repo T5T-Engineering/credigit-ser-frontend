@@ -25,10 +25,12 @@ import {
   Workflow,
 } from "lucide-react";
 import type { ModuleKey } from "./rbac/roles";
+import { areaPermissions, type PermissionKey } from "./iam/catalogue";
 
 export type Phase = 1 | 2 | 3;
 
-export type NavPage = { label: string; href: string; phase?: Phase };
+/** `permission` = the page's `<area>.<resource>.view` key (AUTH-FR-17): the tab is shown and the page opens only when it is held. */
+export type NavPage = { label: string; href: string; phase?: Phase; permission: PermissionKey };
 
 export type NavItem = {
   module: ModuleKey;
@@ -41,6 +43,8 @@ export type NavItem = {
   prd?: string;
   /** Sub-pages shown as tabs on the module pages. */
   pages?: NavPage[];
+  /** View key of a module without sub-pages (e.g. `dashboard.overview.view`). */
+  permission?: PermissionKey;
 };
 
 export type NavGroup = { label: string; items: NavItem[] };
@@ -50,12 +54,12 @@ export const navigation: NavGroup[] = [
   {
     label: "Workspace",
     items: [
-      { module: "dashboard", label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { module: "inbox", label: "My tasks", href: "/inbox", icon: Inbox },
+      { module: "dashboard", label: "Dashboard", href: "/dashboard", permission: "dashboard.overview.view", icon: LayoutDashboard },
+      { module: "inbox", label: "My tasks", href: "/inbox", permission: "inbox.tasks.view", icon: Inbox },
       {
         module: "executive",
         label: "Executive view",
-        href: "/executive",
+        href: "/executive", permission: "executive.cockpit.view",
         icon: Gauge,
         phase: 1,
         prd: "§6.11, §3 row 19",
@@ -68,9 +72,9 @@ export const navigation: NavGroup[] = [
         phase: 2,
         prd: "§6.12–6.13",
         pages: [
-          { label: "Query console", href: "/ai" },
-          { label: "AI activity", href: "/ai/activity" },
-          { label: "Query log & schedules", href: "/ai/log" },
+          { label: "Query console", href: "/ai", permission: "ai.console.view" },
+          { label: "AI activity", href: "/ai/activity", permission: "ai.activity.view" },
+          { label: "Query log & schedules", href: "/ai/log", permission: "ai.query-log.view" },
         ],
       },
     ],
@@ -86,11 +90,11 @@ export const navigation: NavGroup[] = [
         phase: 1,
         prd: "§6.1",
         pages: [
-          { label: "Applications", href: "/origination" },
-          { label: "My queue", href: "/origination?scope=mine" },
-          { label: "My applications", href: "/origination?scope=created" },
-          { label: "New application", href: "/origination/new" },
-          { label: "Approval chart-flows", href: "/origination/chart-flows" },
+          { label: "Applications", href: "/origination", permission: "origination.applications.view" },
+          { label: "My queue", href: "/origination?scope=mine", permission: "origination.queue.view" },
+          { label: "My applications", href: "/origination?scope=created", permission: "origination.applications.view-mine" },
+          { label: "New application", href: "/origination/new", permission: "origination.applications.create" },
+          { label: "Approval chart-flows", href: "/origination/chart-flows", permission: "origination.chart-flows.view" },
         ],
       },
       {
@@ -101,11 +105,11 @@ export const navigation: NavGroup[] = [
         phase: 1,
         prd: "§6.2",
         pages: [
-          { label: "Assessments", href: "/credit-analysis" },
-          { label: "Peer benchmarks", href: "/credit-analysis/benchmarks", phase: 2 },
-          { label: "Share of wallet", href: "/credit-analysis/share-of-wallet", phase: 2 },
-          { label: "NGX sector corpus", href: "/credit-analysis/sector-corpus", phase: 2 },
-          { label: "My requests", href: "/credit-analysis/requests" },
+          { label: "Assessments", href: "/credit-analysis", permission: "credit-analysis.assessments.view" },
+          { label: "Peer benchmarks", href: "/credit-analysis/benchmarks", phase: 2, permission: "credit-analysis.benchmarks.view" },
+          { label: "Share of wallet", href: "/credit-analysis/share-of-wallet", phase: 2, permission: "credit-analysis.share-of-wallet.view" },
+          { label: "NGX sector corpus", href: "/credit-analysis/sector-corpus", phase: 2, permission: "credit-analysis.sector-corpus.view" },
+          { label: "My requests", href: "/credit-analysis/requests", permission: "credit-analysis.requests.view" },
         ],
       },
       {
@@ -116,9 +120,9 @@ export const navigation: NavGroup[] = [
         phase: 1,
         prd: "§7",
         pages: [
-          { label: "Offer letters", href: "/offer-letters" },
-          { label: "House template", href: "/offer-letters/template" },
-          { label: "Conditions library", href: "/offer-letters/library" },
+          { label: "Offer letters", href: "/offer-letters", permission: "offer-letters.letters.view" },
+          { label: "House template", href: "/offer-letters/template", permission: "offer-letters.template.view" },
+          { label: "Conditions library", href: "/offer-letters/library", permission: "offer-letters.clauses.view" },
         ],
       },
       {
@@ -129,13 +133,13 @@ export const navigation: NavGroup[] = [
         phase: 1,
         prd: "§6.3",
         pages: [
-          { label: "Facility register", href: "/credit-admin" },
-          { label: "Waivers & deferrals", href: "/credit-admin/waivers" },
-          { label: "CRMS desk", href: "/credit-admin/crms" },
-          { label: "Credit files", href: "/credit-admin/credit-files" },
+          { label: "Facility register", href: "/credit-admin", permission: "credit-admin.facilities.view" },
+          { label: "Waivers & deferrals", href: "/credit-admin/waivers", permission: "credit-admin.waivers.view" },
+          { label: "CRMS desk", href: "/credit-admin/crms", permission: "credit-admin.crms.view" },
+          { label: "Credit files", href: "/credit-admin/credit-files", permission: "credit-admin.credit-files.view" },
         ],
       },
-      { module: "disbursement", label: "Disbursement", href: "/disbursement", icon: Banknote, phase: 1, prd: "§4.1, §4.2" },
+      { module: "disbursement", label: "Disbursement", href: "/disbursement", permission: "disbursement.queue.view", icon: Banknote, phase: 1, prd: "§4.1, §4.2" },
       {
         module: "monitoring",
         label: "Loan review & monitoring",
@@ -144,11 +148,11 @@ export const navigation: NavGroup[] = [
         phase: 1,
         prd: "§6.4",
         pages: [
-          { label: "Past-due obligations", href: "/monitoring" },
-          { label: "Covenants & inflows", href: "/monitoring/covenants" },
-          { label: "Guarantees & overdrafts", href: "/monitoring/guarantees" },
-          { label: "Exceptions & escalations", href: "/monitoring/exceptions" },
-          { label: "Escalation protocol", href: "/monitoring/escalation" },
+          { label: "Past-due obligations", href: "/monitoring", permission: "monitoring.past-due.view" },
+          { label: "Covenants & inflows", href: "/monitoring/covenants", permission: "monitoring.covenants.view" },
+          { label: "Guarantees & overdrafts", href: "/monitoring/guarantees", permission: "monitoring.guarantees.view" },
+          { label: "Exceptions & escalations", href: "/monitoring/exceptions", permission: "monitoring.exceptions.view" },
+          { label: "Escalation protocol", href: "/monitoring/escalation", permission: "monitoring.escalation.view" },
         ],
       },
       {
@@ -159,10 +163,10 @@ export const navigation: NavGroup[] = [
         phase: 1,
         prd: "§6.5, §5.7",
         pages: [
-          { label: "Collateral register", href: "/collateral" },
-          { label: "Legal review", href: "/collateral/legal" },
-          { label: "Valuation verification", href: "/collateral/verification" },
-          { label: "Share-backed (SEC/CSCS)", href: "/collateral/shares", phase: 2 },
+          { label: "Collateral register", href: "/collateral", permission: "collateral.register.view" },
+          { label: "Legal review", href: "/collateral/legal", permission: "collateral.legal.view" },
+          { label: "Valuation verification", href: "/collateral/verification", permission: "collateral.verification.view" },
+          { label: "Share-backed (SEC/CSCS)", href: "/collateral/shares", phase: 2, permission: "collateral.shares.view" },
         ],
       },
     ],
@@ -178,14 +182,14 @@ export const navigation: NavGroup[] = [
         phase: 1,
         prd: "§6.6",
         pages: [
-          { label: "Dashboards", href: "/portfolio" },
-          { label: "Limits", href: "/portfolio/limits" },
-          { label: "Concentration", href: "/portfolio/concentration" },
-          { label: "WARR", href: "/portfolio/warr" },
-          { label: "Sector performance", href: "/portfolio/sector-performance", phase: 2 },
-          { label: "Projections", href: "/portfolio/projections", phase: 2 },
-          { label: "Annual plan", href: "/portfolio/annual-plan", phase: 2 },
-          { label: "Regulatory reports", href: "/portfolio/reports" },
+          { label: "Dashboards", href: "/portfolio", permission: "portfolio.dashboards.view" },
+          { label: "Limits", href: "/portfolio/limits", permission: "portfolio.limits.view" },
+          { label: "Concentration", href: "/portfolio/concentration", permission: "portfolio.concentration.view" },
+          { label: "WARR", href: "/portfolio/warr", permission: "portfolio.warr.view" },
+          { label: "Sector performance", href: "/portfolio/sector-performance", phase: 2, permission: "portfolio.sector-performance.view" },
+          { label: "Projections", href: "/portfolio/projections", phase: 2, permission: "portfolio.projections.view" },
+          { label: "Annual plan", href: "/portfolio/annual-plan", phase: 2, permission: "portfolio.annual-plan.view" },
+          { label: "Regulatory reports", href: "/portfolio/reports", permission: "portfolio.reports.view" },
         ],
       },
       {
@@ -196,12 +200,12 @@ export const navigation: NavGroup[] = [
         phase: 2,
         prd: "§6.7",
         pages: [
-          { label: "ECL overview", href: "/ifrs9" },
-          { label: "Staging", href: "/ifrs9/staging" },
-          { label: "PD / LGD / EAD models", href: "/ifrs9/models" },
-          { label: "ICAAP", href: "/ifrs9/icaap" },
-          { label: "Declassification", href: "/ifrs9/declassification" },
-          { label: "Rules & approvals", href: "/ifrs9/governance" },
+          { label: "ECL overview", href: "/ifrs9", permission: "ifrs9.ecl.view" },
+          { label: "Staging", href: "/ifrs9/staging", permission: "ifrs9.staging.view" },
+          { label: "PD / LGD / EAD models", href: "/ifrs9/models", permission: "ifrs9.models.view" },
+          { label: "ICAAP", href: "/ifrs9/icaap", permission: "ifrs9.icaap.view" },
+          { label: "Declassification", href: "/ifrs9/declassification", permission: "ifrs9.declassification.view" },
+          { label: "Rules & approvals", href: "/ifrs9/governance", permission: "ifrs9.governance.view" },
         ],
       },
       {
@@ -212,11 +216,11 @@ export const navigation: NavGroup[] = [
         phase: 2,
         prd: "§6.8",
         pages: [
-          { label: "Market risk", href: "/market-risk" },
-          { label: "Liquidity", href: "/market-risk/liquidity" },
-          { label: "ILAAP", href: "/market-risk/ilaap", phase: 3 },
-          { label: "Stress testing", href: "/market-risk/stress-testing", phase: 3 },
-          { label: "Limits, rules & approvals", href: "/market-risk/governance" },
+          { label: "Market risk", href: "/market-risk", permission: "market-risk.market.view" },
+          { label: "Liquidity", href: "/market-risk/liquidity", permission: "market-risk.liquidity.view" },
+          { label: "ILAAP", href: "/market-risk/ilaap", phase: 3, permission: "market-risk.ilaap.view" },
+          { label: "Stress testing", href: "/market-risk/stress-testing", phase: 3, permission: "market-risk.stress-testing.view" },
+          { label: "Limits, rules & approvals", href: "/market-risk/governance", permission: "market-risk.governance.view" },
         ],
       },
       {
@@ -227,10 +231,10 @@ export const navigation: NavGroup[] = [
         phase: 2,
         prd: "§6.9",
         pages: [
-          { label: "KRIs", href: "/operational-risk" },
-          { label: "Loss events", href: "/operational-risk/loss-events" },
-          { label: "RCSA", href: "/operational-risk/rcsa" },
-          { label: "BCM & crisis", href: "/operational-risk/bcm" },
+          { label: "KRIs", href: "/operational-risk", permission: "operational-risk.kris.view" },
+          { label: "Loss events", href: "/operational-risk/loss-events", permission: "operational-risk.loss-events.view" },
+          { label: "RCSA", href: "/operational-risk/rcsa", permission: "operational-risk.rcsa.view" },
+          { label: "BCM & crisis", href: "/operational-risk/bcm", permission: "operational-risk.bcm.view" },
         ],
       },
       {
@@ -241,12 +245,12 @@ export const navigation: NavGroup[] = [
         phase: 2,
         prd: "§6.10",
         pages: [
-          { label: "Risk appetite", href: "/enterprise-risk" },
-          { label: "Risk register", href: "/enterprise-risk/register" },
-          { label: "Insider & related party", href: "/enterprise-risk/insider" },
-          { label: "Regulatory & policies", href: "/enterprise-risk/regulatory" },
-          { label: "BRC pack", href: "/enterprise-risk/brc-pack" },
-          { label: "Lines of defence", href: "/enterprise-risk/lines-of-defence" },
+          { label: "Risk appetite", href: "/enterprise-risk", permission: "enterprise-risk.risk-appetite.view" },
+          { label: "Risk register", href: "/enterprise-risk/register", permission: "enterprise-risk.register.view" },
+          { label: "Insider & related party", href: "/enterprise-risk/insider", permission: "enterprise-risk.insider.view" },
+          { label: "Regulatory & policies", href: "/enterprise-risk/regulatory", permission: "enterprise-risk.regulatory.view" },
+          { label: "BRC pack", href: "/enterprise-risk/brc-pack", permission: "enterprise-risk.brc-pack.view" },
+          { label: "Lines of defence", href: "/enterprise-risk/lines-of-defence", permission: "enterprise-risk.lines-of-defence.view" },
         ],
       },
     ],
@@ -261,12 +265,12 @@ export const navigation: NavGroup[] = [
         icon: Workflow,
         prd: "§10.4",
         pages: [
-          { label: "Approvals", href: "/operations" },
-          { label: "My requests", href: "/operations/requests" },
-          { label: "Workflows", href: "/operations/workflows" },
-          { label: "Business rules", href: "/operations/rules" },
-          { label: "Notifications", href: "/operations/notifications" },
-          { label: "Events & hooks", href: "/operations/events" },
+          { label: "Approvals", href: "/operations", permission: "operations.queue.view" },
+          { label: "My requests", href: "/operations/requests", permission: "operations.requests.view" },
+          { label: "Workflows", href: "/operations/workflows", permission: "operations.workflows.view" },
+          { label: "Business rules", href: "/operations/rules", permission: "rules.rules.view" },
+          { label: "Notifications", href: "/operations/notifications", permission: "notifications.templates.view" },
+          { label: "Events & hooks", href: "/operations/events", permission: "operations.events.view" },
         ],
       },
     ],
@@ -282,9 +286,9 @@ export const navigation: NavGroup[] = [
         phase: 1,
         prd: "§5",
         pages: [
-          { label: "Overview", href: "/connectors" },
-          { label: "Recent runs", href: "/connectors/runs" },
-          { label: "Staging & reconciliation", href: "/connectors/staging" },
+          { label: "Overview", href: "/connectors", permission: "connectors.overview.view" },
+          { label: "Recent runs", href: "/connectors/runs", permission: "connectors.runs.view" },
+          { label: "Staging & reconciliation", href: "/connectors/staging", permission: "connectors.staging.view" },
         ],
       },
       {
@@ -294,21 +298,22 @@ export const navigation: NavGroup[] = [
         icon: Users,
         prd: "§4",
         pages: [
-          { label: "Users", href: "/admin" },
-          { label: "Roles & limits", href: "/admin/roles" },
-          { label: "Rules & parameters", href: "/admin/parameters" },
+          { label: "Users", href: "/admin", permission: "identity.users.view" },
+          { label: "Roles & limits", href: "/admin/roles", permission: "identity.roles.view" },
+          { label: "Permissions", href: "/admin/permissions", permission: "identity.permissions.view" },
+          { label: "Rules & parameters", href: "/admin/parameters", permission: "platform.parameters.view" },
         ],
       },
-      { module: "audit", label: "Audit log", href: "/audit", icon: ScrollText, prd: "§10.3" },
+      { module: "audit", label: "Audit log", href: "/audit", permission: "audit.log.view", icon: ScrollText, prd: "§10.3" },
       {
         module: "settings",
         label: "Settings",
         href: "/settings",
         icon: SlidersHorizontal,
         pages: [
-          { label: "Profile & security", href: "/settings" },
-          { label: "Password", href: "/settings/password" },
-          { label: "Branding", href: "/settings/branding" },
+          { label: "Profile & security", href: "/settings", permission: "settings.profile.view" },
+          { label: "Password", href: "/settings/password", permission: "identity.password.change" },
+          { label: "Branding", href: "/settings/branding", permission: "settings.branding.view" },
         ],
       },
     ],
@@ -322,4 +327,17 @@ export const moduleIcons = { KeyRound, Palette };
 
 export function navItemFor(pathname: string): NavItem | undefined {
   return [...allNavItems].sort((a, b) => b.href.length - a.href.length).find((i) => pathname === i.href || pathname.startsWith(`${i.href}/`));
+}
+
+/** Permissions that show a nav item (API contract §5): any permission whose area is the item's module. */
+export function navItemPermissions(item: NavItem): PermissionKey[] {
+  return areaPermissions(item.module);
+}
+
+/** The view permission a path needs: the most specific matching sub-page, else the item's own key. */
+export function pagePermissionFor(pathname: string): PermissionKey | undefined {
+  const item = navItemFor(pathname);
+  if (!item) return undefined;
+  const page = [...(item.pages ?? [])].filter((p) => !p.href.includes("?")).sort((a, b) => b.href.length - a.href.length).find((p) => pathname === p.href || pathname.startsWith(`${p.href}/`));
+  return page?.permission ?? item.permission;
 }

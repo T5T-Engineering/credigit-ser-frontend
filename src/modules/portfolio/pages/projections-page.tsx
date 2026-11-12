@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AiInsightCard, Alert, AreaChart, Badge, ChipList, Chip, DataTable, Grid, PhaseBadge, SegmentedControl, Stack, StatusBadge, Text, useToast, type DataTableColumn } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { publish } from "@/lib/platform/events";
 import { runHooks } from "@/lib/platform/hooks";
 import { getDefinition, stepApproverLabel, usePendingFor } from "@/lib/platform/operations";
@@ -31,7 +31,8 @@ export function ProjectionsPage() {
   const { actor: me } = useScope();
   const { toast } = useToast();
   const submit = useSubmitOperation();
-  const canView = useCan("portfolio", "view");
+  const canSubmitForAdoption = useCan("portfolio.projection-commentary.submit");
+  const canExport = useCan("portfolio.data.export");
   const key = `projection-commentary:${scenario}`;
   const signOff = usePortfolioStore((s) => s.signOffs[key]);
   const pending = usePendingFor("ProjectionCommentary", key);
@@ -137,14 +138,14 @@ export function ProjectionsPage() {
               )
             }
             labels={{ accept: "Submit for adoption" }}
-            onAccept={canView && !pending ? () => void submitForAdoption() : undefined}
+            onAccept={canSubmitForAdoption && !pending ? () => void submitForAdoption() : undefined}
           />
         </Grid>
 
         {pending ? <PendingApproval subjectType="ProjectionCommentary" subjectId={key} /> : null}
 
         <Panel title="Sector projections" description={`3/6/12-month projected NPL ratio range (confidence band) per sector — ${scenario.toLowerCase()} scenario — with the driving variables, not a single unexplained figure.`}>
-          <DataTable label="Sector projections" data={proj} columns={columns} getRowId={(r) => r.sector.id} paginate={false} exportFilename={`sector-projection-${scenario.toLowerCase()}.csv`} defaultSort={{ id: "m12", direction: "desc" }} />
+          <DataTable label="Sector projections" data={proj} columns={columns} getRowId={(r) => r.sector.id} paginate={false} exportFilename={canExport ? `sector-projection-${scenario.toLowerCase()}.csv` : undefined} defaultSort={{ id: "m12", direction: "desc" }} />
         </Panel>
 
         <Panel title="Macro-economic variables" description="Carried in the External Data Feeds layer (§5.5). Values shown are demo feed values.">

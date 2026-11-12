@@ -32,7 +32,7 @@ import {
   type DataTableColumn,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { useFacilities, useLookups, useObligors } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { date, dateTime, money, moneyShort, number, pct } from "@/lib/format";
@@ -65,7 +65,11 @@ export function CovenantsPage() {
   const facilities = useFacilities();
   const obligors = useObligors();
   const { obligor } = useLookups();
-  const canEdit = useCan("monitoring", "edit");
+  const canTest = useCan("monitoring.covenant-tests.create");
+  const canRaise = useCan("monitoring.exceptions.create");
+  const canSignOffAi = useCan("monitoring.ai-flags.sign-off");
+  const canMarkReceived = useCan("monitoring.periodic-financials.update");
+  const canExport = useCan("monitoring.registers.export");
   const tests = useMonitoring((s) => s.covenantTests);
   const exceptions = useMonitoring((s) => s.exceptions);
   const [raiseTarget, setRaiseTarget] = useState<RaiseExceptionTarget | null>(null);
@@ -174,14 +178,14 @@ export function CovenantsPage() {
       header: <span className="sr-only">Actions</span>,
       exportable: false,
       cell: (c) =>
-        canEdit ? (
+        canTest || canRaise ? (
           <Menu
             align="end"
             triggerLabel={`Actions for ${c.id}`}
             trigger={<MoreHorizontal aria-hidden className="size-4" />}
             items={[
-              { label: "Record covenant test", onSelect: () => setTestFor(c) },
-              { label: c.exceptionId ? `Exception ${c.exceptionId} open` : "Raise exception", onSelect: () => raiseForCovenant(c), disabled: !!c.exceptionId },
+              ...(canTest ? [{ label: "Record covenant test", onSelect: () => setTestFor(c) }] : []),
+              ...(canRaise ? [{ label: c.exceptionId ? `Exception ${c.exceptionId} open` : "Raise exception", onSelect: () => raiseForCovenant(c), disabled: !!c.exceptionId }] : []),
             ]}
           />
         ) : null,
@@ -232,14 +236,14 @@ export function CovenantsPage() {
                       filterFn: (c, v) => (v === "mine" ? c.ownerRole === actor.roleId : c.ownerRole === v),
                     },
                   ]}
-                  exportFilename="covenant-register.csv"
+                  exportFilename={canExport ? "covenant-register.csv" : undefined}
                   emptyState={<EmptyState title="No covenants match" description="Clear the filters to see the full register." />}
                 />
               </Stack>
             ),
           },
-          { id: "inflows", label: "Account inflows", content: <InflowsTab obligors={obligors} canEdit={canEdit} onRaise={setRaiseTarget} /> },
-          { id: "periodic", label: "Periodic reviews", content: <PeriodicTab canEdit={canEdit} onRaise={setRaiseTarget} /> },
+          { id: "inflows", label: "Account inflows", content: <InflowsTab obligors={obligors} canSignOff={canSignOffAi} canRaise={canRaise} canExport={canExport} onRaise={setRaiseTarget} /> },
+          { id: "periodic", label: "Periodic reviews", content: <PeriodicTab canMarkReceived={canMarkReceived} canRaise={canRaise} canExport={canExport} onRaise={setRaiseTarget} /> },
           { id: "fees", label: "External agents' fees", content: <FeesTab /> },
         ]}
       />
@@ -312,7 +316,7 @@ function CovenantTestModal({ covenant, onClose, onBreach }: { covenant: CovRow; 
 
 /* ---------------- Account inflows ---------------- */
 
-function InflowsTab({ obligors, canEdit, onRaise }: { obligors: ReturnType<typeof useObligors>; canEdit: boolean; onRaise: (t: RaiseExceptionTarget) => void }) {
+function InflowsTab({ obligors, canSignOff, canRaise, canExport, onRaise }: { obligors: ReturnType<typeof useObligors>; canSignOff: boolean; canRaise: boolean; canExport: boolean; onRaise: (t: RaiseExceptionTarget) => void }) {
   const { obligor, sector } = useLookups();
   const profiles = useMemo(() => buildInflowProfiles(obligors), [obligors]);
   const flagged = profiles.filter((p) => p.aiFlag);
@@ -374,8 +378,8 @@ function InflowsTab({ obligors, canEdit, onRaise }: { obligors: ReturnType<typeo
             { label: "Nature-of-Business profile captured at origination (PRD §6.4.3)" },
             { label: "NGX Sector Corpus seasonality (PRD §6.2.8)" },
           ]}
-          onAccept={canEdit && !signoff ? accept : undefined}
-          onDismiss={canEdit && !signoff ? dismiss : undefined}
+          onAccept={canSignOff && !signoff ? accept : undefined}
+          onDismiss={canSignOff && !signoff ? dismiss : undefined}
           labels={{ accept: "Accept & raise exceptions" }}
           signedOffBy={signoff ? `Signed off by ${signoff.by} on ${dateTime(signoff.at)} — exceptions raised` : undefined}
         />
@@ -442,7 +446,7 @@ function InflowsTab({ obligors, canEdit, onRaise }: { obligors: ReturnType<typeo
                     { label: "Ratio", value: pct(p.ratio3m * 100, 0), mono: true },
                   ]}
                 />
-                {canEdit && p.status === "Below envelope" && (
+                {canRaise && p.status === "Below envelope" && (
                   <Button
                     variant="secondary"
                     onClick={() =>
@@ -480,7 +484,7 @@ function InflowsTab({ obligors, canEdit, onRaise }: { obligors: ReturnType<typeo
           setSelected(r.obligorId);
           if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
         }}
-        exportFilename="inflow-tracking.csv"
+        exportFilename={canExport ? "inflow-tracking.csv" : undefined}
       />
     </Stack>
   );
@@ -488,7 +492,7 @@ function InflowsTab({ obligors, canEdit, onRaise }: { obligors: ReturnType<typeo
 
 /* ---------------- Periodic analysis (§6.4.5) ---------------- */
 
-function PeriodicTab({ canEdit, onRaise }: { canEdit: boolean; onRaise: (t: RaiseExceptionTarget) => void }) {
+function PeriodicTab({ canMarkReceived, canRaise, canExport, onRaise }: { canMarkReceived: boolean; canRaise: boolean; canExport: boolean; onRaise: (t: RaiseExceptionTarget) => void }) {
   const obligors = useObligors();
   const facilities = useFacilities();
   const { obligor } = useLookups();
@@ -530,12 +534,14 @@ function PeriodicTab({ canEdit, onRaise }: { canEdit: boolean; onRaise: (t: Rais
       header: <span className="sr-only">Actions</span>,
       exportable: false,
       cell: (r) =>
-        canEdit && r.status !== "Received" ? (
+        (canMarkReceived || canRaise) && r.status !== "Received" ? (
           <Stack direction="horizontal" gap="small">
-            <Button size="small" variant="tertiary" onClick={() => markReceived(r)}>
-              Mark received
-            </Button>
-            {r.status === "Overdue" && (
+            {canMarkReceived ? (
+              <Button size="small" variant="tertiary" onClick={() => markReceived(r)}>
+                Mark received
+              </Button>
+            ) : null}
+            {canRaise && r.status === "Overdue" && (
               <Button
                 size="small"
                 variant="text"
@@ -560,7 +566,7 @@ function PeriodicTab({ canEdit, onRaise }: { canEdit: boolean; onRaise: (t: Rais
         <StatCard label="Reports due ≤ 21 days" value={number(rows.filter((r) => r.status === "Due").length)} tone="info" />
         <StatCard label="Reports overdue" value={number(rows.filter((r) => r.status === "Overdue").length)} tone="danger" />
       </Grid>
-      <DataTable label="Periodic reviews" data={rows} columns={cols} getRowId={(r) => r.obligorId} searchable density="compact" defaultSort={{ id: "next", direction: "asc" }} filters={[{ id: "status", label: "Status", columnId: "status" }]} exportFilename="periodic-reviews.csv" />
+      <DataTable label="Periodic reviews" data={rows} columns={cols} getRowId={(r) => r.obligorId} searchable density="compact" defaultSort={{ id: "next", direction: "asc" }} filters={[{ id: "status", label: "Status", columnId: "status" }]} exportFilename={canExport ? "periodic-reviews.csv" : undefined} />
     </Stack>
   );
 }
@@ -568,6 +574,7 @@ function PeriodicTab({ canEdit, onRaise }: { canEdit: boolean; onRaise: (t: Rais
 /* ---------------- External agents' fees (§6.4.3) ---------------- */
 
 function FeesTab() {
+  const canExport = useCan("monitoring.registers.export");
   const obligors = useObligors();
   const { obligor } = useLookups();
   const fees = useMemo(() => buildAgentFees(obligors).map((f) => ({ ...f, name: obligor.get(f.obligorId)?.name ?? "" })), [obligors, obligor]);
@@ -590,7 +597,7 @@ function FeesTab() {
         <StatCard label="Not yet reconciled" value={moneyShort(unrec)} tone="warning" />
         <StatCard label="Disputed" value={number(fees.filter((f) => f.status === "Disputed").length)} tone="danger" />
       </Grid>
-      <DataTable label="External agents' fees" caption={`Valuers, solicitors and other external agents per the Payment of External Agents' Fees procedure. As of ${format(DEMO_NOW, "d MMM yyyy")}.`} data={fees} columns={cols} getRowId={(f) => f.id} searchable density="compact" filters={[{ id: "kind", label: "Agent type", columnId: "kind" }, { id: "status", label: "Status", columnId: "status" }]} exportFilename="external-agents-fees.csv" />
+      <DataTable label="External agents' fees" caption={`Valuers, solicitors and other external agents per the Payment of External Agents' Fees procedure. As of ${format(DEMO_NOW, "d MMM yyyy")}.`} data={fees} columns={cols} getRowId={(f) => f.id} searchable density="compact" filters={[{ id: "kind", label: "Agent type", columnId: "kind" }, { id: "status", label: "Status", columnId: "status" }]} exportFilename={canExport ? "external-agents-fees.csv" : undefined} />
     </Stack>
   );
 }

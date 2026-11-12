@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { BriefcaseBusiness, FileSearch, Radar } from "lucide-react";
 import { Button, EmptyState, EntityHeader, PermissionGate, Spinner, Stack, Tabs } from "@credigit/web-ui";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { useApplication, useUsers } from "@/lib/data/hooks";
 import { date, money } from "@/lib/format";
 import { roleById } from "@/lib/rbac/roles";
@@ -35,7 +35,7 @@ function ApplicationRecord() {
   const app = useApplication(id);
   const c = useApplicationContext(app);
   const users = useUsers();
-  const allowed = useCan("origination");
+  const allowed = useCan(["origination.applications.view", "origination.applications.view-mine"]);
   const [tab, setTab] = useState(params.get("tab") ?? "overview");
   useOcrCompletion(c?.docs ?? []);
 

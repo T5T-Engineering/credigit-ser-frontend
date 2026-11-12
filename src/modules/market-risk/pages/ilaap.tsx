@@ -28,7 +28,7 @@ import {
   useToast,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { dateTime, pct } from "@/lib/format";
 import { getDefinition, stepApproverLabel, useOperation, usePendingFor } from "@/lib/platform/operations";
 import { getRule } from "@/lib/platform/rules";
@@ -63,7 +63,9 @@ const decisionMap = { approve: "approved", reject: "declined", return: "returned
 
 export function IlaapPage() {
   const { bs, liq, rules } = useMarketBase();
-  const canEdit = useCan("market-risk", "edit");
+  const canRequestRasChange = useCan("market-risk.ras.request-change");
+  const canUpdateIlaap = useCan("market-risk.ilaap.update");
+  const canSubmitIlaap = useCan("market-risk.ilaap.submit");
   const { toast } = useToast();
   const s = useMarketRisk();
   const current = s.rasVersions[0]!;
@@ -128,7 +130,7 @@ export function IlaapPage() {
       accessor: (m) => values[m.id]![k],
       numeric: true,
       cell: (m) =>
-        canEdit && !rasPending ? (
+        canRequestRasChange && !rasPending ? (
           <div className="ml-auto w-32">
             <Input
               aria-label={`${m.metric} ${k}`}
@@ -185,7 +187,7 @@ export function IlaapPage() {
       header: "Relevance",
       accessor: "relevance",
       cell: (f) =>
-        canEdit ? (
+        canUpdateIlaap ? (
           <Select
             aria-label={`${f.factor} relevance`}
             size="small"
@@ -260,7 +262,7 @@ export function IlaapPage() {
                 Thresholds are locked until the request is decided.
               </PendingNotice>
               <DataTable label="Risk appetite thresholds" columns={rasCols} data={RAS_METRICS} getRowId={(m) => m.id} paginate={false} />
-              {canEdit && !rasPending && (
+              {canRequestRasChange && !rasPending && (
                 <Grid columns={{ base: 1, md: 3 }} gap="medium">
                   <div className="md:col-span-2">
                     <Field label="Change rationale" description="Saved with the new version; the compiled ILAAP states which version was in force.">
@@ -347,7 +349,7 @@ export function IlaapPage() {
                         {ilaapOp?.reason ?? "The last sign-off request was not approved."} Address the comments and resubmit.
                       </Alert>
                     )}
-                    {canEdit ? (
+                    {canSubmitIlaap ? (
                       <div>
                         <Button onClick={submitForSignOff}>{s.ilaap.status === "Returned" ? "Resubmit for sign-off" : "Submit for sign-off"}</Button>
                       </div>
@@ -366,7 +368,7 @@ export function IlaapPage() {
             <ChecklistPanel
               title="ILAAP report compilation"
               description="Chapters auto-populate from the platform; mark each reviewed."
-              items={CHAPTERS.map((c) => ({ id: c.id, title: c.title, description: c.source, status: s.chapters[c.id] ? "met" : "pending", locked: !canEdit }))}
+              items={CHAPTERS.map((c) => ({ id: c.id, title: c.title, description: c.source, status: s.chapters[c.id] ? "met" : "pending", locked: !canUpdateIlaap }))}
               // Library typing: ChecklistPanel's onToggle collides with the native <section> onToggle (reported as a library request).
               onToggle={
                 ((id: string, st: ChecklistStatus) => setChapterReviewed(id, CHAPTERS.find((c) => c.id === id)?.title ?? id, st === "met")) as unknown as ChecklistPanelProps["onToggle"]
@@ -378,7 +380,7 @@ export function IlaapPage() {
                   {done}/{CHAPTERS.length} chapters reviewed. The compiled report states RAS <span className="font-mono">v{current.version}</span> as the version in force for the
                   period.
                 </Text>
-                {canEdit && (
+                {canUpdateIlaap && (
                   <div>
                     <Button onClick={compile} variant={done === CHAPTERS.length ? "primary" : "secondary"}>
                       {done === CHAPTERS.length ? "Compile ILAAP report" : "Compile draft"}

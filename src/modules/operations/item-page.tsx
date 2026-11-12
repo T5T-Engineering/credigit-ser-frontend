@@ -1,5 +1,7 @@
 "use client";
 
+import { verifyStepUp } from "@/lib/auth/service";
+import { getRule } from "@/lib/platform/rules";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -44,6 +46,7 @@ import { useDb } from "@/lib/data/store";
 import { actingRoles, cancelOperation, canDecide, canViewOperation, decideOperation, requiresStepUp, useOperation, type OperationInstance } from "@/lib/platform/operations";
 import { useRule } from "@/lib/platform/rules";
 import { useScope } from "@/lib/platform/scope";
+import { useCan } from "@/lib/iam/permissions";
 import {
   currentStepName,
   isOpen,
@@ -148,6 +151,9 @@ function Detail({ instance: i }: { instance: OperationInstance }) {
   const steps = useMemo(() => timelineSteps(i, def), [i, def]);
   const due = safeDueAt(i);
   const overdue = !!due && now > 0 && new Date(due).getTime() < now;
+  // UI mirror of invariant 12; canDecide() still applies eligibility, four-eyes and segregation of duties.
+  const holdsDecide = useCan("operations.items.decide");
+  const holdsWithdraw = useCan("operations.items.withdraw");
   const decide = canDecide(i, actor);
   const amount = largestAmount(i.payload);
   // Same rule as the engine (instance.amountNgn), plus the largest amount in the payload (OPS-FR-19).
@@ -310,7 +316,7 @@ function Detail({ instance: i }: { instance: OperationInstance }) {
           </div>
 
           <Stack gap="large" className="order-first lg:order-none">
-            {open && decide.ok ? (
+            {open && holdsDecide && decide.ok ? (
               <DecisionPanel
                 title={`Your decision — ${roleName(actor.roleId)}${i.awaitingAdjudication ? " (adjudicator)" : ""}`}
                 actions={["approve", "return", "decline"]}
@@ -342,7 +348,7 @@ function Detail({ instance: i }: { instance: OperationInstance }) {
               </Alert>
             )}
 
-            {open && mine ? (
+            {open && mine && holdsWithdraw ? (
               <Card>
                 <CardHeader>
                   <div>
@@ -385,6 +391,8 @@ function Detail({ instance: i }: { instance: OperationInstance }) {
       </Stack>
 
       <StepUpAuthDialog
+        length={getRule<number>("auth.otpLength")}
+        resendCooldown={getRule<number>("auth.otpResendCooldownSeconds")}
         open={stepUpOpen}
         onOpenChange={(o) => {
           setStepUpOpen(o);
@@ -395,8 +403,8 @@ function Detail({ instance: i }: { instance: OperationInstance }) {
           }
         }}
         summary={`Approve “${i.title}”${amount !== undefined ? ` — ${money(amount)}` : ""}`}
-        description="Demo: enter any 6-digit code."
-        onVerify={async (code) => (verified.current = /^\d{6}$/.test(code))}
+        description="Demo: enter any complete code (TD-858)."
+        onVerify={async (code) => (verified.current = (await verifyStepUp(null, code)).ok)}
         errorMessage="Enter the 6-digit code."
       />
     </ModulePage>

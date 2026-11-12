@@ -27,7 +27,7 @@ import { useScope } from "@/lib/platform/scope";
 export const operationHref = (id: string) => `/operations/item?id=${encodeURIComponent(id)}`;
 export const ruleHref = (key: string) => `/operations/rules?key=${encodeURIComponent(key)}`;
 
-const statusMap = { Pending: "pending", "In progress": "in_progress", Approved: "approved", Rejected: "rejected", Returned: "returned", Cancelled: "cancelled", Failed: "rejected" /* TD-960 */ } as const;
+const statusMap = { Pending: "pending", "In progress": "in_progress", Approved: "approved", Rejected: "rejected", Returned: "returned", Cancelled: "cancelled", Failed: "failed" } as const;
 const decisionMap = { approve: "approved", reject: "rejected", return: "returned" } as const;
 
 function steps(instance: OperationInstance): OperationStep[] {

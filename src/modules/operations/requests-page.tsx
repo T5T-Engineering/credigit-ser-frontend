@@ -9,6 +9,7 @@ import { dateTime } from "@/lib/format";
 import { cancelOperation, useMyRequests, type OperationInstance, type OperationStatus } from "@/lib/platform/operations";
 import { useRule } from "@/lib/platform/rules";
 import { useScope } from "@/lib/platform/scope";
+import { useCan } from "@/lib/iam/permissions";
 import { currentStepName, isOpen, MS_PER_HOUR, roleName, safeDefinition, safeDueAt, timelineSteps, uiStatus, useDefinitions, useNow, useOpsHydrated } from "./logic";
 
 const tabs: { id: string; label: string; match: (s: OperationStatus) => boolean }[] = [
@@ -28,6 +29,7 @@ export function RequestsPage() {
   const now = useNow();
   const warnHours = useRule<number>("operations.slaWarningHours");
   const minComment = useRule<number>("operations.minCommentLength");
+  const canWithdraw = useCan("operations.items.withdraw");
   const { toast } = useToast();
   const [withdrawing, setWithdrawing] = useState<OperationInstance | null>(null);
   const [reason, setReason] = useState("");
@@ -71,7 +73,7 @@ export function RequestsPage() {
                   <Button as={Link} href={`/operations/item?id=${i.id}`} size="small" variant="tertiary">
                     Open
                   </Button>
-                  {isOpen(i) ? (
+                  {canWithdraw && isOpen(i) ? (
                     <Button size="small" variant="danger" iconBefore={<Undo2 aria-hidden />} onClick={() => setWithdrawing(i)}>
                       Withdraw
                     </Button>

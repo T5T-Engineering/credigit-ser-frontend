@@ -30,7 +30,7 @@ import {
   type MatrixCell,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { useMyApprovalQueue } from "@/lib/platform/operations";
 import { safeDefinition } from "@/modules/operations/logic";
 import { useRule } from "@/lib/platform/rules";
@@ -69,7 +69,8 @@ export function ExecutivePage() {
   const { obligor } = useLookups();
   const [view, setView] = useState<View>(actor.roleId === "head-of-risk" ? "hor" : "cro");
   const { actor: me } = useScope();
-  const canEdit = useCan("executive", "edit");
+  const canSubmitSummary = useCan("executive.summary.submit");
+  const canExportKris = useCan("executive.kris.export");
   const gov = useExecutiveGovernance();
   const queue = useMyApprovalQueue(me);
   useLimitMonitor(m);
@@ -217,7 +218,7 @@ export function ExecutivePage() {
         )
       }
       labels={{ accept: "Submit for sign-off" }}
-      onAccept={canEdit && !summaryPending ? () => void gov.submitSummary(headline) : undefined}
+      onAccept={canSubmitSummary && !summaryPending ? () => void gov.submitSummary(headline) : undefined}
     />
   );
 
@@ -371,7 +372,7 @@ export function ExecutivePage() {
         ) : null}
 
         <Panel title="Key risk indicators" description="Credit, capital, market, liquidity and operational KRIs against appetite. Select an indicator to open the owning module.">
-          <DataTable label="Key risk indicators" data={kris} columns={kriColumns} getRowId={(r) => r.id} paginate={false} filters={[{ id: "domain", label: "Domain" }]} exportFilename="executive-kris.csv" />
+          <DataTable label="Key risk indicators" data={kris} columns={kriColumns} getRowId={(r) => r.id} paginate={false} filters={[{ id: "domain", label: "Domain" }]} exportFilename={canExportKris ? "executive-kris.csv" : undefined} />
         </Panel>
 
         <Grid columns={{ base: 1, lg: 2 }} gap="medium">

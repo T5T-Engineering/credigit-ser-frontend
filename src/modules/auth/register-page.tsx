@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { UserPlus } from "lucide-react";
 import { AuthCard, Button, Checkbox, Field, Input, Logo, PasswordInput, PasswordStrength, Select, Stack, Text, evaluatePassword } from "@credigit/web-ui";
-import { passwordPolicy, register } from "@/lib/auth/accounts";
+import { usePasswordRules } from "@/lib/auth/auth-config";
+import { registerAccount } from "@/lib/auth/service";
 import { branches } from "@/lib/data/seed";
 import { roles, type RoleId } from "@/lib/rbac/roles";
 import { AuthShell } from "./auth-shell";
@@ -18,6 +19,7 @@ export function RegisterPage() {
   const [form, setForm] = useState({ name: "", email: "", institution: "", branch: "", role: "", password: "", confirm: "", terms: false });
   const [errors, setErrors] = useState<Errors>({});
   const [loading, setLoading] = useState(false);
+  const policy = usePasswordRules();
   const set = (k: keyof typeof form) => (v: string | boolean) => setForm((f) => ({ ...f, [k]: v }));
   const roleOptions = useMemo(() => roles.filter((r) => r.id !== "system-admin").map((r) => ({ value: r.id, label: `${r.name} — ${r.group}` })), []);
 
@@ -29,7 +31,7 @@ export function RegisterPage() {
     if (!form.institution.trim()) next.institution = "Enter your institution.";
     if (!form.branch) next.branch = "Choose your branch or office.";
     if (!form.role) next.role = "Choose the role you need. Your admin confirms it.";
-    if (!evaluatePassword(form.password, passwordPolicy()).valid) next.password = "Your password doesn't meet all the requirements.";
+    if (!evaluatePassword(form.password, policy).valid) next.password = "Your password doesn't meet all the requirements.";
     if (form.confirm !== form.password) next.confirm = "Passwords don't match.";
     if (!form.terms) next.terms = "You need to accept the acceptable-use policy.";
     setErrors(next);
@@ -38,13 +40,13 @@ export function RegisterPage() {
       return;
     }
     setLoading(true);
-    const result = await register({ name: form.name, email: form.email, password: form.password, institution: form.institution, branch: form.branch, requestedRoleId: form.role as RoleId });
+    const result = await registerAccount({ name: form.name, email: form.email, password: form.password, institution: form.institution, branch: form.branch, requestedRoleId: form.role as RoleId });
     setLoading(false);
     if (!result.ok) {
       setErrors({ email: result.error });
       return;
     }
-    router.push(`/verify/?challenge=${result.challengeId}`);
+    router.push(`/verify/?challenge=${encodeURIComponent(result.challengeId)}`);
   };
 
   return (
@@ -88,7 +90,7 @@ export function RegisterPage() {
             <Field label="Password" required error={errors.password}>
               <PasswordInput autoComplete="new-password" value={form.password} onChange={(e) => set("password")(e.target.value)} />
             </Field>
-            <PasswordStrength value={form.password} rules={passwordPolicy()} />
+            <PasswordStrength value={form.password} rules={policy} />
             <Field label="Confirm password" required error={errors.confirm}>
               <PasswordInput autoComplete="new-password" value={form.confirm} onChange={(e) => set("confirm")(e.target.value)} />
             </Field>

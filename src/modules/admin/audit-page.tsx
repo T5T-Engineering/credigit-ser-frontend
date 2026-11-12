@@ -20,6 +20,7 @@ import {
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { useRole } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { useAudit } from "@/lib/data/hooks";
 import type { AuditEvent } from "@/lib/data/types";
 import { roleById } from "@/lib/rbac/roles";
@@ -35,6 +36,7 @@ const typeTone = { session: "neutral", decision: "success", configuration: "acce
 export function AuditPage() {
   const audit = useAudit();
   const role = useRole();
+  const canExport = useCan("audit.log.export");
   const log = useAuditLog();
   const [search, setSearch] = useState("");
   const [actor, setActor] = useState("");
@@ -198,7 +200,7 @@ export function AuditPage() {
                   label="Audit log"
                   defaultSort={{ id: "at", direction: "desc" }}
                   defaultPageSize={15}
-                  exportFilename="audit-log.csv"
+                  exportFilename={canExport ? "audit-log.csv" : undefined}
                   exportLabel="Export CSV"
                   mobileCard={(e) => (
                     <div className="flex flex-col gap-1">

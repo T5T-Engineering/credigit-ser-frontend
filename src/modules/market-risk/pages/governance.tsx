@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Grid, Stack } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { ruleDefinitions } from "@/lib/platform/rules";
 import { ModuleApprovals, RulesPanel } from "../../ifrs9/governance";
 
@@ -21,7 +21,7 @@ const GROUPS: { title: string; description?: string; categories: (c: string) => 
 ];
 
 export function MarketGovernancePage() {
-  const canEdit = useCan("market-risk", "edit");
+  const canRequestRuleChange = useCan("rules.rules.request-change");
   const groups = useMemo(() => {
     const defs = ruleDefinitions().filter((d) => d.module === "market-risk");
     return GROUPS.map((g) => ({ ...g, keys: defs.filter((d) => g.categories(d.category)).map((d) => d.key) }));
@@ -32,7 +32,7 @@ export function MarketGovernancePage() {
         <ModuleApprovals modules={["market-risk"]} limit={10} />
         <Grid columns={{ base: 1 }} gap="large">
           {groups.map((g) => (
-            <RulesPanel key={g.title} title={g.title} description={g.description} keys={g.keys} canRequest={canEdit} />
+            <RulesPanel key={g.title} title={g.title} description={g.description} keys={g.keys} canRequest={canRequestRuleChange} />
           ))}
         </Grid>
       </Stack>

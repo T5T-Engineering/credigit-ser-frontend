@@ -12,7 +12,7 @@ realistic mock data with a backend-ready data seam. Read with:
 2. **No hard-coded colours or fonts.** Only theme tokens/utilities (CONVENTIONS §3). Colour, logo and font change at runtime per tenant.
 3. **PRD fidelity.** Use PRD terminology, workflows, roles, formulas and phase tags. Don't invent regulatory rules, formula weights or limits. Where the PRD gives a formula, implement it on the mock data; where it doesn't, show the input and mark the gap ("Parameter — set by tenant"). Every computed figure should be traceable: show source/formula on hover or in a details panel where reasonable (PRD §2.1, §10.3).
 4. **Prototype honesty.** Data is fictional (demo tenant "Harbourline Bank"). AI output is canned/simulated and always labelled "AI-drafted"/"AI-flagged" with a human sign-off action (PRD §2.3, §6.12). Connectors are simulated.
-5. **Role-aware.** Pages check `useCan(module, "edit")` to show/hide actions; navigation is filtered by role. Segregation of duties: the initiator/recommender can't be the disbursement maker or checker (PRD §4.2).
+5. **Permission-driven (invariant 12).** Every view, button, export, approval and configuration change checks a catalogue key with `useCan("<module>.<resource>.<action>")` from `@/lib/iam/permissions` (typed `PermissionKey`; never role names); non-React code uses `hasPermission(key)`. Navigation shows a module when any permission of its area is held and a sub-page when its `NavPage.permission` is held (`src/lib/nav.ts`); `ModulePage` gates the page. Keys come from the generated catalogue (`node scripts/sync-permissions.mjs`). Holding a permission never bypasses Operations eligibility / SoD. Segregation of duties: the initiator/recommender can't be the disbursement maker or checker (PRD §4.2).
 6. **Every state-changing action writes to the audit log** via `useDbActions().log({...})` (who, what, entity, before/after).
 
 ## Structure
@@ -23,7 +23,9 @@ src/modules/<module>/               module code: pages/*.tsx, data.ts (module-sp
 src/lib/data/                       shared Risk Data Spine: types.ts, seed.ts, store.ts (zustand + localStorage), hooks.ts
 src/lib/rbac/roles.ts               roles (PRD §4.1), module access, canAccess
 src/lib/workflow.ts                 approval chart-flow: buildApprovalChain, currentSteps, applyDecision (dissent → adjudicator)
-src/lib/auth/                       Microsoft SSO (MSAL) + demo session: useSession, useRole, useCan
+src/lib/auth/                       auth config (Local / MicrosoftEntra), auth facade (service.ts), MSAL, demo accounts, session
+src/lib/iam/                        permission catalogue (generated), grants, useCan / hasPermission, Identity API client
+src/lib/api/                        API client (NEXT_PUBLIC_API_URL), tokens, problem details
 src/lib/nav.ts                      navigation map: module → href, sub-pages (tabs), phase, PRD ref
 src/lib/format.ts                   money (₦), moneyShort (₦1.2bn), pct, date, dateTime, ago
 src/components/                     app-level compositions only (shell, ModulePage wrapper) — not UI primitives
@@ -62,7 +64,7 @@ All in `src/lib/platform/`. Each module declares its registrations in **`src/mod
 | Notify people | `defineTemplates([...])` + `notify({ templateId, toRoles / toUserIds, href, data })` | Template = subject, HTML body with `{{vars}}` (simple p/strong/ul/li), in-app text, tone, documented variables with examples. Create the template if it doesn't exist. |
 | Extension points | `defineEvents([...])` + `publish(name, { module, subject, payload })` after each state change; `defineHookPoints([...])` + `await runHooks("<module>.<action>.before", ctx)` (respect vetoes) and `.after` | Event names `<module>.<entity>.<past-verb>`. |
 | Audit | `useDbActions().log(...)` (or module audit helper) for every state change | Operations/notifications audit themselves. |
-| User scope | `useScope()` / `currentActor()`; filter "my" views by actor; gate actions with `useCan` | Segregation of duties is enforced by the engine for operations. |
+| User scope | `useScope()` / `currentActor()`; filter "my" views by actor; gate actions with `useCan(permissionKey)` | Segregation of duties is enforced by the engine for operations. |
 | Hard-coded value you can't remove yet | add a row to `TECH-DEBT.md` (TD-###) and reference the ID in a code comment | |
 
 The Operations area (`/operations`): Approvals, My requests, Workflows, Business rules, Notifications (templates + outbox), Events & hooks.

@@ -82,7 +82,7 @@ Exported: `EXEC_RULES`, `PACK_HREF`, payload types, `useExecutiveGovernance`.
 
 ## 10. Gaps against the invariants
 - Invariant 12: module-level `useCan("executive", "edit")` only; export permissions not mirrored.
-- Board / MCC / BCC roles have `executive` access but no `enterprise-risk` view, so they can't open the consolidated BRC pack page (TD-964; IAM permission `enterprise-risk.brc-pack.view`).
+- Board / MCC / BCC hold `enterprise-risk.brc-pack.view` as a seeded tenant grant, so they open the consolidated BRC pack page (TD-964 closed in the frontend; backend `ExtraPermissions` pending, TD-974).
 - Invariant 8: KRI thresholds owned by other modules duplicated as executive rules (TD-508); workflow SLAs are literals in `defaultSteps` (TD-127 pattern).
 - Invariant 9 (end-to-end): non-credit actuals and exception items are demo feeds, not owning-module data (TD-507); no events consumed from those modules.
 - Invariant 9 (notified): no notification to approvers beyond the generic `operations.approval-requested`; no alert when a KRI turns Red.

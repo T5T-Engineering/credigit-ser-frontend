@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, DataTable, Field, Grid, Modal, Select, Stack, StatCard, StatusBadge, type DataTableColumn } from "@credigit/web-ui";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { date, money } from "@/lib/format";
 import { publish } from "@/lib/platform/events";
@@ -18,7 +18,8 @@ const breachTones = { Open: "danger", Remediating: "warning", Closed: "success" 
 const sevTones = { High: "danger", Medium: "warning", Low: "neutral" } as const;
 
 export function RegulatorySection() {
-  const canEdit = useCan("enterprise-risk", "edit");
+  const canAssess = useCan("enterprise-risk.circulars.assess");
+  const canReviewPolicy = useCan("enterprise-risk.policies.review");
   const circulars = useErm((s) => s.circulars);
   const policies = useErm((s) => s.policies);
   const breaches = useErm((s) => s.breaches);
@@ -42,7 +43,7 @@ export function RegulatorySection() {
       header: "",
       exportable: false,
       cell: (c) =>
-        canEdit && (c.status === "New" || c.status === "Under assessment") ? (
+        canAssess && (c.status === "New" || c.status === "Under assessment") ? (
           <div className="flex justify-end gap-2">
             {c.status === "New" && <Button size="small" variant="tertiary" onClick={() => { updateCircular(c.id, { status: "Under assessment" }); audit("Started circular impact assessment", "CBN circular", c.ref, "New", "Under assessment"); publish("enterprise-risk.circular.assessed", { module: ERM, subject: { type: "Circular", id: c.id, title: c.title, href: "/enterprise-risk/regulatory" } }); }}>Assess</Button>}
             <Button size="small" variant="secondary" onClick={() => { setLinking(c); setPolicyId(""); }}>Link to policy</Button>
@@ -61,7 +62,7 @@ export function RegulatorySection() {
       header: "",
       exportable: false,
       cell: (p) =>
-        canEdit && policyStatus(p).label !== "Current" ? (
+        canReviewPolicy && policyStatus(p).label !== "Current" ? (
           <Button size="small" variant="tertiary" onClick={() => { updatePolicy(p.id, { lastReviewed: DEMO_NOW.toISOString() }); audit("Recorded policy review", "Policy", p.id, `Reviewed ${date(p.lastReviewed)}`, `Reviewed ${date(DEMO_NOW)}`); publish("enterprise-risk.policy.reviewed", { module: ERM, subject: { type: "Policy", id: p.id, title: p.name, href: "/enterprise-risk/regulatory" } }); }}>Record review</Button>
         ) : null,
     },

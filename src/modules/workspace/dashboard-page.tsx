@@ -51,7 +51,8 @@ import {
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { useRole, useSession } from "@/lib/auth/session";
-import { canAccess, roleById, type Role } from "@/lib/rbac/roles";
+import { roleById, type Role } from "@/lib/rbac/roles";
+import { usePermissionSet, type PermissionKey } from "@/lib/iam/permissions";
 import { useApplications, useAudit, useLookups, useObligors, useTenant, useUsers } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { Application, ApprovalStep } from "@/lib/data/types";
@@ -106,6 +107,8 @@ export function DashboardPage() {
   const decisionsWindowDays = useRule<number>("workspace.decisionsWindowDays");
   const activityWindowHours = useRule<number>("workspace.activityWindowHours");
   const kind = audience(role);
+  const held = usePermissionSet();
+  const can = (...keys: PermissionKey[]) => keys.some((k) => held.has(k));
   const firstName = user.name.split(" ")[0];
   const greeting = DEMO_NOW.getHours() < 12 ? "Good morning" : DEMO_NOW.getHours() < 17 ? "Good afternoon" : "Good evening";
 
@@ -118,7 +121,7 @@ export function DashboardPage() {
   const openTasks = tasks.filter((t) => t.status === "Open");
   const awaitingValue = awaiting.reduce((s, x) => s + x.app.amount, 0);
   const awaitingOverdue = awaiting.filter((x) => isOverdue(x.app.slaDueAt)).length;
-  const canPortfolio = canAccess(role, "portfolio") || canAccess(role, "executive") || role.id === "credit-analyst";
+  const canPortfolio = can("portfolio.dashboards.view", "executive.cockpit.view");
 
   // ---------------------------------------------------------------- KPIs (role-aware)
   const kpis: Kpi[] = (() => {
@@ -184,7 +187,8 @@ export function DashboardPage() {
       case "approver":
         return role.id === "cro" || role.id === "md" ? [awaitingKpi, limitKpi, npl, breaches] : [awaitingKpi, limitKpi, decidedKpi, npl];
       case "risk":
-        return role.id === "credit-analyst" ? [awaitingKpi, npl, watch, stages] : [tasksKpi, npl, stages, breaches];
+        // Analysts (who record credit analysis) track their review queue; other risk roles see their task list.
+        return can("origination.analysis.record") ? [awaitingKpi, npl, watch, stages] : [tasksKpi, npl, stages, breaches];
       case "ops":
         return [
           tasksKpi,
@@ -208,16 +212,16 @@ export function DashboardPage() {
   // ---------------------------------------------------------------- quick actions
   const actions: ActionBlockItem[] = (
     [
-      canAccess(role, "origination", "edit") && kind !== "admin" ? { title: "New credit application", description: "Start an origination file", icon: <FilePlus2 aria-hidden />, href: "/origination/new" } : null,
+      can("origination.applications.create") && kind !== "admin" ? { title: "New credit application", description: "Start an origination file", icon: <FilePlus2 aria-hidden />, href: "/origination/new" } : null,
       awaiting.length || kind === "approver" ? { title: "Review approvals", description: `${awaiting.length} awaiting you`, icon: <Inbox aria-hidden />, href: "/inbox" } : null,
       opsQueue.length ? { title: "Operations approvals", description: `${opsQueue.length} awaiting your decision`, icon: <Workflow aria-hidden />, href: "/operations" } : null,
-      canAccess(role, "portfolio") ? { title: "Portfolio limits", description: "Sector and obligor limits", icon: <BarChart3 aria-hidden />, href: "/portfolio/limits" } : null,
-      canAccess(role, "monitoring") ? { title: "Exceptions", description: "Escalations and past-due", icon: <ShieldAlert aria-hidden />, href: "/monitoring/exceptions" } : null,
-      canAccess(role, "disbursement") ? { title: "Disbursement queue", description: "Maker / checker", icon: <Banknote aria-hidden />, href: "/disbursement" } : null,
-      canAccess(role, "admin", "edit") ? { title: "Invite a user", description: "Named user, MFA enforced", icon: <UserPlus aria-hidden />, href: "/admin" } : null,
-      canAccess(role, "admin") ? { title: "Rules & parameters", description: "Limits, tiers, thresholds", icon: <SlidersHorizontal aria-hidden />, href: "/admin/parameters" } : null,
-      canAccess(role, "audit") ? { title: "Audit log", description: "Append-only trail", icon: <ScrollText aria-hidden />, href: "/audit" } : null,
-      { title: "Branding", description: "Colours, logo and font", icon: <Palette aria-hidden />, href: "/settings/branding" },
+      can("portfolio.limits.view") ? { title: "Portfolio limits", description: "Sector and obligor limits", icon: <BarChart3 aria-hidden />, href: "/portfolio/limits" } : null,
+      can("monitoring.exceptions.view") ? { title: "Exceptions", description: "Escalations and past-due", icon: <ShieldAlert aria-hidden />, href: "/monitoring/exceptions" } : null,
+      can("disbursement.queue.view") ? { title: "Disbursement queue", description: "Maker / checker", icon: <Banknote aria-hidden />, href: "/disbursement" } : null,
+      can("identity.users.invite") ? { title: "Invite a user", description: "Named user, MFA enforced", icon: <UserPlus aria-hidden />, href: "/admin" } : null,
+      can("platform.parameters.view") ? { title: "Rules & parameters", description: "Limits, tiers, thresholds", icon: <SlidersHorizontal aria-hidden />, href: "/admin/parameters" } : null,
+      can("audit.log.view") ? { title: "Audit log", description: "Append-only trail", icon: <ScrollText aria-hidden />, href: "/audit" } : null,
+      can("settings.branding.view") ? { title: "Branding", description: "Colours, logo and font", icon: <Palette aria-hidden />, href: "/settings/branding" } : null,
     ] as Array<ActionBlockItem | null>
   )
     .filter((x): x is ActionBlockItem => x !== null)
@@ -228,7 +232,7 @@ export function DashboardPage() {
     .slice(0, 5)
     .map((n) => ({ id: n.id, title: n.title, body: n.body, tone: n.tone, read: n.read, href: n.href, time: ago(n.createdAt) }));
 
-  const seesAll = canAccess(role, "audit");
+  const seesAll = can("audit.log.view");
   const activity: ActivityItem[] = audit
     .filter((e) => seesAll || e.actorId === user.id || e.roleId === role.id)
     .slice(0, 6)
@@ -256,7 +260,7 @@ export function DashboardPage() {
           <Button variant="tertiary" href="/inbox" as={Link} iconBefore={<Inbox aria-hidden className="size-4" />}>
             My tasks
           </Button>
-          {canAccess(role, "origination", "edit") && kind !== "admin" ? (
+          {can("origination.applications.create") && kind !== "admin" ? (
             <Button href="/origination/new" as={Link} iconBefore={<FilePlus2 aria-hidden className="size-4" />}>
               New application
             </Button>

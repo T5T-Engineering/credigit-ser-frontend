@@ -25,7 +25,7 @@ import {
   type RuleValue as UiRuleValue,
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
-import { useCan } from "@/lib/auth/session";
+import { useCan } from "@/lib/iam/permissions";
 import { dateTime } from "@/lib/format";
 import { allNavItems } from "@/lib/nav";
 import { requestRuleChange } from "@/lib/platform/core";
@@ -61,7 +61,7 @@ function RulesInner() {
   const values = useRulesStore((s) => s.values);
   const history = useRulesStore((s) => s.history);
   const pending = usePendingRuleChanges();
-  const canEdit = useCan("operations", "edit");
+  const canEdit = useCan("rules.rules.request-change");
   const [search, setSearch] = useState("");
   const [moduleFilter, setModuleFilter] = useState("");
   const [stateFilter, setStateFilter] = useState("");

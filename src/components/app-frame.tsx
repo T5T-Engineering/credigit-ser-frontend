@@ -10,6 +10,7 @@ import {
   CommandPalette,
   Logo,
   NotificationCenter,
+  PermissionProvider,
   SessionTimeoutDialog,
   SideNav,
   Toaster,
@@ -18,8 +19,10 @@ import {
   type CommandItem,
   type SideNavGroup,
 } from "@credigit/web-ui";
-import { allNavItems, navigation, navItemFor } from "@/lib/nav";
-import { roles, canAccess } from "@/lib/rbac/roles";
+import { allNavItems, navigation, navItemFor, navItemPermissions } from "@/lib/nav";
+import { roles } from "@/lib/rbac/roles";
+import { signOut as endSession } from "@/lib/auth/service";
+import { usePermissionSet } from "@/lib/iam/permissions";
 import { useRole, useSession } from "@/lib/auth/session";
 import { useApplications, useDbActions, useObligors, useTenant } from "@/lib/data/hooks";
 import { markNotificationsRead, useMyNotifications } from "@/lib/platform/notifications";
@@ -52,7 +55,8 @@ export function AppFrame({ children }: { children: ReactNode }) {
   const role = useRole();
   const user = useSession((s) => s.user)!;
   const switchRole = useSession((s) => s.switchRole);
-  const signOut = useSession((s) => s.signOut);
+  const held = usePermissionSet();
+  const can = useCallback((permission: string) => held.has(permission as never), [held]);
   const tenant = useTenant();
   const notifications = useMyNotifications();
   const obligors = useObligors();
@@ -71,12 +75,11 @@ export function AppFrame({ children }: { children: ReactNode }) {
       navigation
         .map((g) => ({
           label: g.label,
-          items: g.items
-            .filter((i) => canAccess(role, i.module))
-            .map((i) => ({ href: i.href, label: i.label, icon: <i.icon aria-hidden className="size-4" />, badge: i.phase && i.phase > 1 ? `P${i.phase}` : undefined })),
+          // Invariant 12 / AUTH-FR-17: an item shows when any permission of its area is held (SideNav filters with `can`).
+          items: g.items.map((i) => ({ href: i.href, label: i.label, permission: navItemPermissions(i), icon: <i.icon aria-hidden className="size-4" />, badge: i.phase && i.phase > 1 ? `P${i.phase}` : undefined })),
         }))
         .filter((g) => g.items.length > 0),
-    [role],
+    [],
   );
 
   const current = navItemFor(pathname);
@@ -90,25 +93,25 @@ export function AppFrame({ children }: { children: ReactNode }) {
 
   const commands: CommandItem[] = useMemo(() => {
     const pages: CommandItem[] = allNavItems
-      .filter((i) => canAccess(role, i.module))
+      .filter((i) => navItemPermissions(i).some((k) => held.has(k)))
       .flatMap((i) => [
         { id: `page:${i.href}`, label: i.label, group: "pages", href: i.href, icon: <i.icon aria-hidden className="size-4" />, keywords: [i.prd ?? ""] },
-        ...(i.pages ?? []).filter((p) => p.href !== i.href).map((p) => ({ id: `page:${p.href}`, label: `${i.label} › ${p.label}`, group: "pages", href: p.href })),
+        ...(i.pages ?? []).filter((p) => p.href !== i.href && held.has(p.permission)).map((p) => ({ id: `page:${p.href}`, label: `${i.label} › ${p.label}`, group: "pages", href: p.href })),
       ]);
     const records: CommandItem[] = [
       ...obligors.map((o) => ({ id: `obl:${o.id}`, label: o.name, description: `${o.id} · obligor`, group: "records", href: `/credit-analysis/assessment?id=${o.id}`, keywords: [o.id, o.rcNumber ?? ""] })),
       ...applications.map((a) => ({ id: `app:${a.id}`, label: a.id, description: `Application · ${obligors.find((o) => o.id === a.obligorId)?.name ?? ""}`, group: "records", href: `/origination/application?id=${a.id}` })),
     ];
     const actions: CommandItem[] = [
-      ...(canAccess(role, "origination", "edit") ? [{ id: "act:new-app", label: "New credit application", group: "actions", href: "/origination/new", icon: <FilePlus2 aria-hidden className="size-4" /> }] : []),
-      { id: "act:branding", label: "Change colours, logo or font", group: "actions", href: "/settings/branding", icon: <Palette aria-hidden className="size-4" /> },
-      ...(demoAccessEnabled ? [{ id: "act:reset", label: "Reset demo data", group: "actions", icon: <RotateCcw aria-hidden className="size-4" /> }] : []),
+      ...(held.has("origination.applications.create") ? [{ id: "act:new-app", label: "New credit application", group: "actions", href: "/origination/new", icon: <FilePlus2 aria-hidden className="size-4" /> }] : []),
+      ...(held.has("settings.branding.view") ? [{ id: "act:branding", label: "Change colours, logo or font", group: "actions", href: "/settings/branding", icon: <Palette aria-hidden className="size-4" /> }] : []),
+      ...(demoAccessEnabled && held.has("settings.demo-data.reset") ? [{ id: "act:reset", label: "Reset demo data", group: "actions", icon: <RotateCcw aria-hidden className="size-4" /> }] : []),
     ];
     return [...actions, ...pages, ...records];
-  }, [role, obligors, applications]);
+  }, [held, obligors, applications]);
 
   const onCommand = (item: CommandItem) => {
-    if (item.id === "act:reset") {
+    if (item.id === "act:reset" && held.has("settings.demo-data.reset")) {
       if (window.confirm("Reset all demo data to its original state?")) resetAllDemoData(resetDemo);
       return;
     }
@@ -134,20 +137,24 @@ export function AppFrame({ children }: { children: ReactNode }) {
     };
   }, [warnAt, IDLE_LIMIT_MS, WARNING_SECONDS]);
 
-  const doSignOut = useCallback(async () => {
-    setWarnAt(null);
-    await signOut();
-    router.replace("/login/");
-  }, [signOut, router]);
+  const doSignOut = useCallback(
+    async (reason: "user" | "idle-timeout" = "user") => {
+      setWarnAt(null);
+      await endSession(reason);
+      router.replace("/login/");
+    },
+    [router],
+  );
 
   return (
-    <>
+    <PermissionProvider has={can}>
       <AppShell
         sidebarLabel="Main navigation"
         sidebar={
           <SideNav
             groups={groups}
             activeHref={current?.href ?? pathname}
+            can={can}
             header={
               <Link href="/dashboard" aria-label={`${tenant.shortName} — Smart Enterprise Risk 360° home`}>
                 <Logo tone="reverse" size="small" />
@@ -190,7 +197,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
                   router.push("/dashboard");
                 }}
                 labels={{ switchRole: "Switch demo role" }}
-                onSignOut={doSignOut}
+                onSignOut={() => void doSignOut()}
               />
             }
           />
@@ -221,9 +228,9 @@ export function AppFrame({ children }: { children: ReactNode }) {
           lastActivity.current = Date.now();
           setWarnAt(null);
         }}
-        onSignOut={doSignOut}
-        onTimeout={doSignOut}
+        onSignOut={() => void doSignOut()}
+        onTimeout={() => void doSignOut("idle-timeout")}
       />
-    </>
+    </PermissionProvider>
   );
 }

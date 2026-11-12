@@ -23,7 +23,9 @@ import {
 import { ModulePage } from "@/components/module-page";
 import { demoAccessEnabled } from "@/components/auth-guard";
 import { useRole, useSession } from "@/lib/auth/session";
-import { msalEnabled } from "@/lib/auth/msal";
+import { useCan } from "@/lib/iam/permissions";
+import { msalConfigured } from "@/lib/auth/msal";
+import { signOut as endSession } from "@/lib/auth/service";
 import { useDbActions, useTenant, useUsers } from "@/lib/data/hooks";
 import { ago, dateTime, moneyShort } from "@/lib/format";
 import { useRoleLimit, useRoleSecurity } from "@/modules/admin/store";
@@ -36,7 +38,6 @@ import { useAuditLog } from "@/modules/workspace/use-audit-log";
 export function ProfilePage() {
   const user = useSession((s) => s.user)!;
   const signedInAt = useSession((s) => s.signedInAt);
-  const signOut = useSession((s) => s.signOut);
   const role = useRole()!;
   const tenant = useTenant();
   const users = useUsers();
@@ -44,6 +45,7 @@ export function ProfilePage() {
   const security = useRoleSecurity(role.id);
   const limit = useRoleLimit(role.id);
   const { resetDemo } = useDbActions();
+  const canResetDemo = useCan("settings.demo-data.reset");
   const warningSeconds = useRule<number>("session.warningSeconds");
   const shellTimeout = useRule<number>("session.idleTimeoutMinutes");
   const stepUp = useRule<number>("approvals.stepUpThresholdNgn");
@@ -110,7 +112,7 @@ export function ProfilePage() {
                           <Badge tone={sso ? "success" : "warning"}>{sso ? "SSO" : "Demo"}</Badge>
                         </span>
                       ),
-                      hint: sso ? undefined : msalEnabled ? "Microsoft SSO is configured — sign out and choose “Sign in with Microsoft”." : "Microsoft SSO isn't configured on this deployment (see README).",
+                      hint: sso ? undefined : msalConfigured() ? "Microsoft SSO is configured — sign out and choose “Sign in with Microsoft”." : "Microsoft SSO isn't configured on this deployment (see README).",
                     },
                     { label: "Signed in", value: signedInAt ? `${dateTime(signedInAt)} (${ago(signedInAt)})` : "—" },
                     { label: "This device", value: device },
@@ -126,7 +128,7 @@ export function ProfilePage() {
                     variant="secondary"
                     iconBefore={<LogOut aria-hidden className="size-4" />}
                     onClick={async () => {
-                      await signOut();
+                      await endSession();
                       router.replace("/login/");
                     }}
                   >
@@ -138,7 +140,7 @@ export function ProfilePage() {
           </Card>
         </Grid>
 
-        {demoAccessEnabled ? (
+        {demoAccessEnabled && canResetDemo ? (
           <Card variant="filled">
             <CardContent>
               <div className="flex flex-wrap items-center justify-between gap-4">
