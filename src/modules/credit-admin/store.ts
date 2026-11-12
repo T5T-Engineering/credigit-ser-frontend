@@ -6,9 +6,10 @@
  * BACKEND SEAM: replace the setters with API mutations.
  */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import type { ChecklistStatus } from "@credigit/web-ui";
 import type { RoleId } from "@/lib/rbac/roles";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type CpState = { status: ChecklistStatus; byName: string; at: string; note?: string; evidence?: string };
 
@@ -98,8 +99,10 @@ export const useCreditAdminStore = create<CreditAdminStore>()(
     {
       name: "credigit.ser.credit-admin",
       version: 1,
-      storage: createJSONStorage(() => localStorage),
+      storage: dataStorage(),
       partialize: ({ cp, released, waivers, crmsSearches, crmsBatches, crmsResolved, files }) => ({ cp, released, waivers, crmsSearches, crmsBatches, crmsResolved, files }),
     },
   ),
 );
+
+registerDatabaseStore(useCreditAdminStore);

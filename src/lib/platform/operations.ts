@@ -16,7 +16,7 @@
  * BACKEND SEAM: submit/decide call the workflow API; instances/definitions come from the server.
  */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { roleById, type RoleId } from "../rbac/roles";
 import { useDb, newId } from "../data/store";
 import { publish, type EventSubject } from "./events";
@@ -24,6 +24,7 @@ import { runHooks } from "./hooks";
 import { notify } from "./notifications";
 import { getRule } from "./rules";
 import { currentActor, type Actor } from "./scope";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type StepMode = "any" | "all";
 
@@ -109,7 +110,7 @@ type OpsState = {
 };
 
 export const useOperationsStore = create<OpsState>()(
-  persist((): OpsState => ({ definitions: {}, instances: [] }), { name: "credigit.ser.operations", storage: createJSONStorage(() => localStorage) }),
+  persist((): OpsState => ({ definitions: {}, instances: [] }), { name: "credigit.ser.operations", storage: dataStorage() }),
 );
 
 const handlers = new Map<string, OperationHandler<unknown>>();
@@ -388,3 +389,5 @@ export function useOperation(id: string | null | undefined) {
 export function usePendingFor(subjectType: string, subjectId: string) {
   return useOperationsStore((s) => s.instances.find((i) => i.subject.type === subjectType && i.subject.id === subjectId && ["Pending", "In progress"].includes(i.status)));
 }
+
+registerDatabaseStore(useOperationsStore);

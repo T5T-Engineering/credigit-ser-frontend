@@ -10,12 +10,13 @@
  * BACKEND SEAM: `notify` posts to the notification service (email/SMS/in-app).
  */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { defaultBrand } from "@credigit/web-ui";
 import type { RoleId } from "../rbac/roles";
 import { useDb, newId } from "../data/store";
 import { publish } from "./events";
 import { currentActor } from "./scope";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type TemplateVariable = { name: string; description: string; example: string };
 
@@ -53,7 +54,7 @@ type NotificationState = {
 const OUTBOX_LIMIT = 300;
 
 export const useNotificationStore = create<NotificationState>()(
-  persist((): NotificationState => ({ overrides: {}, outbox: [] }), { name: "credigit.ser.notifications", storage: createJSONStorage(() => localStorage) }),
+  persist((): NotificationState => ({ overrides: {}, outbox: [] }), { name: "credigit.ser.notifications", storage: dataStorage() }),
 );
 
 const templates = new Map<string, NotificationTemplate>();
@@ -170,3 +171,5 @@ export function notify(input: NotifyInput) {
   db.log({ actorId: actor.id, actorName: actor.name, roleId: actor.roleId, action: `Sent notification "${template.name}"`, entityType: "Notification", entityId: template.id, after: `${items.length} recipient(s)` });
   publish("platform.notification.sent", { module: "platform", subject: { type: "NotificationTemplate", id: template.id, title: template.name }, payload: { recipients: items.length } });
 }
+
+registerDatabaseStore(useNotificationStore);

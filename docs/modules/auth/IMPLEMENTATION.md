@@ -21,6 +21,7 @@ BACKEND SEAM: replace `accounts.ts` with Identity & Access API calls; keep MSAL.
 | `src/modules/auth/auth-shell.tsx` | Auth page layout wrapper |
 | `src/lib/auth/accounts.ts` | Accounts, challenges, policy, audit/notify/publish |
 | `src/lib/auth/msal.ts` | MSAL config and sign-in |
+| `src/lib/data/workspace-storage.ts` | Database-backed persisted stores (ADR-0015): load / save through `/workspace-data`, development identity for browser sign-ins (TD-953); `onSignedIn` reloads once |
 | `src/lib/auth/backend-sso.ts` | Backend Microsoft sign-in (start → callback → token), backend tokens, `/identity/me`, backend logout |
 | `src/modules/auth/microsoft-callback-page.tsx` | `/callback/`: finishes the backend Microsoft sign-in |
 | `src/lib/auth/session.ts` | Session store, `useRole`, `useCan`, `useHydrated` |
