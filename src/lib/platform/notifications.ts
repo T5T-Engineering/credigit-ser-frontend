@@ -42,7 +42,7 @@ export type OutboxItem = {
   subject: string;
   html: string;
   createdAt: string;
-  status: "Queued (demo — not sent)" | "Sent" | "Failed";
+  status: "Queued (not sent)" | "Sent" | "Failed";
 };
 
 type NotificationState = {
@@ -165,7 +165,7 @@ export function notify(input: NotifyInput) {
     roleIds: [...new Set([...roleIds, ...userRoleIds])],
   });
   const { subject, html } = renderEmail(template, data);
-  const items: OutboxItem[] = recipients.map((u) => ({ id: newId("OUT"), templateId: template.id, to: `${u.name} <${u.email}>`, subject, html, createdAt: new Date().toISOString(), status: "Queued (demo — not sent)" }));
+  const items: OutboxItem[] = recipients.map((u) => ({ id: newId("OUT"), templateId: template.id, to: `${u.name} <${u.email}>`, subject, html, createdAt: new Date().toISOString(), status: "Queued (not sent)" }));
   useNotificationStore.setState((s) => ({ outbox: [...items, ...s.outbox].slice(0, OUTBOX_LIMIT) }));
   const actor = currentActor();
   db.log({ actorId: actor.id, actorName: actor.name, roleId: actor.roleId, action: `Sent notification "${template.name}"`, entityType: "Notification", entityId: template.id, after: `${items.length} recipient(s)` });

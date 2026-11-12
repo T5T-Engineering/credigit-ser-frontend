@@ -22,7 +22,7 @@ defineRules([
     category: "Branding",
     type: "roles",
     default: ["system-admin"],
-    source: "(System Admin configures the tenant) — demo value",
+    source: "(System Admin configures the tenant)",
   },
   {
     key: "settings.brand.personalPreview",
@@ -32,7 +32,7 @@ defineRules([
     category: "Branding",
     type: "boolean",
     default: true,
-    source: "Tenant parameter (demo value)",
+    source: "Tenant parameter",
   },
 ]);
 
@@ -74,7 +74,7 @@ defineTemplates([
 
 defineEvents([
   { name: "settings.brand.changed", module: "settings", description: "The tenant brand (colours, logos, font) changed after approval.", payloadExample: { summary: "Inter · custom logo", operationId: "OPS-…" } },
-  { name: "settings.demo-data.reset", module: "settings", description: "A user reset the demo data in this browser." },
+  { name: "settings.demo-data.reset", module: "settings", description: "A user reset the data to its initial state." },
 ]);
 
 defineHookPoints([

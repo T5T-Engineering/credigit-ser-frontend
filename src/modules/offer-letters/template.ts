@@ -93,7 +93,7 @@ const baseSections: TemplateSection[] = [
 const letterhead = {
   addressLine: "Harbourline Towers, 14 Marina Road, Lagos Island, Lagos",
   contactLine: "credit.admin@harbourline.example · +234 1 000 0000",
-  footer: "Harbourline Bank Plc (demo tenant) · RC 000000 · Licensed by the Central Bank of Nigeria",
+  footer: "Harbourline Bank Plc · RC 000000 · Licensed by the Central Bank of Nigeria",
 };
 
 export const seedTemplates: HouseTemplate[] = [
@@ -106,9 +106,9 @@ export const seedTemplates: HouseTemplate[] = [
     sections: baseSections,
     letterhead,
     changeNote: "Initial house template uploaded at tenant onboarding",
-    createdByName: "System Admin (demo)",
+    createdByName: "System Admin",
     createdAt: "2025-09-02T09:00:00.000Z",
-    approvedByName: "Head of Legal (demo)",
+    approvedByName: "Head of Legal",
     approvedAt: "2025-09-05T09:00:00.000Z",
   },
   {
@@ -120,9 +120,9 @@ export const seedTemplates: HouseTemplate[] = [
     sections: baseSections,
     letterhead,
     changeNote: "Added defined-terms schedule; witness block moved under Memorandum of Acceptance",
-    createdByName: "System Admin (demo)",
+    createdByName: "System Admin",
     createdAt: "2026-02-10T09:00:00.000Z",
-    approvedByName: "Head of Legal (demo)",
+    approvedByName: "Head of Legal",
     approvedAt: "2026-02-12T09:00:00.000Z",
   },
   {
@@ -134,9 +134,9 @@ export const seedTemplates: HouseTemplate[] = [
     sections: baseSections,
     letterhead,
     changeNote: "Special covenants section placed before general conditions",
-    createdByName: "System Admin (demo)",
+    createdByName: "System Admin",
     createdAt: "2026-06-11T09:00:00.000Z",
-    approvedByName: "Head of Legal (demo)",
+    approvedByName: "Head of Legal",
     approvedAt: "2026-06-14T09:00:00.000Z",
   },
   {
@@ -157,9 +157,9 @@ export const seedTemplates: HouseTemplate[] = [
     ),
     letterhead,
     changeNote: "Product-line template for APG, bid bonds and bank guarantees",
-    createdByName: "System Admin (demo)",
+    createdByName: "System Admin",
     createdAt: "2026-04-20T09:00:00.000Z",
-    approvedByName: "Head of Legal (demo)",
+    approvedByName: "Head of Legal",
     approvedAt: "2026-04-22T09:00:00.000Z",
   },
 ];

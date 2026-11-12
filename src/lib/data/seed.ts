@@ -30,10 +30,10 @@ export const DEMO_NOW = new Date("2026-11-10T09:00:00+01:00");
 
 export const tenant: Tenant = {
   id: "TEN-001",
-  name: "Harbourline Bank Plc (demo tenant)",
+  name: "Harbourline Bank Plc",
   shortName: "Harbourline Bank",
   type: "Commercial bank",
-  environment: "Demo",
+  environment: "Development",
 };
 
 export const sectors: Sector[] = [

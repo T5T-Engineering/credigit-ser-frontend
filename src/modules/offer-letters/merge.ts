@@ -43,7 +43,7 @@ export function buildMergeContext(args: {
   const cols = collateral.filter((c) => app.collateralIds.includes(c.id));
   const currency = facility?.currency ?? "NGN";
   return {
-    "tenant.name": tenant.name.replace(/ \(demo tenant\)$/, ""),
+    "tenant.name": tenant.name.replace(/ \$/, ""),
     "tenant.shortName": tenant.shortName,
     "letter.ref": letter?.ref ?? "—",
     "letter.date": date(letter?.issuedAt ?? letter?.createdAt ?? app.updatedAt),

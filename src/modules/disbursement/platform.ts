@@ -26,7 +26,7 @@ const MODULE = "disbursement";
 
 // ---------------------------------------------------------------- business rules
 defineRules([
-  { key: "disbursement.accountNumberLength", label: "Beneficiary account number length", description: "Digits in a beneficiary account number (NUBAN).", module: MODULE, category: "Validation", type: "number", unit: "digits", default: 10, min: 6, max: 20, source: "Tenant parameter (demo value) — CBN NUBAN is 10 digits" },
+  { key: "disbursement.accountNumberLength", label: "Beneficiary account number length", description: "Digits in a beneficiary account number (NUBAN).", module: MODULE, category: "Validation", type: "number", unit: "digits", default: 10, min: 6, max: 20, source: "Tenant parameter — CBN NUBAN is 10 digits" },
   { key: "disbursement.makerRoles", label: "Who prepares disbursements (Maker)", description: "Roles with execution authority within the approved amount.", module: MODULE, category: "Roles", type: "roles", default: ["disbursement-maker"], source: "Domestic Operations — Disbursement Maker" },
 ]);
 

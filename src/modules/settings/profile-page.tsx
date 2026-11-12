@@ -59,8 +59,8 @@ export function ProfilePage() {
       <Stack gap="large">
         {resetDone ? <Alert tone="success">Demo data and configuration were reset to their original state.</Alert> : null}
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
-          <StatCard label="Sign-in method" value={sso ? "Microsoft SSO" : "Demo access"} hint={sso ? "Entra ID work account" : "Prototype role picker"} icon={<KeyRound aria-hidden className="size-5" />} tone="accent" />
-          <StatCard label="MFA" value={sso ? "Enforced" : record?.mfa ? "Enrolled" : "Not enrolled"} hint={sso ? "By your Microsoft tenant policy" : "Simulated in demo access"} icon={<ShieldCheck aria-hidden className="size-5" />} tone="success" />
+          <StatCard label="Sign-in method" value={sso ? "Microsoft SSO" : "Sign-in by role"} hint={sso ? "Entra ID work account" : "Role picker (development)"} icon={<KeyRound aria-hidden className="size-5" />} tone="accent" />
+          <StatCard label="MFA" value={sso ? "Enforced" : record?.mfa ? "Enrolled" : "Not enrolled"} hint={sso ? "By your Microsoft tenant policy" : "Simulated when signed in by role"} icon={<ShieldCheck aria-hidden className="size-5" />} tone="success" />
           <StatCard label="Idle timeout" value={`${security.sessionTimeoutMin} min`} hint={`Rule session.idleTimeoutMinutes.${role.id}`} icon={<Timer aria-hidden className="size-5" />} tone="info" />
           <StatCard label="Device binding" value={security.deviceBinding ? "On" : "Off"} hint={security.ipAllowList ? `IP allow-list: ${security.ipAllowList}` : "Any network"} icon={<MonitorSmartphone aria-hidden className="size-5" />} tone={security.deviceBinding ? "warning" : "neutral"} />
         </Grid>
@@ -106,8 +106,8 @@ export function ProfilePage() {
                       label: "Method",
                       value: (
                         <span className="flex flex-wrap items-center gap-2">
-                          {sso ? "Microsoft Entra ID single sign-on" : "Demo access (prototype only)"}
-                          <Badge tone={sso ? "success" : "warning"}>{sso ? "SSO" : "Demo"}</Badge>
+                          {sso ? "Microsoft Entra ID single sign-on" : "Sign-in by role (development only)"}
+                          <Badge tone={sso ? "success" : "warning"}>{sso ? "SSO" : "By role"}</Badge>
                         </span>
                       ),
                       hint: sso ? undefined : msalEnabled ? "Microsoft SSO is configured — sign out and choose “Sign in with Microsoft”." : "Microsoft SSO isn't configured on this deployment (see README).",
@@ -151,7 +151,7 @@ export function ProfilePage() {
                   </Text>
                 </div>
                 <Button variant="danger" iconBefore={<RotateCcw aria-hidden className="size-4" />} onClick={() => setConfirmReset(true)}>
-                  Reset demo data
+                  Reset to initial data
                 </Button>
               </div>
             </CardContent>
@@ -163,7 +163,7 @@ export function ProfilePage() {
         open={confirmReset}
         onOpenChange={setConfirmReset}
         size="small"
-        title="Reset demo data?"
+        title="Reset to initial data?"
         description="All changes made in this browser — applications, decisions, tasks, users, business-rule values, Operations requests, notifications and events — will be discarded."
         footer={
           <>
@@ -175,7 +175,7 @@ export function ProfilePage() {
               onClick={() => {
                 // Clears the spine and every credigit.ser.* store (Operations, rules, events, notifications, admin, workspace) and reloads.
                 resetAllDemoData(resetDemo);
-                log({ action: "Reset demo data", entityType: "Tenant", entityId: tenant.id });
+                log({ action: "Reset to initial data", entityType: "Tenant", entityId: tenant.id });
                 publish("settings.demo-data.reset", { module: "settings", subject: { type: "Tenant", id: tenant.id, title: tenant.name } });
                 setConfirmReset(false);
                 setResetDone(true);

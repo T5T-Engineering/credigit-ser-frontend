@@ -225,7 +225,7 @@ export function WarrPage() {
           <Panel
             title="Why WARR moved"
             description={`Drivers of the move from ${dec.opening.toFixed(2)} (${openingLabel()}) to ${dec.closing.toFixed(2)} today.`}
-            calc={{ metric: "WARR decomposition", formula: "Opening → run-off (exposure change at opening grades) → migration (grade change, existing book) → new disbursements → write-offs/exits → closing", source: "Prior grades retained under (prototype: opening grades synthesised deterministically).", prd: "§6.6.9" }}
+            calc={{ metric: "WARR decomposition", formula: "Opening → run-off (exposure change at opening grades) → migration (grade change, existing book) → new disbursements → write-offs/exits → closing", source: "Prior grades retained under (opening grades synthesised).", prd: "§6.6.9" }}
           >
             <WaterfallChart
               label="WARR movement decomposition"
@@ -343,7 +343,7 @@ export function WarrPage() {
               layout="inline"
               items={[
                 { label: "Weighting", value: basis === "ccf" ? "Outstanding + undrawn × CCF" : "Approved limit" },
-                { label: "Grade-score table", value: "GST-2026.1 (demo)", mono: true },
+                { label: "Grade-score table", value: "GST-2026.1", mono: true },
                 { label: "Unrated treatment", value: "Separate bucket, excluded from average" },
                 { label: "Defaulted treatment", value: "Shown included and excluded" },
                 { label: "Reporting period", value: periodLabel() },

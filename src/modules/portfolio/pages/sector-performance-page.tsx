@@ -95,7 +95,7 @@ export function SectorPerformancePage() {
           <KpiCard
             label="Bank-wide RAROC"
             value={pct(bank.raroc, 0)}
-            hint={`Hurdle ${pct(hurdle, 0)} (demo)`}
+            hint={`Hurdle ${pct(hurdle, 0)}`}
             tone={bank.raroc >= hurdle ? "success" : "danger"}
             calc={{
               metric: "RAROC",
@@ -117,7 +117,7 @@ export function SectorPerformancePage() {
             value={moneyShort(bank.capital)}
             hint={`RWA ${moneyShort(bank.rwa)} × ${p.minCarPct.value}% min CAR`}
             tone="warning"
-            calc={{ metric: "capital consumption", formula: "Capital consumption = Sector RWA × Minimum capital adequacy ratio", source: `RWA: exposure (off-balance at CCF) × risk weight per the tenant Basel/CBN table (demo weights). Min CAR ${p.minCarPct.value}% (business rule,: national authorisation; 15% international or SIB).`, prd: "§6.6.5", demo: true }}
+            calc={{ metric: "capital consumption", formula: "Capital consumption = Sector RWA × Minimum capital adequacy ratio", source: `RWA: exposure (off-balance at CCF) × risk weight per the tenant Basel/CBN table. Min CAR ${p.minCarPct.value}% (business rule,: national authorisation; 15% international or SIB).`, prd: "§6.6.5", demo: true }}
           />
           <KpiCard
             label="Net interest margin"
@@ -131,7 +131,7 @@ export function SectorPerformancePage() {
             value={pct(large.toCapitalPct, 0)}
             hint={`${large.list.length} obligors ≥${p.largeExposurePct.value}% of SHF`}
             tone="accent"
-            calc={{ metric: "large exposures to capital", formula: "Aggregate large exposures / Total qualifying capital × 100", source: `Large exposures: obligors/groups ≥${p.largeExposurePct.value}% of SHF (CBN 3.2(d)). TQC: GL capital accounts (demo value).`, prd: "§6.6.5", demo: true }}
+            calc={{ metric: "large exposures to capital", formula: "Aggregate large exposures / Total qualifying capital × 100", source: `Large exposures: obligors/groups ≥${p.largeExposurePct.value}% of SHF (CBN 3.2(d)). TQC: GL capital accounts.`, prd: "§6.6.5", demo: true }}
           />
         </Grid>
 

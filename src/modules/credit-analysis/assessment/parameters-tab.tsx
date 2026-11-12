@@ -123,7 +123,7 @@ export function ParametersTab({ a, editing, draft, setDraft }: Props) {
     <Stack gap="large">
       <Text tone="muted">
         Every parameter states its scoring direction, the live system feed behind the number, and the analyst enrichment / survey source. Parameters are scored 1–10
-        against tenant-configurable bands (demo: linear bands shown in “Reading”) and averaged with tenant-configurable weighting (demo: equal).
+        against tenant-configurable bands (demo: linear bands shown in “Reading”) and averaged with tenant-configurable weighting (default: equal).
       </Text>
       {cardinalPoints.map((cp) => {
         const res = a.points[cp.key];

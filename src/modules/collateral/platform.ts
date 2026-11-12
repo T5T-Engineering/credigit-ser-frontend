@@ -13,7 +13,7 @@ import { defineTemplates } from "@/lib/platform/notifications";
 import { registerOperation, type WorkflowStep } from "@/lib/platform/operations";
 import { defineRules, type RuleDefinition } from "@/lib/platform/rules";
 
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 const M = "collateral";
 
 /** Rule-key slug for a collateral type: "Cash / lien on deposit" → "cash-lien-on-deposit". */

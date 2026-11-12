@@ -255,7 +255,7 @@ export function CrmsDeskPage() {
         open={submitOpen}
         onOpenChange={(o) => !submitting && setSubmitOpen(o)}
         title="Submit batch to CRMS?"
-        description="Simulated submission — no data leaves the prototype."
+        description="Simulated submission — no data leaves the application."
         footer={
           <>
             <Button variant="tertiary" disabled={submitting} onClick={() => setSubmitOpen(false)}>

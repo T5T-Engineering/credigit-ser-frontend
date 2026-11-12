@@ -254,7 +254,7 @@ export function topDepositors(bs: BalanceSheet): Depositor[] {
   const f = new Faker({ locale: [en_NG, en] });
   f.seed(6802);
   const raw = Array.from({ length: 200 }, (_, i) => (i + 1) ** -0.9);
-  const scale = (bs.deposits * 0.36) / sum(raw); // top 200 ≈ 36% of deposits (demo)
+  const scale = (bs.deposits * 0.36) / sum(raw); // top 200 ≈ 36% of deposits
   return raw.map((v, i) => ({
     rank: i + 1,
     name:

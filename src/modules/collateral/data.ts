@@ -19,7 +19,7 @@ export type ValuationEntry = {
   assumptions: string;
   fsvMethod: string;
   reference: string;
-  source: "Independent valuer" | "CSCS market data" | "Internal" | "Recorded in prototype";
+  source: "Independent valuer" | "CSCS market data" | "Internal" | "Recorded manually";
 };
 
 const bases = ["Market comparison approach", "Depreciated replacement cost", "Investment (income) approach"];
@@ -54,7 +54,7 @@ export type InsuranceCover = { insurer: string; policyNo: string; sumInsured: nu
 export function insuranceOf(c: Collateral): InsuranceCover | undefined {
   if (!c.insuranceExpiry) return undefined;
   return {
-    insurer: ["Harbour Mutual Assurance (demo)", "Lagoon General Insurance (demo)", "Crestline Insurance (demo)", "Northbridge Assurance (demo)"][hash(c.id + "i") % 4]!,
+    insurer: ["Harbour Mutual Assurance", "Lagoon General Insurance", "Crestline Insurance", "Northbridge Assurance"][hash(c.id + "i") % 4]!,
     policyNo: `POL/${String(hash(c.id + "p") % 900000 + 100000)}`,
     sumInsured: Math.round((c.marketValue * 0.9) / 1e5) * 1e5,
     expiry: c.insuranceExpiry,

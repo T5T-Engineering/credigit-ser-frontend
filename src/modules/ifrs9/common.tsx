@@ -124,7 +124,7 @@ export function CalcRegister({ specs, title = "How these figures are calculated"
 }
 
 /** Banner reminding viewers that parameters are demo values (prototype honesty, conventions rule 4). */
-export function DemoNote({ children, title = "Demo model parameters" }: { children: ReactNode; title?: string }) {
+export function DemoNote({ children, title = "Model parameters" }: { children: ReactNode; title?: string }) {
   return (
     <Alert tone="info" title={title}>
       {children}

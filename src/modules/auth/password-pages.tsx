@@ -179,7 +179,7 @@ export function ChangePasswordPage() {
                     </Alert>
                   ) : null}
                   {user.source === "demo" ? (
-                    <Alert tone="info" title="Demo session">
+                    <Alert tone="info" title="Signed in by role">
                       Demo users&apos; current password is the shared demo password shown on the sign-in page.
                     </Alert>
                   ) : null}
