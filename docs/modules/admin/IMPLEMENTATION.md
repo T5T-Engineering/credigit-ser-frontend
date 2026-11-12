@@ -25,6 +25,9 @@ Layering: page (`*-page.tsx`) → `operation-ui.tsx` / `rule-editor.tsx` → pla
 | `src/modules/admin/operation-ui.tsx` | `submitWithHooks`, `PendingBadge`, `SubmitOutcome` |
 | `src/modules/admin/config-notice.tsx` | Notice on configuration screens |
 | `src/modules/admin/audit-page.tsx` | Audit log viewer (nav module `audit`) |
+| `src/modules/admin/permissions-page.tsx` | Role permission matrix (backend `/identity/permissions`, `/identity/roles`) |
+| `src/modules/admin/groups-page.tsx` | Permission groups (backend `/identity/groups`) |
+| `src/modules/admin/entra-mapping-page.tsx` | Entra role mapping (backend `/identity/entra-mappings`, ADR-0016) |
 | `src/app/(app)/admin/**/page.tsx`, `src/app/(app)/audit/page.tsx` | Thin route files |
 
 ## 3. Routes / endpoints / public API
@@ -33,6 +36,9 @@ Layering: page (`*-page.tsx`) → `operation-ui.tsx` / `rule-editor.tsx` → pla
 | `/admin` (`?user=<id>` opens drawer) | `UsersPage` | Administration → Users & roles → Users |
 | `/admin/roles` | `RolesPage` | → Roles & limits |
 | `/admin/parameters?tab=approvals\|rar\|ifrs9\|haircuts\|sectors\|products\|platform` | `ParametersPage` | → Rules & parameters |
+| `/admin/permissions` | `PermissionsPage` | → Permissions |
+| `/admin/groups` | `GroupsPage` | → Permission groups |
+| `/admin/entra-mapping` | `EntraMappingPage` | → Entra role mapping |
 | `/audit` | `AuditPage` | Administration → Audit log |
 
 Exported for other modules: `roleName`, `roleSecurity`, `roleIdleTimeoutMinutes` (app shell idle sign-out), store read hooks above, `RuleEditorList`, `RuleChangeDialog`, `submitWithHooks`.
@@ -105,6 +111,9 @@ Exported for other modules: `roleName`, `roleSecurity`, `roleIdleTimeoutMinutes`
 | ADM-FR-15 | `audit-page.tsx` IT Support effect | — | Done (once per browser session) |
 | ADM-FR-16 | — | — | Missing |
 | ADM-FR-17 | `rule.change` for all rules | rule-change.spec | Partial (no regulatory distinction, W1) |
+| ADM-FR-18 | `permissions-page.tsx` | backend tests | Done |
+| ADM-FR-19 | `groups-page.tsx` | backend tests | Done |
+| ADM-FR-20 | `entra-mapping-page.tsx` (actions gated by `identity.entra-mappings.change`) | backend `EntraMappingTests` | Done |
 
 ## 10. Gaps against the invariants
 - Inv. 12: no named permission checks (`identity.users.*`, `identity.roles.*`, `platform.*`, `audit.log.*`); gating is `useCan("admin","edit")` by role → module map.
