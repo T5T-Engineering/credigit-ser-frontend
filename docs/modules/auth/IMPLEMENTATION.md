@@ -98,8 +98,8 @@ Backend endpoints called (API mode): `GET /auth/config`, `POST /auth/login`, `/a
 ## 8. Tests
 | Test file / suite | Covers |
 |---|---|
-| `e2e/platform/login-otp.spec.ts` | Demo Local flow: set password via "Set or reset your password" (OTP) → sign in with password + OTP → dashboard |
-| `e2e/platform/permissions-nav.spec.ts` | System Admin sees every module; a limited role doesn't (nav + direct URL gate) |
+| `e2e/iam/login-otp.spec.ts` | Demo Local flow: set password via "Set or reset your password" (OTP) → sign in with password + OTP → dashboard |
+| `e2e/iam/permissions-nav.spec.ts` | System Admin sees every module; a limited role doesn't (nav + direct URL gate) |
 | `e2e/platform/auth-password.spec.ts` | Lockout after N wrong passwords; reset unlocks |
 | `e2e/platform/registration.spec.ts` | Request access → verify → System Admin approves → sign in |
 | `e2e/platform/change-password.spec.ts` | Change password, sign in with new one |
@@ -143,3 +143,6 @@ Backend endpoints called (API mode): `GET /auth/config`, `POST /auth/login`, `/a
 | TD-969 | Role-name lists still gate a few desk actions (`deskRoles`, `editorRoles`) on top of permission keys |
 | TD-970 | API mode not covered by e2e |
 | TD-971 | Only identity endpoints are wired; other modules remain browser stores in API mode |
+| TD-973 | Origination record tabs use a coarse "any origination action" flag |
+| TD-974 | Seeded demo tenant grants pending backend ExtraPermissions |
+| TD-975 | API step-up built but not wired to decisions |

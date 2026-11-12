@@ -1,5 +1,7 @@
 "use client";
 
+import { verifyStepUp } from "@/lib/auth/service";
+import { getRule } from "@/lib/platform/rules";
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, KeyRound, Send } from "lucide-react";
@@ -192,6 +194,8 @@ export function ApprovalsTab({ c }: { c: AppCtx }) {
         </Card>
       </Stack>
       <StepUpAuthDialog
+        length={getRule<number>("auth.otpLength")}
+        resendCooldown={getRule<number>("auth.otpResendCooldownSeconds")}
         open={stepUpOpen}
         onOpenChange={(o) => {
           setStepUpOpen(o);
@@ -200,7 +204,7 @@ export function ApprovalsTab({ c }: { c: AppCtx }) {
             resolver.current = null;
           }
         }}
-        onVerify={async (code) => /^\d{6}$/.test(code)}
+        onVerify={async (code) => (await verifyStepUp(null, code)).ok}
         onVerified={() => {
           if (op) markStepUp(op);
           resolver.current?.(true);

@@ -1,5 +1,7 @@
 "use client";
 
+import { verifyStepUp } from "@/lib/auth/service";
+import { getRule } from "@/lib/platform/rules";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -389,6 +391,8 @@ function Detail({ instance: i }: { instance: OperationInstance }) {
       </Stack>
 
       <StepUpAuthDialog
+        length={getRule<number>("auth.otpLength")}
+        resendCooldown={getRule<number>("auth.otpResendCooldownSeconds")}
         open={stepUpOpen}
         onOpenChange={(o) => {
           setStepUpOpen(o);
@@ -399,8 +403,8 @@ function Detail({ instance: i }: { instance: OperationInstance }) {
           }
         }}
         summary={`Approve “${i.title}”${amount !== undefined ? ` — ${money(amount)}` : ""}`}
-        description="Demo: enter any 6-digit code."
-        onVerify={async (code) => (verified.current = /^\d{6}$/.test(code))}
+        description="Demo: enter any complete code (TD-858)."
+        onVerify={async (code) => (verified.current = (await verifyStepUp(null, code)).ok)}
         errorMessage="Enter the 6-digit code."
       />
     </ModulePage>

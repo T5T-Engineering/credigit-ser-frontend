@@ -127,3 +127,6 @@ none should be treated as a product decision until confirmed. Agents: append new
 | ERM1 | §6.10 / §4.3 | Approval route for Risk Appetite Statement limit changes. | CRO review, then Board approval. |
 | ERM2 | §6.10 | Who approves risk acceptance (Tolerate). | CRO, or MD when the CRO requested it. |
 | AI1 | §6.12 | Whether an AI output sign-off needs a second person. | The accountable role's sign-off is final (`ai.output.sign-off` has no steps by default; tenants may add one). Scheduled AI reports need Head of Risk / CRO approval (data distribution). |
+| AUTH-OQ1 | §4, §10.1 | Microsoft Entra ID details per environment (tenant, SPA client id, API scope, redirect URIs) aren't known yet. | Sign-in is config-driven: `/auth/config` → `microsoftEntra`, else `NEXT_PUBLIC_AZURE_AD_*`; without them the Microsoft button says sign-in isn't configured. `src/lib/auth/msal.ts` |
+| AUTH-OQ2 | §4.2 | Does unlocking a locked account need second-person approval? | Lock and unlock are immediate, reason-required, audited, evented and notified (security containment); deactivation / reactivation go through Operations. `src/modules/admin/iam-service.ts` |
+| ADM-OQ2 | §4 | The backend has no admin lock / unlock endpoint or permission keys. | Lock guarded by `identity.users.deactivate`, unlock by `identity.users.reactivate`; demo only (TD-972). |

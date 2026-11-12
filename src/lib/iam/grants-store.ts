@@ -23,9 +23,17 @@ type GrantsState = { overrides: Record<string, GrantDelta>; version: number };
  * /enterprise-risk/brc-pack) without holding the enterprise-risk area (was TD-964; backend change listed in
  * docs/modules/admin/IMPLEMENTATION.md — add `ExtraPermissions` to these roles in config/roles.json).
  */
-const seededOverrides: Record<string, GrantDelta> = Object.fromEntries(
-  ["board", "mcc", "bcc", "portfolio-mis-officer"].map((roleId) => [roleId, { grant: ["enterprise-risk.brc-pack.view" as PermissionKey], revoke: [] }]),
-);
+const brcReaders: [string, PermissionKey[]][] = ["board", "mcc", "bcc", "portfolio-mis-officer"].map((roleId) => [roleId, ["enterprise-risk.brc-pack.view"]]);
+/**
+ * The Account Officer presents offer letters and the Credit Administration Officer handles them (PRD §6.1.1 steps 13–14)
+ * without holding the offer-letters area at edit level: they send letters to Legal, request re-issues and record
+ * acceptance. Backend change listed in docs/modules/admin/IMPLEMENTATION.md (ExtraPermissions in config/roles.json).
+ */
+const letterPresenters: [string, PermissionKey[]][] = ["account-officer", "credit-admin-officer"].map((roleId) => [
+  roleId,
+  ["offer-letters.letters.submit", "offer-letters.letters.request-reissue", "offer-letters.letters.record-acceptance"],
+]);
+const seededOverrides: Record<string, GrantDelta> = Object.fromEntries([...brcReaders, ...letterPresenters].map(([roleId, grant]) => [roleId, { grant, revoke: [] }]));
 
 export const useGrantsStore = create<GrantsState>()(
   persist((): GrantsState => ({ overrides: seededOverrides, version: 0 }), {

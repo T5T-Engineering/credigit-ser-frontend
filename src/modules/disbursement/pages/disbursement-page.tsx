@@ -1,5 +1,7 @@
 "use client";
 
+import { verifyStepUp } from "@/lib/auth/service";
+import { getRule } from "@/lib/platform/rules";
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Banknote, Clock, Gauge as GaugeIcon, Inbox, ShieldCheck } from "lucide-react";
@@ -658,6 +660,8 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
       {/* Rendered beside the Drawer, not inside it: React propagates a nested <dialog>'s close event to the
           parent dialog's onClose, so closing the step-up dialog used to close the workspace too. */}
       <StepUpAuthDialog
+        length={getRule<number>("auth.otpLength")}
+        resendCooldown={getRule<number>("auth.otpResendCooldownSeconds")}
         open={stepUpOpen}
         onOpenChange={(o) => {
           setStepUpOpen(o);
@@ -668,7 +672,7 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
         }}
         onVerify={async (code) => {
           // TD-858: demo OTP check (any 6 digits) until the step-up provider is integrated.
-          const ok = /^\d{6}$/.test(code);
+          const ok = (await verifyStepUp(null, code)).ok;
           if (ok) stepUpPassed.current = true;
           if (ok && resolver.current) {
 

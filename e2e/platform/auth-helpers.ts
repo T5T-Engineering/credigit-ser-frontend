@@ -9,7 +9,7 @@ export const NAV = { timeout: 45_000 };
 /** Sample seeded email shown in the demo hint on the sign-in page. */
 export async function sampleEmail(page: Page): Promise<string> {
   await gotoHydrated(page, "/login/");
-  const hint = page.getByRole("alert").filter({ hasText: /prototype sign-in/i }).first();
+  const hint = page.getByRole("status").or(page.getByRole("alert")).filter({ hasText: /prototype sign-in/i }).first();
   await expect(hint).toBeVisible();
   const text = (await hint.textContent()) ?? "";
   const m = text.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/);
