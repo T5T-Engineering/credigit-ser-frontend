@@ -8,11 +8,13 @@
  *   or `MicrosoftEntra`); Entra settings come from environment config.
  * MSAL is (re)configured from whichever answer is active.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { PasswordRule } from "@credigit/web-ui";
 import { apiEnabled } from "../api/config";
 import { problemText } from "../api/client";
 import { authApi, type AuthConfig } from "../iam/api";
 import { getRule, useRulesStore } from "../platform/rules";
+import { passwordRules } from "./accounts";
 import { configureMsal, entraSettingsFromEnv, type EntraSettings } from "./msal";
 
 export type { AuthConfig } from "../iam/api";
@@ -84,4 +86,13 @@ export function useAuthConfig(): AuthConfigState {
     };
   }, [rules]);
   return state;
+}
+
+/** Password checklist rules from the active config (API: `local.passwordPolicy`; demo: rules). Library TD-012 override. */
+export function usePasswordRules(): PasswordRule[] {
+  const { config } = useAuthConfig();
+  return useMemo(() => {
+    const policy = config?.local?.passwordPolicy ?? { minLength: getRule<number>("auth.passwordMinLength"), requireMixed: getRule<boolean>("auth.passwordRequireMixed") };
+    return passwordRules(policy);
+  }, [config]);
 }

@@ -5,18 +5,14 @@ import { usePathname, useRouter } from "next/navigation";
 import { Spinner } from "@credigit/web-ui";
 import { useHydrated, useSession } from "@/lib/auth/session";
 import { roleById, type RoleId } from "@/lib/rbac/roles";
-import { useDb } from "@/lib/data/store";
+import { apiEnabled } from "@/lib/api/config";
+import { signInDemo } from "@/lib/auth/service";
 
-export const demoAccessEnabled = process.env.NEXT_PUBLIC_DEMO_ACCESS !== "false";
+/** Demo access by role (prototype only): off when a backend is configured or `NEXT_PUBLIC_DEMO_ACCESS=false`. */
+export const demoAccessEnabled = !apiEnabled && process.env.NEXT_PUBLIC_DEMO_ACCESS !== "false";
 
 /** Sign a demo user in for a role (uses the seeded user for that role). */
-export function demoSignIn(roleId: RoleId) {
-  const user = useDb.getState().users.find((u) => u.roleId === roleId);
-  useSession.getState().signIn(
-    { id: user?.id ?? "USR-DEMO", name: user?.name ?? roleById[roleId].name, email: user?.email ?? "demo@harbourline.example", source: "demo" },
-    roleId,
-  );
-}
+export const demoSignIn = signInDemo;
 
 /**
  * Protects the app: waits for stored data to load, then requires a session.

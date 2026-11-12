@@ -6,15 +6,16 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { MailCheck, ShieldCheck } from "lucide-react";
 import { Alert, AuthCard, Button, Logo, OtpVerification, Text } from "@credigit/web-ui";
 import { demoAccessEnabled } from "@/components/auth-guard";
-import { maskEmail, platformUserFor, resendCode, useAccounts, verifyCode } from "@/lib/auth/accounts";
-import { useHydrated, useSession } from "@/lib/auth/session";
-import { getRule } from "@/lib/platform/rules";
+import { resendChallenge, useChallenge, verifyChallenge } from "@/lib/auth/service";
+import { useHydrated } from "@/lib/auth/session";
+import { useRule } from "@/lib/platform/rules";
 import { AuthShell } from "./auth-shell";
 
 const copy = {
   signin: { title: "Enter your sign-in code", icon: ShieldCheck, description: "Multi-factor sign-in protects every account." },
   signup: { title: "Verify your email", icon: MailCheck, description: "Confirm it's you before we send your request for approval." },
   reset: { title: "Enter your reset code", icon: ShieldCheck, description: "Use the code to set a new password." },
+  stepup: { title: "Confirm it's you", icon: ShieldCheck, description: "Enter the code to continue." },
 } as const;
 
 /** One-time code step shared by password sign-in (MFA), registration and password reset. */
@@ -23,12 +24,12 @@ export function VerifyPage() {
   const params = useSearchParams();
   const challengeId = params.get("challenge");
   const next = params.get("next") || "/dashboard";
-  const signIn = useSession((s) => s.signIn);
   const hydrated = useHydrated();
-  // Re-read on change so the demo hint shows the latest (resent) code.
-  const challenge = useAccounts((s) => (challengeId ? s.challenges[challengeId] : undefined));
+  const challenge = useChallenge(challengeId);
+  const cooldown = useRule<number>("auth.otpResendCooldownSeconds");
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState<{ name: string } | null>(null);
+  const [pending, setPending] = useState<{ name?: string } | null>(null);
+  const [openedAt] = useState(() => Date.now());
 
   if (!hydrated) return null;
 
@@ -39,7 +40,7 @@ export function VerifyPage() {
           logo={<Logo size="small" />}
           icon={<MailCheck />}
           title="Request sent for approval"
-          description={`Thanks, ${pending.name}. Your email is verified. Your institution's System Admin will approve your access and assign your role — you'll be able to sign in once that's done.`}
+          description={`Thanks${pending.name ? `, ${pending.name}` : ""}. Your email is verified. Your institution's System Admin will approve your access and assign your role — you'll be able to sign in once that's done.`}
           footer={
             <Link href="/login/" className="font-semibold text-link">
               Back to sign in
@@ -61,15 +62,16 @@ export function VerifyPage() {
       <AuthShell>
         <AuthCard logo={<Logo size="small" />} title="This code has expired" description="Start again to get a new code." footer={<Link href="/login/" className="font-semibold text-link">Back to sign in</Link>}>
           <Button href="/forgot-password/" variant="tertiary" fullWidth>
-            Reset password
+            Set or reset your password
           </Button>
         </AuthCard>
       </AuthShell>
     );
   }
 
-  const meta = copy[challenge.purpose];
+  const meta = copy[challenge.kind];
   const Icon = meta.icon;
+  const ttlMinutes = Math.max(1, Math.round((challenge.expiresAt - openedAt) / 60_000));
 
   return (
     <AuthShell>
@@ -78,48 +80,42 @@ export function VerifyPage() {
         icon={<Icon />}
         title={meta.title}
         description={meta.description}
-        back={{ label: challenge.purpose === "signup" ? "Back to request access" : "Back to sign in", href: challenge.purpose === "signup" ? "/register/" : "/login/" }}
+        back={{ label: challenge.kind === "signup" ? "Back to request access" : "Back to sign in", href: challenge.kind === "signup" ? "/register/" : "/login/" }}
         linkComponent={Link}
       >
         <OtpVerification
-          destination={maskEmail(challenge.email)}
+          key={challenge.id}
+          destination={challenge.maskedEmail}
+          length={challenge.codeLength}
+          resendCooldown={cooldown}
           errorMessage={error ?? undefined}
-          onResend={() => {
-            resendCode(challenge.id);
-            setError(null);
+          onResend={async () => {
+            const r = await resendChallenge(challenge.id);
+            setError(r.ok ? null : r.error);
           }}
           hint={
-            demoAccessEnabled ? (
+            challenge.demoCode ? (
               <Alert tone="info" title="Prototype — no email is sent">
-                Your code is <span className="font-mono text-lg font-semibold tracking-[0.2em]">{challenge.code}</span>
+                Your code is <span className="font-mono text-lg font-semibold tracking-[0.2em]">{challenge.demoCode}</span>
               </Alert>
             ) : undefined
           }
           onVerify={async (code) => {
-            const outcome = await verifyCode(challenge.id, code);
+            const outcome = await verifyChallenge(challenge.id, code);
             if (!outcome.ok) {
               setError(outcome.error);
               return false;
             }
-            if (outcome.purpose === "reset") router.push(`/reset-password/?token=${outcome.token}`);
-            else if (outcome.purpose === "signup") setPending({ name: outcome.account.name });
-            else {
-              const user = platformUserFor(outcome.account);
-              if (!user) {
-                setError("Your account isn't linked to a platform user yet. Contact your System Admin.");
-                return false;
-              }
-              signIn({ id: user.id, name: user.name, email: user.email, source: "password" }, user.roleId);
-              router.replace(next);
-            }
+            if (outcome.kind === "reset") router.push(`/reset-password/?token=${encodeURIComponent(outcome.token)}`);
+            else if (outcome.kind === "registered") setPending({ name: outcome.name });
+            else router.replace(next);
             return true;
           }}
         />
         <Text variant="caption" tone="subtle" align="center">
-          Codes expire after {getRule<number>("auth.otpTtlMinutes")} minutes. After {getRule<number>("auth.otpMaxAttempts")} wrong codes you&apos;ll need a new one.
+          This code expires in about {ttlMinutes} minute{ttlMinutes === 1 ? "" : "s"}. After {challenge.maxAttempts} wrong codes you&apos;ll need a new one.
         </Text>
       </AuthCard>
     </AuthShell>
   );
 }
-
