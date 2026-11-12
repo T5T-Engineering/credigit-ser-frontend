@@ -13,13 +13,11 @@
  * Without NEXT_PUBLIC_API_BASE_URL the stores keep using localStorage.
  */
 import { createJSONStorage, type PersistStorage, type StorageValue } from "zustand/middleware";
-import { validAccessToken } from "@/lib/auth/backend-sso";
+import { backendIdentityHeaders } from "@/lib/auth/backend-identity";
 
 const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/+$/, "");
 export const workspaceDataEnabled = apiBase.length > 0;
 
-const devIdentity = process.env.NEXT_PUBLIC_BACKEND_DEV_IDENTITY === "true";
-const devTenant = process.env.NEXT_PUBLIC_BACKEND_DEV_TENANT ?? "";
 /** Request-size and batching limits (TD-953: defaults below the backend's 1 MB body limit and WorkspaceData:MaxPatchDocuments). */
 const maxPatchBytes = Number(process.env.NEXT_PUBLIC_WORKSPACE_MAX_PATCH_BYTES ?? 400_000);
 const maxPatchDocuments = Number(process.env.NEXT_PUBLIC_WORKSPACE_MAX_PATCH_DOCUMENTS ?? 500);
@@ -27,8 +25,6 @@ const saveDelayMs = Number(process.env.NEXT_PUBLIC_WORKSPACE_SAVE_DELAY_MS ?? 40
 /** How long a sign-in may take to navigate before the page reloads anyway. */
 const reloadWaitMs = 2_000;
 
-/** Session store key (src/lib/auth/session.ts) — read directly to avoid an import cycle. */
-const sessionStorageKey = "credigit.ser.session";
 const storePrefix = /^credigit\.ser\./;
 
 type Shape = "array" | "map" | "value";
@@ -54,21 +50,6 @@ export function storeSlug(name: string): string {
   return name.replace(storePrefix, "").replace(/[^a-z0-9-]+/gi, "-").toLowerCase();
 }
 
-async function identityHeaders(): Promise<Record<string, string> | null> {
-  const accessToken = await validAccessToken();
-  if (accessToken) return { Authorization: `Bearer ${accessToken}` };
-  if (!devIdentity || typeof window === "undefined") return null;
-  try {
-    const raw = sessionStorage.getItem(sessionStorageKey);
-    const session = raw ? (JSON.parse(raw) as { state?: { user?: { id: string; name: string; email: string } | null; roleId?: string | null } }) : null;
-    const user = session?.state?.user;
-    const roleId = session?.state?.roleId;
-    if (!user || !roleId) return null;
-    return { "X-Dev-User": user.id, "X-Dev-Name": user.name, "X-Dev-Email": user.email, "X-Dev-Tenant": devTenant, "X-Dev-Roles": roleId };
-  } catch {
-    return null;
-  }
-}
 
 function shapeOf(value: unknown): Shape {
   if (Array.isArray(value)) {
@@ -162,7 +143,7 @@ function chunks(patch: Patch): Patch[] {
 }
 
 async function request(path: string, init: RequestInit = {}, keepalive = false): Promise<Response | null> {
-  const identity = await identityHeaders();
+  const identity = await backendIdentityHeaders();
   if (!identity) return null;
   return fetch(`${apiBase}/api/v1/workspace-data${path}`, {
     ...init,

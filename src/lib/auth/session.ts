@@ -4,12 +4,13 @@
  * Signed-in session for the prototype. Stored in sessionStorage (cleared when the browser tab closes).
  * Real authorisation will be enforced by the backend; the UI only hides what a role can't use.
  */
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { roleById, type ModuleKey, type Access, type RoleId, canAccess } from "../rbac/roles";
 import { useDb } from "../data/store";
 import { onSignedIn } from "../data/workspace-storage";
+import type { BackendAccess } from "./backend-identity";
 import { signOutOfBackend } from "./backend-sso";
 import { signOutOfMicrosoft } from "./msal";
 
@@ -24,6 +25,9 @@ type SessionState = {
   user: SessionUser | null;
   roleId: RoleId | null;
   signedInAt: string | null;
+  /** What the backend grants this user (GET /identity/me): drives menus and access checks when the backend is configured. */
+  access: BackendAccess | null;
+  setAccess: (access: BackendAccess | null) => void;
   signIn: (user: SessionUser, roleId: RoleId) => void;
   switchRole: (roleId: RoleId) => void;
   signOut: () => Promise<void>;
@@ -35,8 +39,10 @@ export const useSession = create<SessionState>()(
       user: null,
       roleId: null,
       signedInAt: null,
+      access: null,
+      setAccess: (access) => set({ access }),
       signIn: (user, roleId) => {
-        set({ user, roleId, signedInAt: new Date().toISOString() });
+        set({ user, roleId, signedInAt: new Date().toISOString(), access: null });
         useDb.getState().log({
           actorId: user.id,
           actorName: user.name,
@@ -57,11 +63,9 @@ export const useSession = create<SessionState>()(
       signOut: async () => {
         const { user, roleId } = get();
         if (user && roleId) useDb.getState().log({ actorId: user.id, actorName: user.name, roleId, action: "Signed out", entityType: "Session", entityId: "-" });
-        set({ user: null, roleId: null, signedInAt: null });
-        if (user?.source === "microsoft") {
-          await signOutOfBackend();
-          await signOutOfMicrosoft().catch(() => undefined);
-        }
+        set({ user: null, roleId: null, signedInAt: null, access: null });
+        if (user && user.source !== "demo") await signOutOfBackend();
+        if (user?.source === "microsoft") await signOutOfMicrosoft().catch(() => undefined);
       },
     }),
     { name: "credigit.ser.session", storage: createJSONStorage(() => sessionStorage) },
@@ -71,7 +75,13 @@ export const useSession = create<SessionState>()(
 /** The current role object (undefined when signed out). */
 export function useRole() {
   const roleId = useSession((s) => s.roleId);
-  return roleId ? roleById[roleId] : undefined;
+  const access = useSession((s) => s.access);
+  return useMemo(() => {
+    if (!roleId) return undefined;
+    const role = roleById[roleId];
+    // The backend decides module access (roles + permission groups) when it is configured.
+    return access ? { ...role, modules: access.moduleAccess as typeof role.modules } : role;
+  }, [roleId, access]);
 }
 
 /** Whether the current role can use a module. */

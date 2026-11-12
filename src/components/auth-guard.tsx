@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Spinner } from "@credigit/web-ui";
+import { loadBackendAccess } from "@/lib/auth/backend-identity";
 import { useHydrated, useSession } from "@/lib/auth/session";
 import { roleById, type RoleId } from "@/lib/rbac/roles";
 import { useDb } from "@/lib/data/store";
@@ -45,6 +46,20 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     }
     if (!user) router.replace(`/login/?next=${encodeURIComponent(pathname)}`);
   }, [hydrated, user, roleId, router, pathname]);
+
+  // Load what the backend grants this user (menus and access checks follow it; ADR-0012 / ADR-0014).
+  const setAccess = useSession((s) => s.setAccess);
+  const userId = user?.id;
+  useEffect(() => {
+    if (!hydrated || !userId) return;
+    let cancelled = false;
+    void loadBackendAccess().then((access) => {
+      if (!cancelled && access) setAccess(access);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, userId, roleId, setAccess]);
 
   if (!hydrated || !user) {
     return (
