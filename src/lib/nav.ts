@@ -299,7 +299,7 @@ export const navigation: NavGroup[] = [
         prd: "§4",
         pages: [
           { label: "Users", href: "/admin" },
-          { label: "Roles & limits", href: "/admin/roles" }, { label: "Permissions", href: "/admin/permissions" }, { label: "Permission groups", href: "/admin/groups" },
+          { label: "Roles & limits", href: "/admin/roles" }, { label: "Permissions", href: "/admin/permissions" }, { label: "Permission groups", href: "/admin/groups" }, { label: "Entra role mapping", href: "/admin/entra-mapping" },
           { label: "Rules & parameters", href: "/admin/parameters" },
         ],
       },

@@ -46,6 +46,9 @@ Tenant administration of named users, roles and sign-on limits, per-role session
 | ADM-FR-15 | IT Support's viewing of the audit log is itself logged. | PRD §10.1 |
 | ADM-FR-16 | Add/remove/merge/split/re-sequence roles and approval tiers; remap co-signer/adjudicator matrix. | PRD §4.0 — **not implemented** (static RoleId set, TD-805) |
 | ADM-FR-17 | Second-person confirmation for regulatory-parameter changes. | PRD §10.4; scope of "regulatory" = W1 |
+| ADM-FR-18 | Permissions screen: per-role permission matrix from the backend catalogue; changes are requests approved in Operations. | Backend ADR-0014 / IAM |
+| ADM-FR-19 | Permission groups: additive permission bundles with members and optional end date; every change approved in Operations. | Backend ADR-0014 |
+| ADM-FR-20 | Entra role mapping: map Entra groups (object id) and app roles (value) to platform roles; a Microsoft sign-in by an unknown person matching a mapping becomes an access request. Add / remove are requests approved in Operations (`entra-mapping.change`). Permissions `identity.entra-mappings.view` / `.change`. | Backend ADR-0016, IAM-FR-29 |
 
 ## 4. Business rules and parameters
 | Rule key | Meaning | Default | Source |
