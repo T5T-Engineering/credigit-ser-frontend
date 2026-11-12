@@ -2,6 +2,7 @@
 
 | ID | Area | Debt | Fix | Raised |
 |---|---|---|---|---|
+| TD-952 | `src/lib/auth/backend-sso.ts` | Backend tokens (access + refresh) are kept in `sessionStorage` and only the Microsoft sign-in, `/identity/me` and logout talk to the backend; every other screen still reads browser demo data. The role picked is the first backend role the frontend knows. | Move the refresh token to an httpOnly cookie (backend TD-032), add a shared API client with refresh, and switch modules to the backend one by one. | 2026-11-12 |
 | TD-120 | `src/modules/credit-analysis/logic.ts`, `parameters.ts` | The 360 RAR 1–10 score scale (clamp bounds, `1 + 9t` mapping, "10" in band labels) is a literal. It is PRD-fixed (§6.2) rather than a tenant value, but invariant 8 prefers a rule. | Add core rules `rar.scaleMin` / `rar.scaleMax` next to `rar.midpoint` (core.ts) and read them in the credit-analysis logic. | 2026-11-10 |
 | TD-121 | `src/modules/credit-analysis/logic.ts` (`parameterWeight`) | Rule `credit-analysis.weightingScheme` only offers "equal"; there is no per-parameter weight table (PRD gives none — OPEN-QUESTIONS RAR4). | Once the tenant weight table is specified, add `credit-analysis.weight.<parameterId>` rules and a "custom" scheme option. | 2026-11-10 |
 | TD-122 | `src/modules/credit-analysis/data.ts` (`walletFor`) | The tenant bank's display name in the Share-of-Wallet demo generator is a literal. | Read the tenant name from the tenant profile (`useDb().tenant`). | 2026-11-10 |

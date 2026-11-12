@@ -7,6 +7,7 @@ import { BriefcaseBusiness, Building2, Gavel, ShieldCheck, Users } from "lucide-
 import { Alert, Button, Divider, Field, Input, Logo, PasswordInput, RolePicker, SignInCard, Stack, Text, TextLink, type RoleOption } from "@credigit/web-ui";
 import { demoAccessEnabled, demoSignIn } from "@/components/auth-guard";
 import { DEMO_PASSWORD, signInWithPassword } from "@/lib/auth/accounts";
+import { backendSsoEnabled, startMicrosoftSignIn } from "@/lib/auth/backend-sso";
 import { msalEnabled, signInWithMicrosoft } from "@/lib/auth/msal";
 import { useHydrated, useSession } from "@/lib/auth/session";
 import { roleById, roleGroups, roles, type RoleGroup, type RoleId } from "@/lib/rbac/roles";
@@ -62,6 +63,17 @@ export function LoginPage() {
 
   const onMicrosoft = async () => {
     setError(null);
+    if (backendSsoEnabled) {
+      // Backend code flow (AUTH-FR-14): the browser leaves for Microsoft and comes back to /callback/.
+      setMsLoading(true);
+      try {
+        await startMicrosoftSignIn(next);
+      } catch (e) {
+        setMsLoading(false);
+        setError(`Microsoft sign-in couldn't start: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      return;
+    }
     if (!msalEnabled) {
       setError("Microsoft sign-in isn't configured for this environment yet. Use email and password or demo access.");
       return;

@@ -9,6 +9,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { roleById, type ModuleKey, type Access, type RoleId, canAccess } from "../rbac/roles";
 import { useDb } from "../data/store";
+import { signOutOfBackend } from "./backend-sso";
 import { signOutOfMicrosoft } from "./msal";
 
 export type SessionUser = {
@@ -54,7 +55,10 @@ export const useSession = create<SessionState>()(
         const { user, roleId } = get();
         if (user && roleId) useDb.getState().log({ actorId: user.id, actorName: user.name, roleId, action: "Signed out", entityType: "Session", entityId: "-" });
         set({ user: null, roleId: null, signedInAt: null });
-        if (user?.source === "microsoft") await signOutOfMicrosoft().catch(() => undefined);
+        if (user?.source === "microsoft") {
+          await signOutOfBackend();
+          await signOutOfMicrosoft().catch(() => undefined);
+        }
       },
     }),
     { name: "credigit.ser.session", storage: createJSONStorage(() => sessionStorage) },
