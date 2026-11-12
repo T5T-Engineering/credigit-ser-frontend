@@ -243,7 +243,7 @@ export function OverviewTab({ a, history, peers, wallet, onOpenTab }: Props) {
                 ]}
               />
               <Text variant="small" tone="muted">
-                Bands (demo defaults): Neutral &lt; {t.neutralBelow} · Marginal &lt; {t.marginalBelow} · Moderate &lt; {t.moderateBelow} · Strong ≥ {t.moderateBelow}.
+                Bands: Neutral &lt; {t.neutralBelow} · Marginal &lt; {t.marginalBelow} · Moderate &lt; {t.moderateBelow} · Strong ≥ {t.moderateBelow}.
                 {p.intensity === "Marginally" && " Marginal readings are provisional — see the parameters closest to flipping in Advisory."}
               </Text>
             </Stack>

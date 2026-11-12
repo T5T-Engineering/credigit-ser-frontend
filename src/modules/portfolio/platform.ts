@@ -23,7 +23,7 @@ import { ccfRuleKey, OBLIGOR_TYPES, PARAM_RULES, PORTFOLIO_RULES as R, PRODUCT_T
 import { usePortfolioStore, type ReportRun } from "./store";
 
 const MODULE = "portfolio";
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 const P = PARAM_RULES;
 
 // ---------------------------------------------------------------- business rules
@@ -36,8 +36,8 @@ const ccfDefaults: Record<string, { pct: number; basis: string; source: string }
   "Bank guarantee": { pct: 100, basis: "Financial guarantee — direct credit substitute", source: "(100%)" },
   "Advance payment guarantee": { pct: 50, basis: "Transaction-related contingency", source: "(50%)" },
   "Trade finance (LC)": { pct: 20, basis: "Trade-related instrument", source: "(20%)" },
-  Overdraft: { pct: 0, basis: "Unconditionally cancellable (classification is a demo choice)", source: "(0%) — demo classification" },
-  "Revolving credit": { pct: 0, basis: "Unconditionally cancellable (classification is a demo choice)", source: "(0%) — demo classification" },
+  Overdraft: { pct: 0, basis: "Unconditionally cancellable", source: "(0%)" },
+  "Revolving credit": { pct: 0, basis: "Unconditionally cancellable", source: "(0%)" },
   "Term loan": { pct: 50, basis: "Committed undrawn", source: DEMO },
   "Lease finance": { pct: 50, basis: "Committed undrawn", source: DEMO },
   "Invoice discounting": { pct: 50, basis: "Committed undrawn", source: DEMO },
@@ -48,45 +48,45 @@ const riskWeightDefaults: Record<string, number> = { Corporate: 100, Commercial:
 
 defineRules([
   // Capital & statutory limits
-  { key: P.totalQualifyingCapital, label: "Total qualifying capital (Tier 1 + Tier 2)", description: "Denominator of Large Exposures to Capital.", module: MODULE, category: "Capital", type: "money", default: 52e9, min: 1, source: "regulatory capital return (demo value)" },
+  { key: P.totalQualifyingCapital, label: "Total qualifying capital (Tier 1 + Tier 2)", description: "Denominator of Large Exposures to Capital.", module: MODULE, category: "Capital", type: "money", default: 52e9, min: 1, source: "regulatory capital return" },
   pctRule(P.singleObligorLimitPct, "Single-obligor limit (% of shareholders' funds)", "Maximum weighted exposure to one obligor / connected group.", "Statutory limits", 20, "CBN 3.2(a)"),
   pctRule(P.offBalanceSolWeight, "Off-balance-sheet weighting for single-obligor limit", "Share of off-balance-sheet engagements counted in the single-obligor limit.", "Statutory limits", 100 / 3, "CBN 3.2(b) (33⅓%)", { step: 0.01 }),
   pctRule(P.largeExposurePct, "Large exposure threshold (% of shareholders' funds)", "Obligors at or above this share of SHF are large exposures.", "Statutory limits", 10, "CBN 3.2(d)"),
   { key: P.aggregateLargeExposureMultiple, label: "Aggregate large-exposure ceiling (× shareholders' funds)", description: "Ceiling on the sum of large exposures.", module: MODULE, category: "Statutory limits", type: "number", unit: "×", default: 8, min: 1, max: 20, step: 0.5, source: "CBN 3.2(e)" },
   pctRule(P.governmentCeilingPct, "All tiers of government (% of total credit portfolio)", "Statutory ceiling on public-sector lending (applies to the government sector).", "Statutory limits", 10, "CBN 3.2(c)"),
-  pctRule(P.earlyWarningPct, "Near-breach early-warning threshold (% of limit)", "Utilisation at which a limit is flagged as near breach.", "Limit monitoring", 90, "(e.g. 90%) — tenant parameter (demo value)"),
+  pctRule(P.earlyWarningPct, "Near-breach early-warning threshold (% of limit)", "Utilisation at which a limit is flagged as near breach.", "Limit monitoring", 90, "(e.g. 90%) — tenant parameter"),
   pctRule(P.minCarPct, "Minimum CAR — national authorisation", "Capital charge used for capital consumption (RWA × min CAR).", "Capital", 10, "CBN Regulatory Capital 2021 (15% international / SIBs)"),
   // Risk appetite
-  { key: P.warrCeiling, label: "Board-approved WARR ceiling (whole book)", description: "WARR at or above this is a breach of appetite.", module: MODULE, category: "Risk appetite", type: "number", default: 4.5, min: 1, max: 10, step: 0.05, source: "tenant parameter (demo value)" },
-  { key: P.warrEarlyWarning, label: "WARR early-warning band", description: "WARR at or above this (below the ceiling) is an early warning.", module: MODULE, category: "Risk appetite", type: "number", default: 4.3, min: 1, max: 10, step: 0.05, source: "tenant parameter (demo value)" },
-  pctRule(P.nplAppetitePct, "NPL ratio appetite (Risk Appetite Statement)", "Maximum NPL / gross loans.", "Risk appetite", 5, "tenant parameter (demo value)"),
+  { key: P.warrCeiling, label: "Board-approved WARR ceiling (whole book)", description: "WARR at or above this is a breach of appetite.", module: MODULE, category: "Risk appetite", type: "number", default: 4.5, min: 1, max: 10, step: 0.05, source: "tenant parameter" },
+  { key: P.warrEarlyWarning, label: "WARR early-warning band", description: "WARR at or above this (below the ceiling) is an early warning.", module: MODULE, category: "Risk appetite", type: "number", default: 4.3, min: 1, max: 10, step: 0.05, source: "tenant parameter" },
+  pctRule(P.nplAppetitePct, "NPL ratio appetite (Risk Appetite Statement)", "Maximum NPL / gross loans.", "Risk appetite", 5, "tenant parameter"),
   // RAROC inputs
-  pctRule(P.costOfFundsPct, "Average cost of funds (interest expense rate)", "Interest expense rate applied to funded balances.", "RAROC inputs", 13.5, "CBA GL (demo value)"),
-  pctRule(P.feeIncomePct, "Fee income (% of approved amount, annual)", "Annual fee income per facility.", "RAROC inputs", 1, "product sub-ledger (demo value)"),
-  pctRule(P.opexAllocationPct, "Operating cost allocation (% of outstanding)", "Cost-allocation key for operating expense.", "RAROC inputs", 2.5, "cost-allocation key (demo value)"),
-  pctRule(P.rarocHurdlePct, "RAROC hurdle rate", "Segments below this RAROC are flagged.", "RAROC inputs", 20, "tenant parameter (demo value)"),
-  pctRule(R.eclStage1Pct, "ECL proxy — Stage 1 (% of outstanding)", "Used for RAROC until the IFRS 9 engine feeds ECL.", "RAROC inputs", 1, "proxy until the IFRS 9 feed (demo value)"),
-  pctRule(R.eclStage2Pct, "ECL proxy — Stage 2 (% of outstanding)", "Used for RAROC until the IFRS 9 engine feeds ECL.", "RAROC inputs", 6, "proxy until the IFRS 9 feed (demo value)"),
+  pctRule(P.costOfFundsPct, "Average cost of funds (interest expense rate)", "Interest expense rate applied to funded balances.", "RAROC inputs", 13.5, "CBA GL"),
+  pctRule(P.feeIncomePct, "Fee income (% of approved amount, annual)", "Annual fee income per facility.", "RAROC inputs", 1, "product sub-ledger"),
+  pctRule(P.opexAllocationPct, "Operating cost allocation (% of outstanding)", "Cost-allocation key for operating expense.", "RAROC inputs", 2.5, "cost-allocation key"),
+  pctRule(P.rarocHurdlePct, "RAROC hurdle rate", "Segments below this RAROC are flagged.", "RAROC inputs", 20, "tenant parameter"),
+  pctRule(R.eclStage1Pct, "ECL proxy — Stage 1 (% of outstanding)", "Used for RAROC until the IFRS 9 engine feeds ECL.", "RAROC inputs", 1, "proxy until the IFRS 9 feed"),
+  pctRule(R.eclStage2Pct, "ECL proxy — Stage 2 (% of outstanding)", "Used for RAROC until the IFRS 9 engine feeds ECL.", "RAROC inputs", 6, "proxy until the IFRS 9 feed"),
   pctRule(R.eclSubstandardPct, "ECL proxy — Stage 3 Substandard", "CBN prudential provisioning rate used as the Stage 3 proxy.", "RAROC inputs", 10, "CBN provisioning table"),
   pctRule(R.eclDoubtfulPct, "ECL proxy — Stage 3 Doubtful", "CBN prudential provisioning rate used as the Stage 3 proxy.", "RAROC inputs", 50, "CBN provisioning table"),
   pctRule(R.eclLostPct, "ECL proxy — Stage 3 Lost", "CBN prudential provisioning rate used as the Stage 3 proxy.", "RAROC inputs", 100, "CBN provisioning table"),
   // CCF & risk weights
   ...PRODUCT_TYPES.map((p) => pctRule(ccfRuleKey(p), `Credit-conversion factor — ${p}`, `${ccfDefaults[p]!.basis}. Applied to undrawn / contingent amounts (WARR and RWA exposure).`, "Credit-conversion factors", ccfDefaults[p]!.pct, ccfDefaults[p]!.source)),
-  ...OBLIGOR_TYPES.map((t) => pctRule(riskWeightRuleKey(t), `Risk weight — ${t}`, "Asset-classification risk weight for RWA (tenant table).", "Risk weights", riskWeightDefaults[t]!, "tenant asset-classification table (demo value)", { max: 1250 })),
+  ...OBLIGOR_TYPES.map((t) => pctRule(riskWeightRuleKey(t), `Risk weight — ${t}`, "Asset-classification risk weight for RWA (tenant table).", "Risk weights", riskWeightDefaults[t]!, "tenant asset-classification table", { max: 1250 })),
   // Reporting
-  { key: R.periodStartDate, label: "Reporting period start", description: "Start of the YTD period for new-business split and WARR decomposition (ISO date).", module: MODULE, category: "Reporting", type: "text", default: "2026-01-01", source: "financial year start (demo value)" },
+  { key: R.periodStartDate, label: "Reporting period start", description: "Start of the YTD period for new-business split and WARR decomposition (ISO date).", module: MODULE, category: "Reporting", type: "text", default: "2026-01-01", source: "financial year start" },
   { key: R.openingDateLabel, label: "Opening balance date label", description: "Label of the opening snapshot (prior year-end).", module: MODULE, category: "Reporting", type: "text", default: "31 Dec 2025", source: DEMO },
   pctRule(R.obligorReportFloorPct, "Single-obligor report floor (% of limit)", "Obligors below this utilisation are left out of the single-obligor table.", "Reporting", 25, DEMO),
-  { key: R.blockReleaseOnReconBreak, label: "Block report release on reconciliation break", description: "Runs generated while a CBA reconciliation break is open cannot be submitted for release.", module: MODULE, category: "Reporting", type: "boolean", default: true, source: "reconciliation layer (tenant choice, demo on)" },
+  { key: R.blockReleaseOnReconBreak, label: "Block report release on reconciliation break", description: "Runs generated while a CBA reconciliation break is open cannot be submitted for release.", module: MODULE, category: "Reporting", type: "boolean", default: true, source: "reconciliation layer (tenant choice)" },
   { key: R.reportReleaseNotifyRoles, label: "Report release — notify roles", description: "Roles notified when a report run is released.", module: MODULE, category: "Notifications", type: "roles", default: ["portfolio-mis-officer", "head-of-risk", "cro"], source: DEMO },
-  { key: R.limitAlertRoles, label: "Limit alerts — notify roles", description: "Roles notified when a limit enters near-breach or breach (escalation).", module: MODULE, category: "Notifications", type: "roles", default: ["head-of-risk", "cro", "portfolio-mis-officer"], source: "recipients are tenant configuration (demo)" },
+  { key: R.limitAlertRoles, label: "Limit alerts — notify roles", description: "Roles notified when a limit enters near-breach or breach (escalation).", module: MODULE, category: "Notifications", type: "roles", default: ["head-of-risk", "cro", "portfolio-mis-officer"], source: "recipients are tenant configuration" },
   { key: R.planApprovedNotifyRoles, label: "Plan approval — notify roles", description: "Roles notified when a plan version is approved.", module: MODULE, category: "Notifications", type: "roles", default: ["portfolio-mis-officer", "head-of-risk", "cro", "md"], source: DEMO },
-  ...reportCatalogue.map((r): RuleDefinition => ({ key: reportCadenceRuleKey(r.id), label: `Cadence — ${r.name}`, description: "How often the report is generated (scheduled run).", module: MODULE, category: "Report cadence", type: "enum", default: r.cadence, options: REPORT_CADENCES.map((c) => ({ value: c, label: c })), source: `(${r.prd}) — cadence configured per tenant (demo value)` })),
+  ...reportCatalogue.map((r): RuleDefinition => ({ key: reportCadenceRuleKey(r.id), label: `Cadence — ${r.name}`, description: "How often the report is generated (scheduled run).", module: MODULE, category: "Report cadence", type: "enum", default: r.cadence, options: REPORT_CADENCES.map((c) => ({ value: c, label: c })), source: `(${r.prd}) — cadence configured per tenant` })),
   // Plan guidance & projection calibration
-  { key: R.planDeterioratingFactor, label: "Cycle adjustment — deteriorating sector", description: "Multiplier on planned share where the 12m projection deteriorates.", module: MODULE, category: "Plan guidance", type: "number", default: 0.8, min: 0, max: 2, step: 0.05, source: "calibration (demo value)" },
-  { key: R.planImprovingFactor, label: "Cycle adjustment — improving sector", description: "Multiplier on planned share where the 12m projection improves.", module: MODULE, category: "Plan guidance", type: "number", default: 1.15, min: 0, max: 2, step: 0.05, source: "calibration (demo value)" },
-  pctRule(R.projectionDeterioratingAbovePct, "Projection — deteriorating above (% rise)", "12m projected NPL above current × (1 + this) is Deteriorating.", "Projection", 8, "calibration (demo value)"),
-  pctRule(R.projectionImprovingBelowPct, "Projection — improving below (% fall)", "12m projected NPL below current × (1 − this) is Improving.", "Projection", 5, "calibration (demo value)"),
+  { key: R.planDeterioratingFactor, label: "Cycle adjustment — deteriorating sector", description: "Multiplier on planned share where the 12m projection deteriorates.", module: MODULE, category: "Plan guidance", type: "number", default: 0.8, min: 0, max: 2, step: 0.05, source: "calibration" },
+  { key: R.planImprovingFactor, label: "Cycle adjustment — improving sector", description: "Multiplier on planned share where the 12m projection improves.", module: MODULE, category: "Plan guidance", type: "number", default: 1.15, min: 0, max: 2, step: 0.05, source: "calibration" },
+  pctRule(R.projectionDeterioratingAbovePct, "Projection — deteriorating above (% rise)", "12m projected NPL above current × (1 + this) is Deteriorating.", "Projection", 8, "calibration"),
+  pctRule(R.projectionImprovingBelowPct, "Projection — improving below (% fall)", "12m projected NPL below current × (1 − this) is Improving.", "Projection", 5, "calibration"),
 ]);
 
 // ---------------------------------------------------------------- helpers

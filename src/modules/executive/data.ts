@@ -18,7 +18,7 @@ export type Kri = {
   value: string;
   threshold: string;
   rag: Rag;
-  source: "Derived" | "Demo value";
+  source: "Derived" | "Tenant parameter";
   href: string;
   prd: string;
 };

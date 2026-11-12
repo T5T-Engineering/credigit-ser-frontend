@@ -320,7 +320,7 @@ export function AssessmentsPage() {
                 <Text variant="small" tone="muted" className="mt-3">
                   {counts.neutral} obligor
                   {counts.neutral === 1 ? " sits" : "s sit"} inside the Neutral / Transitional radius around ({midpoint}, {midpoint}). Intensity bands and the neutral threshold are tenant
-                  parameters (demo defaults).
+                  parameters.
                 </Text>
               </div>
             </Grid>

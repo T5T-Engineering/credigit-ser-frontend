@@ -9,7 +9,7 @@ import { defineEvents } from "@/lib/platform/events";
 import { defineHookPoints } from "@/lib/platform/hooks";
 import { defineRules } from "@/lib/platform/rules";
 
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 
 defineRules([
   { key: "workspace.nearLimitPct", label: "Near-limit warning from", description: "A sector counts as 'near limit' once its share reaches this % of its limit (e.g. 90% = within 10% of the limit).", module: "workspace", category: "Dashboard", type: "percent", default: 90, min: 50, max: 100, source: DEMO },

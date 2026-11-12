@@ -20,7 +20,7 @@ import type { Actor } from "@/lib/platform/scope";
 import { usePortfolioStore } from "@/modules/portfolio/store";
 
 const MODULE = "executive";
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 
 /** Business-rule keys of the executive module. Market/liquidity/op-risk/collateral thresholds are temporary duplicates (TD-508). */
 export const EXEC_RULES = {
@@ -47,18 +47,18 @@ const R = EXEC_RULES;
 
 // ---------------------------------------------------------------- business rules
 defineRules([
-  pctRule(R.stage2RedPct, "Stage 2 share of book — appetite", "Stage 2 share at or above this is Red.", "KRI thresholds", 12, "tenant parameter (demo value)"),
-  pctRule(R.stage2AmberPct, "Stage 2 share of book — early warning", "Stage 2 share at or above this (below appetite) is Amber.", "KRI thresholds", 10, "tenant parameter (demo value)"),
+  pctRule(R.stage2RedPct, "Stage 2 share of book — appetite", "Stage 2 share at or above this is Red.", "KRI thresholds", 12, "tenant parameter"),
+  pctRule(R.stage2AmberPct, "Stage 2 share of book — early warning", "Stage 2 share at or above this (below appetite) is Amber.", "KRI thresholds", 10, "tenant parameter"),
   pctRule(R.appetiteAmberPct, "Early-warning share of appetite", "A KRI at or above this share of its appetite (NPL, op-loss) is Amber.", "KRI thresholds", 80, DEMO),
   { key: R.carAmberBufferPp, label: "CAR early-warning buffer", description: "CAR within this many percentage points above the minimum is Amber.", module: MODULE, category: "KRI thresholds", type: "number", unit: "pp", default: 2.5, min: 0, max: 10, step: 0.1, source: DEMO },
   pctRule(R.ldrMinPct, "Minimum loan-to-deposit ratio", "LDR below this is Red.", "KRI thresholds", 65, "CBN minimum LDR"),
   { key: R.ldrAmberBufferPp, label: "LDR early-warning buffer", description: "LDR within this many percentage points above the minimum is Amber.", module: MODULE, category: "KRI thresholds", type: "number", unit: "pp", default: 3, min: 0, max: 20, step: 0.5, source: DEMO },
-  pctRule(R.liquidityRatioMinPct, "Minimum liquidity ratio", "Liquidity ratio below this is Red.", "KRI thresholds", 30, "tenant parameter (demo value)"),
-  pctRule(R.nopLimitPct, "Net open position limit (% of capital)", "NOP / capital above this is a breach.", "KRI thresholds", 20, "tenant parameter (demo value)"),
-  { key: R.varLimitNgn, label: "Trading VaR limit (1-day, 99%)", description: "VaR above this is a breach.", module: MODULE, category: "KRI thresholds", type: "money", default: 600e6, min: 0, source: "tenant parameter (demo value)" },
-  pctRule(R.opLossAppetitePct, "Operational loss appetite (% of gross income)", "Loss rate at or above this is Red.", "KRI thresholds", 0.5, "tenant parameter (demo value)", { step: 0.01 }),
+  pctRule(R.liquidityRatioMinPct, "Minimum liquidity ratio", "Liquidity ratio below this is Red.", "KRI thresholds", 30, "tenant parameter"),
+  pctRule(R.nopLimitPct, "Net open position limit (% of capital)", "NOP / capital above this is a breach.", "KRI thresholds", 20, "tenant parameter"),
+  { key: R.varLimitNgn, label: "Trading VaR limit (1-day, 99%)", description: "VaR above this is a breach.", module: MODULE, category: "KRI thresholds", type: "money", default: 600e6, min: 0, source: "tenant parameter" },
+  pctRule(R.opLossAppetitePct, "Operational loss appetite (% of gross income)", "Loss rate at or above this is Red.", "KRI thresholds", 0.5, "tenant parameter", { step: 0.01 }),
   pctRule(R.quotedEquityHaircutPct, "Quoted-equity collateral haircut", "Haircut applied to CSCS mark-to-market for share-margin status.", "Collateral", 20, "quoted equity haircut"),
-  { key: R.packRequiresSignedSummary, label: "BRC pack needs a signed-off summary", description: "The Board Risk Committee pack can't be submitted until the executive summary is signed off.", module: MODULE, category: "Board reporting", type: "boolean", default: true, source: "AI-drafted, human-approved (tenant choice, demo on)" },
+  { key: R.packRequiresSignedSummary, label: "BRC pack needs a signed-off summary", description: "The Board Risk Committee pack can't be submitted until the executive summary is signed off.", module: MODULE, category: "Board reporting", type: "boolean", default: true, source: "AI-drafted, human-approved (tenant choice)" },
   { key: R.summaryNotifyRoles, label: "Executive summary sign-off — notify roles", description: "Roles notified when the executive summary is signed off.", module: MODULE, category: "Notifications", type: "roles", default: ["cro", "head-of-risk", "md"], source: DEMO },
   { key: R.packNotifyRoles, label: "BRC pack approval — notify roles", description: "Roles notified when the Board Risk Committee pack is approved.", module: MODULE, category: "Notifications", type: "roles", default: ["cro", "head-of-risk", "md", "board", "portfolio-mis-officer"], source: DEMO },
 ]);

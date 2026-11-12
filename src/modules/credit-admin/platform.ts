@@ -26,21 +26,21 @@ import { auditAs, demoNowIso, hash } from "./common";
 import { canApproveAtTier } from "./logic";
 import { useCreditAdminStore, type CrmsBatch, type WaiverRequest } from "./store";
 
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 const MODULE = "credit-admin";
 
 // ---------------------------------------------------------------- business rules
 defineRules([
-  { key: "credit-admin.delegatedMaxDeferralDays", label: "Delegated tolerance — max deferral", description: "Deferrals up to this many days on the delegated condition categories may be approved by Credit Administration.", module: MODULE, category: "Waivers & deferrals", type: "duration", durationUnit: "days", default: 30, min: 0, max: 365, source: "(CAD: waivers/deferrals within delegated tolerance) — demo value" },
-  { key: "credit-admin.delegatedCategories", label: "Delegated tolerance — condition categories", description: "Condition categories Credit Administration may defer within its delegated tolerance.", module: MODULE, category: "Waivers & deferrals", type: "list", default: ["Documentation", "Fees", "Corporate authorisation"], source: "demo value" },
+  { key: "credit-admin.delegatedMaxDeferralDays", label: "Delegated tolerance — max deferral", description: "Deferrals up to this many days on the delegated condition categories may be approved by Credit Administration.", module: MODULE, category: "Waivers & deferrals", type: "duration", durationUnit: "days", default: 30, min: 0, max: 365, source: "(CAD: waivers/deferrals within delegated tolerance)" },
+  { key: "credit-admin.delegatedCategories", label: "Delegated tolerance — condition categories", description: "Condition categories Credit Administration may defer within its delegated tolerance.", module: MODULE, category: "Waivers & deferrals", type: "list", default: ["Documentation", "Fees", "Corporate authorisation"], source: "Tenant parameter" },
   { key: "credit-admin.delegatedApproverRoles", label: "Delegated tolerance — approvers", description: "Roles that may approve a request that is within the delegated tolerance.", module: MODULE, category: "Waivers & deferrals", type: "roles", default: ["credit-admin-officer"], source: "Platform default" },
-  { key: "credit-admin.waiverReminderDays", label: "Waiver / deferral reminder window", description: "Reminders go out this many days before a waiver or deferral lapses.", module: MODULE, category: "Waivers & deferrals", type: "duration", durationUnit: "days", default: 7, min: 1, max: 90, source: "(auto-reminds before lapse) — demo value" },
+  { key: "credit-admin.waiverReminderDays", label: "Waiver / deferral reminder window", description: "Reminders go out this many days before a waiver or deferral lapses.", module: MODULE, category: "Waivers & deferrals", type: "duration", durationUnit: "days", default: 7, min: 1, max: 90, source: "(auto-reminds before lapse)" },
   { key: "credit-admin.defaultDeferralDays", label: "Default deferral period", description: "Pre-filled expiry / deferred-to date on a new request.", module: MODULE, category: "Waivers & deferrals", type: "duration", durationUnit: "days", default: 14, min: 1, max: 365, source: DEMO },
   { key: "credit-admin.minReasonLength", label: "Minimum request reason", description: "Characters required in the reason for a waiver, deferral or sanction.", module: MODULE, category: "Waivers & deferrals", type: "number", unit: "characters", default: 10, min: 1, max: 500, source: DEMO },
   { key: "credit-admin.requesterRoles", label: "Who raises waivers, deferrals and sanctions", description: "Roles that may raise a request against an approved condition.", module: MODULE, category: "Roles", type: "roles", default: ["credit-admin-officer"], source: "(Credit Administration raises)" },
   { key: "credit-admin.cpConfirmerRoles", label: "Who confirms conditions precedent and releases files", description: "Roles that confirm CPs, request release for disbursement and maintain credit files.", module: MODULE, category: "Roles", type: "roles", default: ["credit-admin-officer"], source: "Credit Administration Officer" },
   { key: "credit-admin.crmsRecentWindowDays", label: "CRMS search KPI window", description: "Window for the “searches” and “adverse findings” KPIs on the CRMS desk.", module: MODULE, category: "CRMS", type: "duration", durationUnit: "days", default: 30, min: 1, max: 365, source: DEMO },
-  { key: "credit-admin.crmsReportingCadence", label: "CRMS reporting cadence", description: "How often facilities are reported to the CBN CRMS.", module: MODULE, category: "CRMS", type: "enum", default: "monthly", options: [{ value: "daily", label: "Daily" }, { value: "weekly", label: "Weekly" }, { value: "monthly", label: "Month-end" }], source: "cadence not stated; demo value (see OPEN-QUESTIONS CA-OPS-3)" },
+  { key: "credit-admin.crmsReportingCadence", label: "CRMS reporting cadence", description: "How often facilities are reported to the CBN CRMS.", module: MODULE, category: "CRMS", type: "enum", default: "monthly", options: [{ value: "daily", label: "Daily" }, { value: "weekly", label: "Weekly" }, { value: "monthly", label: "Month-end" }], source: "cadence not stated (see OPEN-QUESTIONS CA-OPS-3)" },
   { key: "credit-admin.rarStalenessDays", label: "360 RAR staleness (credit file)", description: "Credit file flags the analysis item when the 360 RAR is older than this.", module: MODULE, category: "Credit files", type: "duration", durationUnit: "days", default: 180, min: 1, max: 730, source: DEMO },
   { key: "credit-admin.callReportStalenessDays", label: "Call report staleness (credit file)", description: "Credit file flags call reports / site visits older than this.", module: MODULE, category: "Credit files", type: "duration", durationUnit: "days", default: 180, min: 1, max: 730, source: DEMO },
 ]);
@@ -265,7 +265,7 @@ defineTemplates([
     trigger: "credit-admin.crms.batch-submitted",
     subject: "CRMS batch {{batch}} submitted ({{count}} facilities)",
     inApp: "CRMS batch {{batch}} ({{label}}) — {{count}} facilities, status {{status}}.",
-    body: "<p>CRMS batch <strong>{{batch}}</strong> ({{label}}) was submitted by {{submittedBy}}.</p><ul><li>Facilities: {{count}}</li><li>Status: {{status}}</li></ul><p>The CRMS connector is simulated in this prototype.</p>",
+    body: "<p>CRMS batch <strong>{{batch}}</strong> ({{label}}) was submitted by {{submittedBy}}.</p><ul><li>Facilities: {{count}}</li><li>Status: {{status}}</li></ul><p>The CRMS connector is simulated (not connected yet).</p>",
     tone: "info",
     variables: [
       { name: "batch", description: "Batch ID", example: "CRMS-B-2026-11" },

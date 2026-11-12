@@ -19,8 +19,8 @@ import { useErm } from "./store";
 
 export { ermKeys };
 export const ERM = "enterprise-risk";
-const DEMO = "Tenant parameter (demo value)";
-const BOARD_RAS = "Board RAS — tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
+const BOARD_RAS = "Board RAS — tenant parameter";
 
 /** Source of each RAS limit (regulatory floors cited from the PRD) and its unit. */
 const rasMeta: Record<string, { unit: string; limitSource: string }> = {
@@ -30,10 +30,10 @@ const rasMeta: Record<string, { unit: string; limitSource: string }> = {
   "RA-04": { unit: "×", limitSource: "CBN 3.2(d)–(e) aggregate large exposures 8× shareholders' funds" },
   "RA-05": { unit: "%", limitSource: BOARD_RAS },
   "RA-06": { unit: "%", limitSource: "CAR minimum 10% or 15% by licence" },
-  "RA-07": { unit: "%", limitSource: "Board RAS (CBN prescribes the floor) — demo value" },
+  "RA-07": { unit: "%", limitSource: "Board RAS (CBN prescribes the floor)" },
   "RA-08": { unit: "%", limitSource: "LCR regulatory floor 100%" },
   "RA-09": { unit: "%", limitSource: BOARD_RAS },
-  "RA-10": { unit: "%", limitSource: "Loss Limit Framework — utilisation ceiling (demo value)" },
+  "RA-10": { unit: "%", limitSource: "Loss Limit Framework — utilisation ceiling" },
   "RA-11": { unit: "%", limitSource: BOARD_RAS },
 };
 
@@ -46,7 +46,7 @@ const roleRule = (key: string, label: string, description: string, def: RoleId[]
 
 defineRules([
   ...rasRules,
-  { key: ermKeys.rasVersion, label: "RAS version in force", description: "Version label of the Board-approved Risk Appetite Statement.", module: ERM, category: "Risk Appetite Statement", type: "text", default: "RAS 2026.1", source: "versioned configuration (demo value)" },
+  { key: ermKeys.rasVersion, label: "RAS version in force", description: "Version label of the Board-approved Risk Appetite Statement.", module: ERM, category: "Risk Appetite Statement", type: "text", default: "RAS 2026.1", source: "versioned configuration" },
   { key: ermKeys.rasApprovedBy, label: "RAS approved by", description: "Body that approved the RAS in force.", module: ERM, category: "Risk Appetite Statement", type: "text", default: "Board of Directors", source: DEMO },
   { key: ermKeys.rasApprovedAt, label: "RAS approval date", description: "ISO date the RAS in force was approved.", module: ERM, category: "Risk Appetite Statement", type: "text", default: "2026-01-28", source: DEMO },
   { key: ermKeys.rasNextReview, label: "RAS next review", description: "ISO date the RAS is next due for Board review.", module: ERM, category: "Risk Appetite Statement", type: "text", default: "2027-01-31", source: DEMO },
@@ -54,9 +54,9 @@ defineRules([
   { key: ermKeys.policyCycleYears, label: "Policy review cycle", description: "Credit, project-finance, real-estate, SME, agriculture and retail-financing policies must be reviewed at least this often.", module: ERM, category: "Policy currency", type: "number", default: 3, min: 1, max: 10, unit: "years", source: "Platform default" },
   { key: ermKeys.policyDueSoonDays, label: "Policy review — due-soon window", description: "Days before the cycle ends at which a policy shows as due soon.", module: ERM, category: "Policy currency", type: "duration", durationUnit: "days", default: 182, min: 0, max: 730, source: DEMO },
   { key: ermKeys.significantShareholdingPct, label: "Significant shareholder threshold", description: "Holding at or above which a shareholder is an insider for related-party disclosure.", module: ERM, category: "Insider & related party", type: "percent", default: 5, min: 0.1, max: 100, unit: "%", source: "Platform default" },
-  roleRule(ermKeys.amberEscalationRoles, "Appetite early warning — escalate to", "Roles an Amber appetite metric is escalated to.", ["cro"], "(automated breach escalation) — demo mapping"),
-  roleRule(ermKeys.redEscalationRoles, "Appetite breach — escalate to", "Roles a Red appetite breach is escalated to (CRO and Board Risk Committee).", ["cro", "board"], "demo mapping"),
-  roleRule(ermKeys.brcNotifyRoles, "BRC pack ready — notify", "Roles notified when the Board Risk Committee pack is approved for circulation.", ["board", "head-of-risk", "cro"], "demo mapping"),
+  roleRule(ermKeys.amberEscalationRoles, "Appetite early warning — escalate to", "Roles an Amber appetite metric is escalated to.", ["cro"], "(automated breach escalation)"),
+  roleRule(ermKeys.redEscalationRoles, "Appetite breach — escalate to", "Roles a Red appetite breach is escalated to (CRO and Board Risk Committee).", ["cro", "board"], "Tenant mapping"),
+  roleRule(ermKeys.brcNotifyRoles, "BRC pack ready — notify", "Roles notified when the Board Risk Committee pack is approved for circulation.", ["board", "head-of-risk", "cro"], "Tenant mapping"),
 ]);
 
 // ---------------------------------------------------------------- operations

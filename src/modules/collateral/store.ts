@@ -122,7 +122,7 @@ export function useCollateralView(): CollateralView[] {
         basisValue: a.value,
         basis: a.basis,
         haircutPct: a.haircut.pct,
-        haircutSource: a.haircut.prdCategory ? `${a.haircut.source} — ${a.haircut.prdCategory}` : "Tenant parameter (demo value) — business rule",
+        haircutSource: a.haircut.prdCategory ? `${a.haircut.source} — ${a.haircut.prdCategory}` : "Tenant parameter — business rule",
         adjusted: a.adjusted,
         eligible: a.eligible,
         exposure,

@@ -37,7 +37,7 @@ export function useActor() {
   const role = useRole();
   const { log } = useDbActions();
   return {
-    name: user?.name ?? "Demo user",
+    name: user?.name ?? "Unknown user",
     roleName: role?.name ?? "—",
     roleId: role?.id,
     log: (action: string, entityType: string, entityId: string, before?: string, after?: string) => {

@@ -41,7 +41,7 @@ export const useSession = create<SessionState>()(
           actorId: user.id,
           actorName: user.name,
           roleId,
-          action: user.source === "microsoft" ? "Signed in (Microsoft SSO)" : user.source === "password" ? "Signed in (email + password + one-time code)" : "Signed in (demo access)",
+          action: user.source === "microsoft" ? "Signed in (Microsoft SSO)" : user.source === "password" ? "Signed in (email + password + one-time code)" : "Signed in",
           entityType: "Session",
           entityId: "-",
         });
@@ -52,7 +52,7 @@ export const useSession = create<SessionState>()(
         const { user, roleId: before } = get();
         if (!user) return;
         set({ roleId });
-        useDb.getState().log({ actorId: user.id, actorName: user.name, roleId, action: "Switched demo role", entityType: "Session", entityId: "-", before: before ?? undefined, after: roleId });
+        useDb.getState().log({ actorId: user.id, actorName: user.name, roleId, action: "Switched role", entityType: "Session", entityId: "-", before: before ?? undefined, after: roleId });
       },
       signOut: async () => {
         const { user, roleId } = get();

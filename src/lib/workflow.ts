@@ -35,7 +35,7 @@ const adjudicatorOptions = [{ value: "", label: "None" }, ...roleOptions];
 
 type SlotDefault = { roles: RoleId[]; adjudicator: RoleId | ""; limitRole: RoleId; slaHours: number; source: string };
 const SRC_FLOW = "6.1.2 (default configuration)";
-const SRC_SLA = "Tenant parameter (demo value)";
+const SRC_SLA = "Tenant parameter";
 const slotDefaults: Record<(typeof TIER_SLOTS)[number], SlotDefault> = {
   T1: { roles: ["bdm"], adjudicator: "", limitRole: "bdm", slaHours: 24, source: SRC_FLOW },
   T2: { roles: ["credit-analyst", "group-head"], adjudicator: "cco", limitRole: "group-head", slaHours: 24, source: SRC_FLOW },

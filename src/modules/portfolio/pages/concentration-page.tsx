@@ -85,9 +85,9 @@ export function ConcentrationPage() {
           <KpiCard
             label="% of shareholders' funds"
             value={pct(c.pctOfShf, 0)}
-            hint={`SHF ${moneyShort(param("shareholdersFunds"))} (demo value)`}
+            hint={`SHF ${moneyShort(param("shareholdersFunds"))}`}
             tone="warning"
-            calc={{ metric: "% of SHF", formula: "Top-N exposure / Shareholders' funds unimpaired by losses × 100", source: "SHF from GL capital accounts — demo value.", prd: "§6.6.3", demo: true }}
+            calc={{ metric: "% of SHF", formula: "Top-N exposure / Shareholders' funds unimpaired by losses × 100", source: "SHF from GL capital accounts.", prd: "§6.6.3", demo: true }}
           />
           <KpiCard
             label="Stage 2/3 within cut-off"

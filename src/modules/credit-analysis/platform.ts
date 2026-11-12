@@ -27,7 +27,7 @@ import { scoringBandDefaults, scoringRuleKey } from "./parameters";
 import { useCreditAnalysis } from "./store";
 
 export const MODULE = "credit-analysis";
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 
 // ---------------------------------------------------------------- business rules
 const r = (d: Omit<RuleDefinition, "module">): RuleDefinition => ({ module: MODULE, ...d });
@@ -35,7 +35,7 @@ const stageOptions = lifeCycleStages.map((s) => ({ value: s, label: s }));
 
 defineRules([
   // Scoring & weighting
-  r({ key: "credit-analysis.weightingScheme", label: "Parameter weighting", description: "How parameter scores combine into each cardinal-point average.", category: "360 RAR scoring", type: "enum", default: "equal", options: [{ value: "equal", label: "Equal weighting" }], source: "tenant-configurable weighting (demo: equal)" }),
+  r({ key: "credit-analysis.weightingScheme", label: "Parameter weighting", description: "How parameter scores combine into each cardinal-point average.", category: "360 RAR scoring", type: "enum", default: "equal", options: [{ value: "equal", label: "Equal weighting" }], source: "tenant-configurable weighting (default: equal)" }),
   r({ key: "credit-analysis.band.lowMax", label: "Interpretive band — Low up to", description: "Highest whole score in the Low band of the 36-cell interpretive layer.", category: "360 RAR scoring", type: "number", default: 3, min: 1, max: 8, step: 1, source: "Platform default" }),
   r({ key: "credit-analysis.band.mediumMax", label: "Interpretive band — Medium up to", description: "Highest whole score in the Medium band; above is High.", category: "360 RAR scoring", type: "number", default: 7, min: 2, max: 9, step: 1, source: "Platform default" }),
   r({ key: "credit-analysis.qualitative.midFrom", label: "Qualitative reading — mid from", description: "Score from which an analyst-led parameter reads as the middle label.", category: "360 RAR scoring", type: "number", default: 4, min: 1, max: 10, step: 0.5, source: DEMO }),
@@ -43,9 +43,9 @@ defineRules([
   // Confidence overlay
   r({ key: "credit-analysis.cop.highFrom", label: "COP High Confidence from", description: "COP ratio at or above which declared financials are High Confidence.", category: "Confidence overlay", type: "number", default: 0.85, min: 0, max: 2, step: 0.01, source: "example banding (tenant-configurable)" }),
   r({ key: "credit-analysis.cop.mediumFrom", label: "COP Medium Confidence from", description: "COP ratio at or above which declared financials are Medium Confidence; below is Low (explanation required).", category: "Confidence overlay", type: "number", default: 0.6, min: 0, max: 2, step: 0.01, source: "example banding (tenant-configurable)" }),
-  r({ key: "credit-analysis.cop.dampenHigh", label: "North dampening — High Confidence", description: "Points subtracted from the North (Internal Risk) average at High Confidence.", category: "Confidence overlay", type: "number", default: 0, min: 0, max: 5, step: 0.1, source: "amount not given (OPEN-QUESTIONS RAR3); demo value" }),
-  r({ key: "credit-analysis.cop.dampenMedium", label: "North dampening — Medium Confidence", description: "Points subtracted from the North average at Medium Confidence.", category: "Confidence overlay", type: "number", default: 0.5, min: 0, max: 5, step: 0.1, source: "amount not given (OPEN-QUESTIONS RAR3); demo value" }),
-  r({ key: "credit-analysis.cop.dampenLow", label: "North dampening — Low Confidence", description: "Points subtracted from the North average at Low Confidence.", category: "Confidence overlay", type: "number", default: 1, min: 0, max: 5, step: 0.1, source: "amount not given (OPEN-QUESTIONS RAR3); demo value" }),
+  r({ key: "credit-analysis.cop.dampenHigh", label: "North dampening — High Confidence", description: "Points subtracted from the North (Internal Risk) average at High Confidence.", category: "Confidence overlay", type: "number", default: 0, min: 0, max: 5, step: 0.1, source: "amount not given (OPEN-QUESTIONS RAR3)" }),
+  r({ key: "credit-analysis.cop.dampenMedium", label: "North dampening — Medium Confidence", description: "Points subtracted from the North average at Medium Confidence.", category: "Confidence overlay", type: "number", default: 0.5, min: 0, max: 5, step: 0.1, source: "amount not given (OPEN-QUESTIONS RAR3)" }),
+  r({ key: "credit-analysis.cop.dampenLow", label: "North dampening — Low Confidence", description: "Points subtracted from the North average at Low Confidence.", category: "Confidence overlay", type: "number", default: 1, min: 0, max: 5, step: 0.1, source: "amount not given (OPEN-QUESTIONS RAR3)" }),
   // Refresh cycle
   r({ key: "credit-analysis.staleAfterDays", label: "Refresh cycle", description: "An assessment older than this is stale and due for refresh.", category: "Refresh cycle", type: "duration", durationUnit: "days", default: 90, min: 1, max: 730, source: DEMO }),
   // Peer benchmarking
@@ -57,13 +57,13 @@ defineRules([
   r({ key: "credit-analysis.trend.flatBandPct", label: "Flat momentum band", description: "Average yearly movement, as % of the current level, treated as Flat/Stable.", category: "Trend & momentum", type: "percent", unit: "%", default: 2, min: 0, max: 50, step: 0.5, source: DEMO }),
   r({ key: "credit-analysis.trend.inLineTolerance", label: "In line with sector tolerance", description: "Difference in rate of change (pp or % p.a.) treated as in line with the sector.", category: "Trend & momentum", type: "number", default: 0.5, min: 0, max: 10, step: 0.1, source: DEMO }),
   // Share of wallet
-  r({ key: "credit-analysis.sow.highSharePct", label: "High wallet share from", description: "Turnover or loan wallet share at or above which the share counts as high (quadrant split).", category: "Share of wallet", type: "percent", unit: "%", default: 50, min: 1, max: 99, step: 1, source: "tenant threshold (demo value)" }),
+  r({ key: "credit-analysis.sow.highSharePct", label: "High wallet share from", description: "Turnover or loan wallet share at or above which the share counts as high (quadrant split).", category: "Share of wallet", type: "percent", unit: "%", default: 50, min: 1, max: 99, step: 1, source: "tenant threshold" }),
   // Life-cycle classification + scores
-  r({ key: "credit-analysis.lifeCycle.introMaxCompanies", label: "Introduction — max listed companies", description: "Sectors with at most this many listed companies can classify as Introduction.", category: "Industry life-cycle", type: "number", default: 5, min: 1, max: 100, step: 1, source: "engine threshold (demo value)" }),
-  r({ key: "credit-analysis.lifeCycle.introMinCagrPct", label: "Introduction — min real growth", description: "Trailing 5-year real revenue CAGR at or above which a thin sector is Introduction.", category: "Industry life-cycle", type: "percent", unit: "% p.a.", default: 8, min: -20, max: 50, step: 0.5, source: "engine threshold (demo value)" }),
-  r({ key: "credit-analysis.lifeCycle.growthMinCagrPct", label: "Growth — min real growth", description: "Trailing 5-year real revenue CAGR at or above which a sector is Growth.", category: "Industry life-cycle", type: "percent", unit: "% p.a.", default: 4, min: -20, max: 50, step: 0.5, source: "engine threshold (demo value)" }),
-  r({ key: "credit-analysis.lifeCycle.declineBelowCagrPct", label: "Decline — real growth below", description: "Real revenue CAGR below which (with falling margins) a sector is Decline.", category: "Industry life-cycle", type: "percent", unit: "% p.a.", default: 0, min: -20, max: 20, step: 0.5, source: "engine threshold (demo value)" }),
-  r({ key: "credit-analysis.lifeCycle.declineBelowMarginTrendPp", label: "Decline — margin trend below", description: "Net-margin trend (pp a year) below which, with contracting revenue, a sector is Decline.", category: "Industry life-cycle", type: "number", unit: "pp/yr", default: 0, min: -10, max: 10, step: 0.05, source: "engine threshold (demo value)" }),
+  r({ key: "credit-analysis.lifeCycle.introMaxCompanies", label: "Introduction — max listed companies", description: "Sectors with at most this many listed companies can classify as Introduction.", category: "Industry life-cycle", type: "number", default: 5, min: 1, max: 100, step: 1, source: "engine threshold" }),
+  r({ key: "credit-analysis.lifeCycle.introMinCagrPct", label: "Introduction — min real growth", description: "Trailing 5-year real revenue CAGR at or above which a thin sector is Introduction.", category: "Industry life-cycle", type: "percent", unit: "% p.a.", default: 8, min: -20, max: 50, step: 0.5, source: "engine threshold" }),
+  r({ key: "credit-analysis.lifeCycle.growthMinCagrPct", label: "Growth — min real growth", description: "Trailing 5-year real revenue CAGR at or above which a sector is Growth.", category: "Industry life-cycle", type: "percent", unit: "% p.a.", default: 4, min: -20, max: 50, step: 0.5, source: "engine threshold" }),
+  r({ key: "credit-analysis.lifeCycle.declineBelowCagrPct", label: "Decline — real growth below", description: "Real revenue CAGR below which (with falling margins) a sector is Decline.", category: "Industry life-cycle", type: "percent", unit: "% p.a.", default: 0, min: -20, max: 20, step: 0.5, source: "engine threshold" }),
+  r({ key: "credit-analysis.lifeCycle.declineBelowMarginTrendPp", label: "Decline — margin trend below", description: "Net-margin trend (pp a year) below which, with contracting revenue, a sector is Decline.", category: "Industry life-cycle", type: "number", unit: "pp/yr", default: 0, min: -10, max: 10, step: 0.05, source: "engine threshold" }),
   ...lifeCycleStages.map((stage, i) =>
     r({ key: `credit-analysis.lifeCycleScore.${stage}`, label: `Life-Cycle Stage score — ${stage}`, description: `South "Life-Cycle Stage" parameter score for a ${stage}-stage industry.`, category: "Industry life-cycle", type: "number", default: [6.5, 8.5, 5, 2][i]!, min: 1, max: 10, step: 0.5, source: DEMO }),
   ),
@@ -96,7 +96,7 @@ defineRules([
         type: "enum",
         default: sectorMapping[s.id]!.primary ?? NO_NGX_PROXY,
         options: [...ngxSectors.map((n) => ({ value: n.id, label: n.name })), { value: NO_NGX_PROXY, label: "No listed proxy" }],
-        source: "tenant mapping (demo value)",
+        source: "tenant mapping",
       }),
     ),
   // Parameter scoring bands (§8 "tenant-configurable bands")
@@ -111,7 +111,7 @@ defineRules([
         unit: b.unit,
         default: b[end],
         step: 0.1,
-        source: "tenant-configurable bands (demo value)",
+        source: "tenant-configurable bands",
       }),
     ),
   ),

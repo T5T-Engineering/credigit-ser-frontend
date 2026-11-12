@@ -167,7 +167,7 @@ export function AuditPage() {
           Audit entries can&apos;t be edited or deleted by any role, including System Admin. Every AI-assisted output is logged with its model and version.
         </Alert>
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
-          <StatCard label="Events" value={audit.length} hint="In this tenant (demo)" icon={<ScrollText aria-hidden className="size-5" />} tone="accent" />
+          <StatCard label="Events" value={audit.length} hint="In this tenant" icon={<ScrollText aria-hidden className="size-5" />} tone="accent" />
           <StatCard label="Last 7 days" value={audit.filter((e) => new Date(e.at).getTime() >= since).length} hint="All actions" icon={<Lock aria-hidden className="size-5" />} tone="info" />
           <StatCard label="Configuration changes" value={audit.filter((e) => typeOf(e.action) === "configuration").length} hint="Parameters, roles, limits" icon={<ShieldCheck aria-hidden className="size-5" />} tone="warning" />
           <StatCard label="Distinct users" value={new Set(audit.map((e) => e.actorId)).size} hint="Named individuals only" icon={<Users aria-hidden className="size-5" />} tone="success" />

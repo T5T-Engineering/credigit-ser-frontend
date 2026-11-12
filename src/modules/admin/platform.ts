@@ -21,7 +21,7 @@ import { currentActor } from "@/lib/platform/scope";
 import { allProducts, productSlug, roleName } from "./rule-keys";
 import { addCustomRole, removeCustomRole, updateCustomRole, type CustomRole } from "./store";
 
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 
 /** PRD §4.2: tighter session defaults for Disbursement Maker/Checker and Legal. */
 const tighterByPrd: RoleId[] = ["disbursement-maker", "disbursement-checker", "legal-officer"];
@@ -60,7 +60,7 @@ defineRules([
         default: tight ? 10 : 15,
         min: 1,
         max: 240,
-        source: "(configurable per role; tighter for disbursement and legal) — demo value",
+        source: "(configurable per role; tighter for disbursement and legal)",
       },
       {
         key: `session.deviceBinding.${r.id}`,
@@ -70,7 +70,7 @@ defineRules([
         category: "Session security",
         type: "boolean",
         default: tight,
-        source: "demo value",
+        source: "Tenant parameter",
       },
       {
         key: `session.ipAllowList.${r.id}`,
@@ -80,7 +80,7 @@ defineRules([
         category: "Session security",
         type: "list",
         default: tight ? ["10.20.0.0/16"] : [],
-        source: "demo value",
+        source: "Tenant parameter",
       },
     ];
   }),

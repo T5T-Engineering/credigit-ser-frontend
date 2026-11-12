@@ -21,7 +21,7 @@ import { useOfferLetterStore, type OfferLetter } from "./store";
 import type { Clause } from "./library";
 import { seedTemplates, type HouseTemplate } from "./template";
 
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 const MODULE = "offer-letters";
 
 // ---------------------------------------------------------------- business rules
@@ -29,7 +29,7 @@ defineRules([
   { key: "offer-letters.validityDaysDefault", label: "Acceptance validity (default)", description: "Days an issued offer stays open for acceptance under seal before it lapses.", module: MODULE, category: "Acceptance", type: "duration", durationUnit: "days", default: 7, min: 1, max: 90, source: "Acceptance Validity (commonly 7 days)" },
   { key: "offer-letters.validityDaysMin", label: "Acceptance validity — minimum", description: "Shortest validity Legal may set on a letter.", module: MODULE, category: "Acceptance", type: "duration", durationUnit: "days", default: 1, min: 1, max: 30, source: DEMO },
   { key: "offer-letters.validityDaysMax", label: "Acceptance validity — maximum", description: "Longest validity Legal may set on a letter.", module: MODULE, category: "Acceptance", type: "duration", durationUnit: "days", default: 90, min: 1, max: 365, source: DEMO },
-  { key: "offer-letters.noticeDays", label: "Notice period (merge field)", description: "Value merged into {{notice.days}} in clauses (e.g. share-cover top-up).", module: MODULE, category: "Merge fields", type: "duration", durationUnit: "days", default: 10, min: 1, max: 90, source: "build note (notice-period days as a merge field) — demo value" },
+  { key: "offer-letters.noticeDays", label: "Notice period (merge field)", description: "Value merged into {{notice.days}} in clauses (e.g. share-cover top-up).", module: MODULE, category: "Merge fields", type: "duration", durationUnit: "days", default: 10, min: 1, max: 90, source: "build note (notice-period days as a merge field)" },
   { key: "offer-letters.referencePrefix", label: "Letter reference prefix", description: "Prefix of generated offer-letter references (followed by year and sequence).", module: MODULE, category: "Generation", type: "text", default: "HLB/CAD/OL", source: DEMO },
   { key: "offer-letters.minClauseTextLength", label: "Minimum clause text", description: "Characters required for a new, bespoke or edited clause.", module: MODULE, category: "Clause library", type: "number", unit: "characters", default: 20, min: 1, max: 500, source: DEMO },
   { key: "offer-letters.insuranceWarningDays", label: "Insurance-expiry warning window", description: "Pre-release check flags collateral insurance expiring within this many days.", module: MODULE, category: "Pre-release checks", type: "duration", durationUnit: "days", default: 30, min: 1, max: 365, source: DEMO },
@@ -42,7 +42,7 @@ defineRules([
     category: "Generation",
     type: "list",
     default: ["Bank guarantee", "Advance payment guarantee"],
-    source: "tenant product-line templates (demo value)",
+    source: "tenant product-line templates",
   },
   {
     key: "offer-letters.unsecuredCollateralTypes",
@@ -54,9 +54,9 @@ defineRules([
     default: ["Personal guarantee", "Corporate guarantee", "Domiciliation of proceeds"],
     source: DEMO,
   },
-  { key: "offer-letters.signoffRequesterRoles", label: "Who sends letters to Legal", description: "Roles that submit a letter for Legal sign-off & issue, or request a re-issue.", module: MODULE, category: "Roles", type: "roles", default: ["account-officer", "credit-admin-officer"], source: "steps 13–14 (Account Officer presents; Credit Admin) — demo mapping" },
+  { key: "offer-letters.signoffRequesterRoles", label: "Who sends letters to Legal", description: "Roles that submit a letter for Legal sign-off & issue, or request a re-issue.", module: MODULE, category: "Roles", type: "roles", default: ["account-officer", "credit-admin-officer"], source: "steps 13–14 (Account Officer presents; Credit Admin)" },
   { key: "offer-letters.legalEditorRoles", label: "Who edits clauses on a letter", description: "Roles that add, remove or edit clauses while the letter is in Legal review.", module: MODULE, category: "Roles", type: "roles", default: ["legal-officer"], source: "Legal Officer /" },
-  { key: "offer-letters.acceptanceRecorderRoles", label: "Who records customer acceptance", description: "Roles that record the signed duplicate and Memorandum of Acceptance.", module: MODULE, category: "Roles", type: "roles", default: ["account-officer", "credit-admin-officer", "legal-officer"], source: "demo mapping" },
+  { key: "offer-letters.acceptanceRecorderRoles", label: "Who records customer acceptance", description: "Roles that record the signed duplicate and Memorandum of Acceptance.", module: MODULE, category: "Roles", type: "roles", default: ["account-officer", "credit-admin-officer", "legal-officer"], source: "Tenant mapping" },
   { key: "offer-letters.libraryEditorRoles", label: "Who proposes clause-library and template changes", description: "Roles that propose new clauses, wording changes, retirements and house-template versions.", module: MODULE, category: "Roles", type: "roles", default: ["legal-officer"], source: "7.3 (Legal approves the text)" },
 ]);
 

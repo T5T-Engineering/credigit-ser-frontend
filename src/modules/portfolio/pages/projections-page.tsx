@@ -92,7 +92,7 @@ export function ProjectionsPage() {
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SegmentedControl label="Scenario" value={scenario} onChange={setScenario} options={[{ value: "Base", label: "Base" }, { value: "Upside", label: "Upside" }, { value: "Downside", label: "Downside" }]} />
-          <Text variant="caption">Macro data as of {dateTime(DEMO_NOW)} · NGX Corpus update Q3 2026 (demo)</Text>
+          <Text variant="caption">Macro data as of {dateTime(DEMO_NOW)} · NGX Corpus update Q3 2026</Text>
         </div>
 
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">

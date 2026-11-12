@@ -115,7 +115,7 @@ export function PortfolioDashboardsPage() {
             value={pct(totals.nplRatio, 2)}
             delta={`${(last.nplRatio - prev.nplRatio).toFixed(2)} pp`}
             deltaIntent={last.nplRatio <= prev.nplRatio ? "positive" : "negative"}
-            hint={`Appetite ${pct(p.nplAppetitePct.value, 0)} (demo)`}
+            hint={`Appetite ${pct(p.nplAppetitePct.value, 0)}`}
             tone={totals.nplRatio > p.nplAppetitePct.value ? "danger" : "brand"}
             calc={{
               metric: "NPL ratio",
@@ -157,14 +157,14 @@ export function PortfolioDashboardsPage() {
               prd: "§6.6.1",
               inputs: [
                 { label: "Applications in process", value: number(pipeline.count) },
-                { label: "Declined (all time, demo)", value: number(pipeline.declined) },
+                { label: "Declined (all time)", value: number(pipeline.declined) },
               ],
             }}
           />
           <KpiCard
             label="WARR (whole book)"
             value={warr.warr.toFixed(2)}
-            hint={`Ceiling ${p.warrCeiling.value.toFixed(1)} (demo) · scale 1 best – 10 worst`}
+            hint={`Ceiling ${p.warrCeiling.value.toFixed(1)} · scale 1 best – 10 worst`}
             calc={{
               metric: "WARR",
               formula: "Σ (exposure × grade score) / Σ rated exposure",
@@ -216,7 +216,7 @@ export function PortfolioDashboardsPage() {
               showLegend
               series={[
                 { name: "NPL ratio", points: history.map((h) => ({ x: h.month, y: h.nplRatio })), tone: "danger" },
-                { name: "Appetite (demo)", points: history.map((h) => ({ x: h.month, y: p.nplAppetitePct.value })), tone: "neutral" },
+                { name: "Appetite", points: history.map((h) => ({ x: h.month, y: p.nplAppetitePct.value })), tone: "neutral" },
               ]}
               yFormatter={(v) => pct(v, 1)}
               height={240}

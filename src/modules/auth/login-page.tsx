@@ -170,7 +170,7 @@ export function LoginPage() {
             </form>
           )}
           {demoAccessEnabled && !backendSsoEnabled && !pickRoleFor ? (
-            <Alert tone="info" title="Prototype sign-in">
+            <Alert tone="info" title="Sign in by role (development)">
               Any demo user signs in with password <span className="font-mono font-semibold">{DEMO_PASSWORD}</span>
               {sampleEmail ? (
                 <>
@@ -182,7 +182,7 @@ export function LoginPage() {
           ) : null}
           {demoAccessEnabled || pickRoleFor ? (
             <Stack gap="small" className="pt-2">
-              {pickRoleFor ? null : <Divider label="or explore the prototype by role" />}
+              {pickRoleFor ? null : <Divider label="or sign in by role (development)" />}
               <RolePicker
                 roles={options}
                 groupOrder={roleGroups}

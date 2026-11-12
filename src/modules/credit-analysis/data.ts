@@ -552,7 +552,7 @@ export function percentileRank(dist: Distribution, value: number): number {
 
 export const macroSnapshot = {
   asAt: "2026-10-31",
-  source: "NBS & CBN MPC data feed (demo values)",
+  source: "NBS & CBN MPC data feed",
   indicators: [
     { label: "Headline inflation (y/y)", value: "18.4%", trend: "Easing" },
     { label: "Monetary Policy Rate", value: "26.50%", trend: "Held" },

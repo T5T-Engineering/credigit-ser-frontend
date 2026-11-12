@@ -195,7 +195,7 @@ export function SharesPage() {
             </>
           }>
           Phase 1: manual / periodic upload of CSCS share-statement and valuation evidence on the collateral record. Phase 2: automated CSCS/SEC feed with scheduled mark-to-market refresh. Prices
-          below are <strong>simulated demo values, not market data</strong> — last close {dateTime(asOf)}.
+          below are <strong>simulated values, not market data</strong> — last close {dateTime(asOf)}.
         </Alert>
         <Grid columns={{ base: 2, lg: 4 }} gap="medium">
           <StatCard label="Share-backed collateral" value={number(rows.length)} hint={`${tickers.length} counters`} />

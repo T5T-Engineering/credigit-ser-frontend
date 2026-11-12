@@ -14,7 +14,7 @@ const PANELS: { title: string; keys: string[]; description?: string }[] = [
   { title: "LGD & EAD", keys: IFRS9_RULE_GROUPS.lgdEad },
   { title: "Model governance", keys: IFRS9_RULE_GROUPS.models },
   { title: "ICAAP — capital adequacy & Pillar 2", keys: IFRS9_RULE_GROUPS.capital },
-  { title: "ICAAP — capital base (demo calibration)", keys: IFRS9_RULE_GROUPS.capitalBase },
+  { title: "ICAAP — capital base", keys: IFRS9_RULE_GROUPS.capitalBase },
   {
     title: "ICAAP — stress scenarios",
     keys: IFRS9_RULE_GROUPS.scenarios,

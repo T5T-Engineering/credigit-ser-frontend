@@ -15,7 +15,7 @@ import { useDb } from "@/lib/data/store";
 import type { RoleId } from "@/lib/rbac/roles";
 
 const M = "operations";
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 
 // ---------------------------------------------------------------- business rules
 defineRules([

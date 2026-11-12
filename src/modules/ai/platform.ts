@@ -18,7 +18,7 @@ import { useAi, type SavedQuery } from "./store";
 
 /** Same key as the nav module ("ai-console") so Operations shows the module name, not a raw id. */
 export const AI = "ai-console";
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 
 export type QueryScope = "full" | "platform";
 
@@ -40,7 +40,7 @@ export const aiKeys = {
 defineRules([
   { key: aiKeys.fullScopeRoles, label: "Query console — full-scope roles", description: "Roles with natural-language access to the whole Risk Data Spine.", module: AI, category: "Query console access", type: "roles", default: ["cro", "head-of-risk"], source: "Platform default" },
   { key: aiKeys.platformScopeRoles, label: "Query console — platform-scope roles", description: "Roles limited to platform-health and configuration data (no customer-identifiable financial data).", module: AI, category: "Query console access", type: "roles", default: ["system-admin", "it-support"], source: "Platform default" },
-  { key: aiKeys.modelVersion, label: "Query model version label", description: "Model version shown on every console answer and written to the audit trail.", module: AI, category: "Models", type: "text", default: "SER-NLQ 0.9 (simulated, rules-based)", source: "(model version labelled) — demo value" },
+  { key: aiKeys.modelVersion, label: "Query model version label", description: "Model version shown on every console answer and written to the audit trail.", module: AI, category: "Models", type: "text", default: "SER-NLQ 0.9 (simulated, rules-based)", source: "(model version labelled)" },
   { key: aiKeys.trendModel, label: "Trend analyser model label", description: "Model that drafts KRI trend & correlation commentary.", module: AI, category: "Models", type: "text", default: "SER Trend Analyser v2.3 (simulated)", source: DEMO },
   { key: aiKeys.narrativeModel, label: "Narrative model label", description: "Model that drafts report narratives (e.g. BRC executive summary).", module: AI, category: "Models", type: "text", default: "SER Narrative v1.4 (simulated)", source: DEMO },
   { key: aiKeys.queryLogMax, label: "Query log size (browser)", description: "Query records kept in the console's local log. The audit trail keeps every query.", module: AI, category: "Query console", type: "number", default: 200, min: 10, max: 5000, source: DEMO, requiresApproval: false },

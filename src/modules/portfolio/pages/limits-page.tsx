@@ -109,7 +109,7 @@ export function LimitsPage() {
           <KpiCard
             label="Single-obligor limit"
             value={moneyShort(sol)}
-            hint={`${solPct}% of SHF ${moneyShort(shf)} (demo SHF)`}
+            hint={`${solPct}% of SHF ${moneyShort(shf)}`}
             calc={{ metric: "single-obligor limit", formula: `${solPct}% × Shareholders' funds unimpaired by losses`, source: "CBN 3.2(a). Shareholders' funds: GL capital accounts (paid-up capital + reserves, net of identified losses) — demo value for this tenant.", prd: "§5.6, §8", demo: true }}
           />
           <KpiCard
@@ -158,7 +158,7 @@ export function LimitsPage() {
         <Panel
           title="Sectoral limits"
           description={taxonomy === "tenant" ? "Tenant internal sector taxonomy vs the internal sectoral concentration limit (% of total loan book)." : "Re-aggregated onto the CBN standard industry classification for regulatory returns (mapped with % splits)."}
-          calc={{ metric: "sectoral exposure", formula: "Sector outstanding balance / Total portfolio outstanding × 100; utilisation = exposure % / limit %", source: "Numerator: CBA facility ledger filtered by the sector code assigned at origination. Denominator: CBA facility ledger, full book. Sector limits: tenant parameters (demo values).", prd: "§8, §6.6.2", demo: true }}
+          calc={{ metric: "sectoral exposure", formula: "Sector outstanding balance / Total portfolio outstanding × 100; utilisation = exposure % / limit %", source: "Numerator: CBA facility ledger filtered by the sector code assigned at origination. Denominator: CBA facility ledger, full book. Sector limits: tenant parameters.", prd: "§8, §6.6.2", demo: true }}
           actions={
             <SegmentedControl
               label="Sector taxonomy"

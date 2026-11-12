@@ -18,7 +18,7 @@ import { MACRO, PD_SCALE, PILLAR2, POSTURES, POSTURE_DEFAULTS, SCENARIO_DEFAULTS
 import { useIfrs9, type Declassification, type ReservePosting } from "./store";
 
 const M = "ifrs9";
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 
 // ---------------------------------------------------------------- business rules
 const num = (key: string, label: string, category: string, def: number, source: string, extra: Partial<RuleDefinition> = {}): RuleDefinition => ({
@@ -80,10 +80,10 @@ defineRules([
   pctRule("cbn.haircut.legalMortgage", "Lost haircut weighting — legal mortgage", "CBN provisioning", 50, "(CBN 12.13(a)(5))"),
   days("cbn.haircutLapseDays", "Haircut adjustment lapses after (in Lost)", "CBN provisioning", 365, "(CBN 12.13(b)(3)-(4): max 1 year)"),
   // Declassification (§6.7.5)
-  days("cure.stage3DpdThreshold", "Stage 3 → 2: arrears cured below", "Declassification", 90, "configurable DPD threshold (demo default)"),
-  num("cure.periods", "Cure period (consecutive timely repayments)", "Declassification", 3, "configurable cure period (demo default)", { min: 1, max: 24, unit: "periods" }),
-  num("cure.stage2ProbationMonths", "Stage 2 → 1 probation", "Declassification", 3, "configurable probation (demo default)", { min: 0, max: 36, unit: "months" }),
-  num("cure.restructuredProbationMonths", "Restructured / modified probation", "Declassification", 12, "configurable probation (demo default)", { min: 0, max: 60, unit: "months" }),
+  days("cure.stage3DpdThreshold", "Stage 3 → 2: arrears cured below", "Declassification", 90, "configurable DPD threshold"),
+  num("cure.periods", "Cure period (consecutive timely repayments)", "Declassification", 3, "configurable cure period", { min: 1, max: 24, unit: "periods" }),
+  num("cure.stage2ProbationMonths", "Stage 2 → 1 probation", "Declassification", 3, "configurable probation", { min: 0, max: 36, unit: "months" }),
+  num("cure.restructuredProbationMonths", "Restructured / modified probation", "Declassification", 12, "configurable probation", { min: 0, max: 60, unit: "months" }),
   num("cure.watchlistExtraPeriods", "Extra timely periods while on watchlist", "Declassification", 3, DEMO, { min: 0, max: 24, unit: "periods" }),
   {
     key: "ifrs9.cure.suspendedInterestPolicy",
@@ -129,11 +129,11 @@ defineRules([
   pctRule("capital.rw.defaulted", "Risk weight — Stage 3 / defaulted", "ICAAP — capital base", 150, `risk weights (${DEMO})`, { max: 1250 }),
   pctRule("capital.rw.corporate", "Risk weight — other exposures", "ICAAP — capital base", 100, `risk weights (${DEMO})`, { max: 1250 }),
   pctRule("capital.loanBookShareOfCreditRwa", "Loan book share of credit RWA", "ICAAP — capital base", 69, `Demo calibration until the GL connector is live (${DEMO})`, { min: 1 }),
-  pctRule("capital.marketRwaPct", "Market RWA (% of credit RWA)", "ICAAP — capital base", 8, `Demo calibration (${DEMO})`),
-  pctRule("capital.operationalRwaPct", "Operational RWA (% of credit RWA)", "ICAAP — capital base", 16, `Demo calibration (${DEMO})`),
-  pctRule("capital.tier1Pct", "Tier 1 gross (% of RWA)", "ICAAP — capital base", 16.8, `Demo calibration (${DEMO})`),
-  pctRule("capital.deductionsPct", "Regulatory deductions (% of RWA)", "ICAAP — capital base", 1.2, `Demo calibration (${DEMO})`),
-  pctRule("capital.tier2Pct", "Tier 2 gross (% of RWA)", "ICAAP — capital base", 4.1, `Demo calibration (${DEMO})`),
+  pctRule("capital.marketRwaPct", "Market RWA (% of credit RWA)", "ICAAP — capital base", 8, `Calibration (${DEMO})`),
+  pctRule("capital.operationalRwaPct", "Operational RWA (% of credit RWA)", "ICAAP — capital base", 16, `Calibration (${DEMO})`),
+  pctRule("capital.tier1Pct", "Tier 1 gross (% of RWA)", "ICAAP — capital base", 16.8, `Calibration (${DEMO})`),
+  pctRule("capital.deductionsPct", "Regulatory deductions (% of RWA)", "ICAAP — capital base", 1.2, `Calibration (${DEMO})`),
+  pctRule("capital.tier2Pct", "Tier 2 gross (% of RWA)", "ICAAP — capital base", 4.1, `Calibration (${DEMO})`),
   pctRule("capital.fxMarketRwaSensitivity", "Market RWA sensitivity to FX devaluation", "ICAAP — capital base", 50, DEMO),
   // ICAAP stress scenarios (§6.7.4)
   ...Object.entries(SCENARIO_DEFAULTS).flatMap(([id, values]) =>

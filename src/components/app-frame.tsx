@@ -102,14 +102,14 @@ export function AppFrame({ children }: { children: ReactNode }) {
     const actions: CommandItem[] = [
       ...(canAccess(role, "origination", "edit") ? [{ id: "act:new-app", label: "New credit application", group: "actions", href: "/origination/new", icon: <FilePlus2 aria-hidden className="size-4" /> }] : []),
       { id: "act:branding", label: "Change colours, logo or font", group: "actions", href: "/settings/branding", icon: <Palette aria-hidden className="size-4" /> },
-      ...(demoAccessEnabled ? [{ id: "act:reset", label: "Reset demo data", group: "actions", icon: <RotateCcw aria-hidden className="size-4" /> }] : []),
+      ...(demoAccessEnabled ? [{ id: "act:reset", label: "Reset to initial data", group: "actions", icon: <RotateCcw aria-hidden className="size-4" /> }] : []),
     ];
     return [...actions, ...pages, ...records];
   }, [role, obligors, applications]);
 
   const onCommand = (item: CommandItem) => {
     if (item.id === "act:reset") {
-      if (window.confirm("Reset all demo data to its original state?")) resetAllDemoData(resetDemo);
+      if (window.confirm("Reset all data to its initial state?")) resetAllDemoData(resetDemo);
       return;
     }
     if (item.href) router.push(item.href);
@@ -164,7 +164,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
             onSearchClick={() => setPaletteOpen(true)}
             searchLabel="Search obligors, applications, pages…"
             showShortcut
-            environment={{ label: tenant.environment === "Demo" ? "Demo data" : tenant.environment, tone: tenant.environment === "Production" ? "success" : "warning" }}
+            environment={{ label: tenant.environment, tone: tenant.environment === "Production" ? "success" : "warning" }}
             notifications={
               <NotificationCenter
                 notifications={myNotifications}
@@ -189,7 +189,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
                   switchRole(r.id as typeof roles[number]["id"]);
                   router.push("/dashboard");
                 }}
-                labels={{ switchRole: "Switch demo role" }}
+                labels={{ switchRole: "Switch role" }}
                 onSignOut={doSignOut}
               />
             }

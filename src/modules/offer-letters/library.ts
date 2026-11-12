@@ -53,7 +53,7 @@ export type Clause = {
   history: ClauseVersion[];
 };
 
-const LEGAL = "Head of Legal (demo)";
+const LEGAL = "Head of Legal";
 const approved = (version: number, at: string) => ({ version, status: "Legal-approved" as const, approvedByName: LEGAL, approvedAt: at });
 
 function c(

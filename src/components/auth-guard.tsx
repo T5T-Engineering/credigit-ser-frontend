@@ -13,7 +13,7 @@ export const demoAccessEnabled = process.env.NEXT_PUBLIC_DEMO_ACCESS !== "false"
 export function demoSignIn(roleId: RoleId) {
   const user = useDb.getState().users.find((u) => u.roleId === roleId);
   useSession.getState().signIn(
-    { id: user?.id ?? "USR-DEMO", name: user?.name ?? roleById[roleId].name, email: user?.email ?? "demo@harbourline.example", source: "demo" },
+    { id: user?.id ?? "USR-UNKNOWN", name: user?.name ?? roleById[roleId].name, email: user?.email ?? "demo@harbourline.example", source: "demo" },
     roleId,
   );
 }

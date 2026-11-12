@@ -42,7 +42,7 @@ export function CalcNote({ metric, formula, source, inputs, demo, display = "ico
           <Stack direction="horizontal" gap="small" align="center" wrap>
             <Text variant="eyebrow">How this is calculated</Text>
 
-            {demo ? <Badge tone="warning">Demo inputs</Badge> : null}
+            {demo ? <Badge tone="warning">Inputs</Badge> : null}
           </Stack>
           <Text variant="small" className="font-mono text-fg">
             {formula}

@@ -476,7 +476,7 @@ function connectors(): Answer {
     status: "answered",
     intent: "connectors",
     title: "Connector health (simulated)",
-    narrative: [`${list.filter((c) => c[1] === "Healthy").length} of ${list.length} connectors are healthy; ${list.filter((c) => c[1] !== "Healthy").map((c) => c[0]).join(", ")} is degraded.`, "Connector telemetry is simulated in this prototype."],
+    narrative: [`${list.filter((c) => c[1] === "Healthy").length} of ${list.length} connectors are healthy; ${list.filter((c) => c[1] !== "Healthy").map((c) => c[0]).join(", ")} is degraded.`, "Connector telemetry is simulated (connectors not connected yet)."],
     chart: { kind: "bar", data: list.map((c) => ({ label: c[0], value: c[2] })), format: "pct", label: "30-day availability by connector" },
     table: { columns: ["Connector", "Status", "30-day availability", "Last sync"], numeric: [false, false, true, false], rows: list.map((c) => [c[0], c[1], `${c[2]}%`, c[3]]) },
     sources: [{ label: "Staging / reconciliation layer telemetry", detail: "Platform-health data" }],

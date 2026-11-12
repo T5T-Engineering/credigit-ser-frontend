@@ -279,7 +279,7 @@ export function IcaapPage() {
   return (
     <ModulePage module="ifrs9" title="ICAAP" description="Internal Capital Adequacy Assessment Process — capital adequacy, Pillar 2 add-ons and macro stress testing.">
       <Stack gap="large">
-        <DemoNote title="Demo capital base">
+        <DemoNote title="Capital base">
           Capital accounts and non-loan RWA are calibrated from the demo loan book (GL connector not yet live). The CAR formula, Tier 2 cap, minimum CAR and classification bands
           are business rules sourced from and.
         </DemoNote>
@@ -375,7 +375,7 @@ export function IcaapPage() {
             <CardHeader>
               <Stack gap="xsmall">
                 <CardTitle>Supervisory-action checklist</CardTitle>
-                <CardDescription>Surfaced for the current classification. Checklist items are tenant-configured (demo).</CardDescription>
+                <CardDescription>Surfaced for the current classification. Checklist items are tenant-configured.</CardDescription>
               </Stack>
             </CardHeader>
             <CardContent>
@@ -496,7 +496,7 @@ export function IcaapPage() {
 
         <Grid columns={{ base: 1, lg: 2 }} gap="large">
           <RulesPanel title="Capital adequacy rules" keys={IFRS9_RULE_GROUPS.capital} canRequest={canEdit} />
-          <RulesPanel title="Capital base calibration (demo)" keys={IFRS9_RULE_GROUPS.capitalBase} canRequest={canEdit} />
+          <RulesPanel title="Capital base calibration" keys={IFRS9_RULE_GROUPS.capitalBase} canRequest={canEdit} />
         </Grid>
 
         <CalcRegister specs={specs} />

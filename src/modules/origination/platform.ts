@@ -37,7 +37,7 @@ import { useOriginationStore } from "./data";
 import { slug } from "./params";
 
 const M = "origination";
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 
 // ---------------------------------------------------------------- business rules
 

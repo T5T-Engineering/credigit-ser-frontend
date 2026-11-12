@@ -328,7 +328,7 @@ function previewTable(rep: ReportDef, m: ReturnType<typeof usePortfolioModel>): 
       const groups = new Map<string, typeof m.rows>();
       for (const r of m.rows) groups.set(sectorName.get(r.obligor.sectorId) ?? "—", [...(groups.get(sectorName.get(r.obligor.sectorId) ?? "—") ?? []), r]);
       return {
-        source: "Internal grades, grade-score table GST-2026.1 (demo); exposure = outstanding + undrawn × CCF.",
+        source: "Internal grades, grade-score table GST-2026.1; exposure = outstanding + undrawn × CCF.",
         columns: [{ id: "sector", header: "Sector" }, { id: "exposure", header: "Exposure", numeric: true }, { id: "warr", header: "WARR", numeric: true }],
         rows: [...groups.entries()].map(([sector, list]) => ({ sector, exposure: sum(list, (r) => r.exposure), warr: computeWarr(list).warr })),
       };

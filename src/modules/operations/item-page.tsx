@@ -361,7 +361,7 @@ function Detail({ instance: i }: { instance: OperationInstance }) {
           }
         }}
         summary={`Approve “${i.title}”${amount !== undefined ? ` — ${money(amount)}` : ""}`}
-        description="Demo: enter any 6-digit code."
+        description="Enter any 6-digit code (step-up provider not connected yet)."
         onVerify={async (code) => (verified.current = /^\d{6}$/.test(code))}
         errorMessage="Enter the 6-digit code."
       />

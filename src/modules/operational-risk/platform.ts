@@ -17,7 +17,7 @@ import { useOpRisk } from "./store";
 import { isoDaysAhead, logAudit } from "./shared";
 
 export const OPRISK = "operational-risk";
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 
 /** Business-rule keys for the module. */
 export const orKeys = {
@@ -54,13 +54,13 @@ export const orKeys = {
 
 // ---------------------------------------------------------------- business rules
 const kriRules: RuleDefinition[] = kris.flatMap((k) => [
-  { key: orKeys.kriAmber(k.id), label: `${k.id} amber threshold`, description: `${k.name}: reading at which the KRI turns Amber (early warning). Unit: ${k.unit}.`, module: OPRISK, category: "KRI thresholds", type: "number", default: k.amber, min: 0, step: k.decimals ? 1 / 10 ** k.decimals : 1, unit: k.unit, source: "tenant-configurable G/A/R banding (demo value)" },
-  { key: orKeys.kriRed(k.id), label: `${k.id} red threshold`, description: `${k.name}: reading at which the KRI is Red (outside Board-approved tolerance). Unit: ${k.unit}.`, module: OPRISK, category: "KRI thresholds", type: "number", default: k.red, min: 0, step: k.decimals ? 1 / 10 ** k.decimals : 1, unit: k.unit, source: "tenant-configurable G/A/R banding (demo value)" },
+  { key: orKeys.kriAmber(k.id), label: `${k.id} amber threshold`, description: `${k.name}: reading at which the KRI turns Amber (early warning). Unit: ${k.unit}.`, module: OPRISK, category: "KRI thresholds", type: "number", default: k.amber, min: 0, step: k.decimals ? 1 / 10 ** k.decimals : 1, unit: k.unit, source: "tenant-configurable G/A/R banding" },
+  { key: orKeys.kriRed(k.id), label: `${k.id} red threshold`, description: `${k.name}: reading at which the KRI is Red (outside Board-approved tolerance). Unit: ${k.unit}.`, module: OPRISK, category: "KRI thresholds", type: "number", default: k.red, min: 0, step: k.decimals ? 1 / 10 ** k.decimals : 1, unit: k.unit, source: "tenant-configurable G/A/R banding" },
 ]);
 
 const bcmRules: RuleDefinition[] = seedBcmPlans.flatMap((p) => [
-  { key: orKeys.bcmRto(p.id), label: `${p.id} RTO target`, description: `Recovery Time Objective for “${p.process}” (Tier ${p.tier}).`, module: OPRISK, category: "BCM targets", type: "duration", durationUnit: "hours", default: p.rtoTargetHrs, min: 0.5, max: 720, step: 0.5, source: "BCM Framework — tenant target (demo value)" },
-  { key: orKeys.bcmRpo(p.id), label: `${p.id} RPO target`, description: `Recovery Point Objective for “${p.process}” (Tier ${p.tier}).`, module: OPRISK, category: "BCM targets", type: "duration", durationUnit: "minutes", default: p.rpoTargetMins, min: 1, max: 10_080, source: "BCM Framework — tenant target (demo value)" },
+  { key: orKeys.bcmRto(p.id), label: `${p.id} RTO target`, description: `Recovery Time Objective for “${p.process}” (Tier ${p.tier}).`, module: OPRISK, category: "BCM targets", type: "duration", durationUnit: "hours", default: p.rtoTargetHrs, min: 0.5, max: 720, step: 0.5, source: "BCM Framework — tenant target" },
+  { key: orKeys.bcmRpo(p.id), label: `${p.id} RPO target`, description: `Recovery Point Objective for “${p.process}” (Tier ${p.tier}).`, module: OPRISK, category: "BCM targets", type: "duration", durationUnit: "minutes", default: p.rpoTargetMins, min: 1, max: 10_080, source: "BCM Framework — tenant target" },
 ]);
 
 const roleRule = (key: string, label: string, description: string, def: RoleId[], source: string): RuleDefinition => ({ key, label, description, module: OPRISK, category: "Escalation", type: "roles", default: def, source });
@@ -76,14 +76,14 @@ defineRules([
   { key: orKeys.singleEvent, label: "Single-event escalation threshold", description: "A loss event with net loss at or above this is escalated to the loss escalation roles on logging.", module: OPRISK, category: "Loss Limit Framework", type: "money", default: 25_000_000, min: 0, source: `Loss Limit Framework — ${DEMO}` },
   { key: orKeys.boardMateriality, label: "Board materiality threshold", description: "Loss events at or above this are notified to the Board Risk Committee roles.", module: OPRISK, category: "Loss Limit Framework", type: "money", default: 100_000_000, min: 0, source: `(BRC notification for material breaches) — ${DEMO}` },
   { key: orKeys.limitWarningPct, label: "Loss-limit early warning", description: "Share of the annual loss limit at which utilisation shows as a warning.", module: OPRISK, category: "Loss Limit Framework", type: "percent", default: 75, min: 1, max: 100, unit: "%", source: DEMO },
-  roleRule(orKeys.lossEscalationRoles, "Loss above threshold — notify", "Roles notified when a loss event is at or above the single-event threshold.", ["head-of-risk", "operational-risk-analyst"], "tenant mapping (demo value)"),
-  roleRule(orKeys.lossBoardRoles, "Material loss — notify", "Roles notified when a loss event is at or above the Board materiality threshold.", ["cro", "board"], "tenant mapping (demo value)"),
+  roleRule(orKeys.lossEscalationRoles, "Loss above threshold — notify", "Roles notified when a loss event is at or above the single-event threshold.", ["head-of-risk", "operational-risk-analyst"], "tenant mapping"),
+  roleRule(orKeys.lossBoardRoles, "Material loss — notify", "Roles notified when a loss event is at or above the Board materiality threshold.", ["cro", "board"], "tenant mapping"),
   { key: orKeys.rcsaLikelihoodLabels, label: "RCSA likelihood scale", description: "Likelihood scale labels, lowest first. The number of labels sets the scale size.", module: OPRISK, category: "RCSA", type: "list", default: ["Rare", "Unlikely", "Possible", "Likely", "Almost certain"], source: DEMO },
   { key: orKeys.rcsaImpactLabels, label: "RCSA impact scale", description: "Impact scale labels, lowest first. The number of labels sets the scale size.", module: OPRISK, category: "RCSA", type: "list", default: ["Insignificant", "Minor", "Moderate", "Major", "Severe"], source: DEMO },
   { key: orKeys.rcsaMediumFrom, label: "Risk score — Medium from", description: "Likelihood × impact score at which a risk is Medium.", module: OPRISK, category: "RCSA", type: "number", default: 5, min: 1, max: 100, source: DEMO },
   { key: orKeys.rcsaHighFrom, label: "Risk score — High from", description: "Likelihood × impact score at which a risk is High.", module: OPRISK, category: "RCSA", type: "number", default: 10, min: 1, max: 100, source: DEMO },
   { key: orKeys.rcsaCriticalFrom, label: "Risk score — Critical from", description: "Likelihood × impact score at which a risk is Critical.", module: OPRISK, category: "RCSA", type: "number", default: 15, min: 1, max: 100, source: DEMO },
-  { key: orKeys.rcsaCycleMonths, label: "RCSA cycle", description: "Months between Risk & Control Self-Assessment cycles.", module: OPRISK, category: "RCSA", type: "number", default: 6, min: 1, max: 36, unit: "months", source: "(configurable cycle) — demo value" },
+  { key: orKeys.rcsaCycleMonths, label: "RCSA cycle", description: "Months between Risk & Control Self-Assessment cycles.", module: OPRISK, category: "RCSA", type: "number", default: 6, min: 1, max: 36, unit: "months", source: "(configurable cycle)" },
   ...bcmRules,
   { key: orKeys.bcmReviewCycleDays, label: "BCM plan review cycle", description: "Days between approved BCM plan reviews.", module: OPRISK, category: "BCM", type: "duration", durationUnit: "days", default: 365, min: 30, max: 1095, source: DEMO },
   { key: orKeys.bcmReviewDueWindowDays, label: "BCM review due window", description: "Days before the next review at which a plan shows as due.", module: OPRISK, category: "BCM", type: "duration", durationUnit: "days", default: 60, min: 0, max: 365, source: DEMO },
@@ -95,7 +95,7 @@ defineRules([
   { key: orKeys.bcmWeightRto, label: "Readiness weight — RTO met", description: "Weight of RTO achievement in the readiness index.", module: OPRISK, category: "BCM readiness weights", type: "percent", default: 25, min: 0, max: 100, unit: "%", source: DEMO },
   { key: orKeys.bcmWeightDrills, label: "Readiness weight — drill compliance", description: "Weight of fire-drill compliance in the readiness index.", module: OPRISK, category: "BCM readiness weights", type: "percent", default: 25, min: 0, max: 100, unit: "%", source: DEMO },
   { key: orKeys.bcmWeightCrisis, label: "Readiness weight — crisis checklist", description: "Weight of the crisis-management checklist in the readiness index.", module: OPRISK, category: "BCM readiness weights", type: "percent", default: 25, min: 0, max: 100, unit: "%", source: DEMO },
-  roleRule(orKeys.bcmEscalationRoles, "Tier 1 test failure — notify", "Roles notified when a Tier 1 BCM/DR test fails.", ["head-of-risk", "cro"], "BCM — tenant mapping (demo value)"),
+  roleRule(orKeys.bcmEscalationRoles, "Tier 1 test failure — notify", "Roles notified when a Tier 1 BCM/DR test fails.", ["head-of-risk", "cro"], "BCM — tenant mapping"),
 ]);
 
 // ---------------------------------------------------------------- operations (approvals)

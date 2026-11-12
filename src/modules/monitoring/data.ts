@@ -291,11 +291,11 @@ export type Apg = {
 
 const beneficiaries = [
   "Lagos State Ministry of Works",
-  "Federal Ministry of Power (demo)",
+  "Federal Ministry of Power",
   "Rivers State Water Board",
   "Coastal EPC Contractors Ltd",
-  "Northern Roads Development Agency (demo)",
-  "Abuja Metropolitan Works (demo)",
+  "Northern Roads Development Agency",
+  "Abuja Metropolitan Works",
 ];
 
 export function buildApgs(facilities: Facility[]): Apg[] {

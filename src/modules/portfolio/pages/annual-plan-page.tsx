@@ -294,7 +294,7 @@ export function AnnualPlanPage() {
           <DataTable label="Plan variance report" data={rows} columns={columns} getRowId={(r) => r.sectorId} paginate={false} exportFilename={`plan-variance-v${plan.version}.csv`} filters={[{ id: "flag", label: "Flag" }]} defaultSort={{ id: "flag", direction: "asc" }} />
         </Panel>
 
-        <Panel title="Budgeted disbursement progress" description="Year-to-date new disbursement against the budget, by largest sectors (demo budget split).">
+        <Panel title="Budgeted disbursement progress" description="Year-to-date new disbursement against the budget, by largest sectors.">
           <Stack gap="medium">
             {top.slice(0, 6).map((r) => {
               const line = plan.lines.find((l) => l.sectorId === r.sectorId)!;

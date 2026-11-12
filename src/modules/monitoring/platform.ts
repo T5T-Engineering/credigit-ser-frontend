@@ -14,7 +14,7 @@ import { defineTemplates } from "@/lib/platform/notifications";
 import { registerOperation, type WorkflowStep } from "@/lib/platform/operations";
 import { defineRules, type RuleDefinition } from "@/lib/platform/rules";
 
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 const M = "monitoring";
 
 /** Exception types that may only close with curing evidence (PRD §6.4.4). Default for `monitoring.exceptions.evidenceRequiredTypes`. */
