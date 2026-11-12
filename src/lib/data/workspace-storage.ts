@@ -13,7 +13,7 @@
  * Without NEXT_PUBLIC_API_BASE_URL the stores keep using localStorage.
  */
 import { createJSONStorage, type PersistStorage, type StorageValue } from "zustand/middleware";
-import { backendTokens } from "@/lib/auth/backend-sso";
+import { validAccessToken } from "@/lib/auth/backend-sso";
 
 const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/+$/, "");
 export const workspaceDataEnabled = apiBase.length > 0;
@@ -24,6 +24,8 @@ const devTenant = process.env.NEXT_PUBLIC_BACKEND_DEV_TENANT ?? "";
 const maxPatchBytes = Number(process.env.NEXT_PUBLIC_WORKSPACE_MAX_PATCH_BYTES ?? 400_000);
 const maxPatchDocuments = Number(process.env.NEXT_PUBLIC_WORKSPACE_MAX_PATCH_DOCUMENTS ?? 500);
 const saveDelayMs = Number(process.env.NEXT_PUBLIC_WORKSPACE_SAVE_DELAY_MS ?? 400);
+/** How long a sign-in may take to navigate before the page reloads anyway. */
+const reloadWaitMs = 2_000;
 
 /** Session store key (src/lib/auth/session.ts) — read directly to avoid an import cycle. */
 const sessionStorageKey = "credigit.ser.session";
@@ -52,9 +54,9 @@ export function storeSlug(name: string): string {
   return name.replace(storePrefix, "").replace(/[^a-z0-9-]+/gi, "-").toLowerCase();
 }
 
-function identityHeaders(): Record<string, string> | null {
-  const tokens = backendTokens();
-  if (tokens) return { Authorization: `Bearer ${tokens.accessToken}` };
+async function identityHeaders(): Promise<Record<string, string> | null> {
+  const accessToken = await validAccessToken();
+  if (accessToken) return { Authorization: `Bearer ${accessToken}` };
   if (!devIdentity || typeof window === "undefined") return null;
   try {
     const raw = sessionStorage.getItem(sessionStorageKey);
@@ -160,7 +162,7 @@ function chunks(patch: Patch): Patch[] {
 }
 
 async function request(path: string, init: RequestInit = {}, keepalive = false): Promise<Response | null> {
-  const identity = identityHeaders();
+  const identity = await identityHeaders();
   if (!identity) return null;
   return fetch(`${apiBase}/api/v1/workspace-data${path}`, {
     ...init,
@@ -245,7 +247,14 @@ export function registerDatabaseStore(api: PersistedStoreApi): void {
 export function onSignedIn(): void {
   if (workspaceDataEnabled && waitingForSignIn && typeof window !== "undefined") {
     waitingForSignIn = false;
-    setTimeout(() => window.location.reload(), 0);
+    // Reload where the sign-in navigates to (the caller routes next), not the sign-in page itself.
+    const from = window.location.href;
+    const startedAt = Date.now();
+    const reloadWhenMoved = () => {
+      if (window.location.href !== from || Date.now() - startedAt > reloadWaitMs) window.location.reload();
+      else setTimeout(reloadWhenMoved, 50);
+    };
+    setTimeout(reloadWhenMoved, 0);
   }
 }
 
