@@ -17,7 +17,9 @@ Routes, page compositions, data/hooks, domain logic and copy only. All UI comes 
    - **Audited:** every state change writes to the immutable audit log (who, what, before/after, when, where).
    - **Notified:** relevant parties receive notifications; build the notification HTML message template if one doesn't exist.
    - **Workflow-routed:** anything needing approval is routed through the **"Operations" workflow** (configurable steps, approvers, SLAs) — no ad-hoc approval logic.
-   - **Extensible:** expose subscribe-able **hook points** (before/after, can veto or enrich) and **event points** (published domain events) so extensions can plug in without changing core code.
+   - **Extensible and externally reachable:** expose subscribe-able **hook points** (before/after, can veto or enrich) and **event points** (publishers of domain events) that external systems can subscribe to (outbound webhooks / message publishers) and act through (inbound APIs), so other systems communicate with this application without changing core code.
+   - **Rule-driven:** replace every hard-coded value with a business rule (invariant 8).
+   - **Connector-ready:** identify every integration connector point (e.g. core banking, credit bureaus, CBN / CRMS, market data, e-mail / SMS; inbound or outbound; real-time or batch) and record it in the repo's `docs/integration-points.md` (create it on first entry) with direction, trigger, payload / contract and owning module. Connectors plug in through the Connectors framework, never ad-hoc calls.
    - **Navigable:** wire up all necessary menus and sub-menus for the feature.
    - **Consistent:** respect every other invariant in this list.
 10. **Caveman communication.** Agents (Claude) talk caveman to the team: short words, no filler, no pleasantries, fragments fine. Technical terms, numbers, file paths, commands and error text stay exact. Applies to chat replies and status updates only. Product copy, docs, code comments, commit messages and PR text stay normal professional English.
