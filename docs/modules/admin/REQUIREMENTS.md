@@ -12,13 +12,14 @@
 ## 1. Purpose and scope
 Tenant administration of named users, roles and sign-on limits, per-role session security and a filtered view over the business-rules registry (PRD §4, §10.4). Every change is a request routed through the Operations workflow; nothing applies on save.
 
-- In scope: users (invite, role change, deactivate / reactivate, MFA reset), access requests list, role catalogue (rename, limits, session rules, clone custom roles), Rules & parameters screen (grouped rule editor, sector limits, read-only chart-flow), audit log viewer (`/audit`).
+- In scope: users (invite, role change, deactivate / reactivate, lock / unlock, MFA reset, users CSV export), access requests list, role catalogue (rename, limits, session rules, clone custom roles, roles CSV export), **roles × permissions matrix** (`/admin/permissions`, changes routed through `role.permissions-change`), Rules & parameters screen (grouped rule editor, sector limits, read-only chart-flow), audit log viewer (`/audit`).
+- API mode (`NEXT_PUBLIC_API_URL` set): users, access requests, roles and exports come from the Identity & Access API (`/identity/*`, contract `credigit-ser-core-backend/docs/api/identity-access.md`); commands answer 202 `{ operationId }` and are approved in Operations. Demo mode: the same screens over browser stores.
 - Out of scope: rule definitions owned by other modules (they register their own; admin only displays/edits through `rule.change`), chart-flow configuration (origination), branding (settings), workflow/template/hook configuration (operations), sign-in itself (auth).
 
 ## 2. Users and permissions
 | Role | What they do here | Permission keys |
 |---|---|---|
-| System Admin | Invites users, changes roles, (de)activates, resets MFA, edits roles / limits / session rules / parameters, clones roles | `identity.users.view`, `identity.users.invite`, `identity.users.change-roles`, `identity.users.deactivate`, `identity.users.reactivate`, `identity.users.reset-mfa`, `identity.users.export`, `identity.roles.create`, `identity.roles.update`, `identity.roles.delete`, `identity.roles.change-permissions`, `identity.roles.export`, `platform.parameters.view`, `rules.rules.request-change` |
+| System Admin | Invites users, changes roles, (de)activates, locks / unlocks, resets MFA, edits roles / limits / session rules / parameters, clones roles, changes role permissions | `identity.users.view`, `identity.users.invite`, `identity.users.change-roles`, `identity.users.deactivate`, `identity.users.reactivate`, `identity.users.reset-mfa`, `identity.users.export`, `identity.roles.create`, `identity.roles.update`, `identity.roles.delete`, `identity.roles.change-permissions`, `identity.roles.export`, `platform.parameters.view`, `rules.rules.request-change` |
 | System Admin / CRO / Head of Risk | Second-person confirmation of admin changes (Operations) | `operations.items.decide` |
 | Head of Risk / CRO | Approve sector-limit changes | `operations.items.decide`; requester needs `platform.sector-limits.request-change` |
 | System Admin | Review self-registered access requests | `identity.access-requests.review` |
@@ -46,6 +47,11 @@ Tenant administration of named users, roles and sign-on limits, per-role session
 | ADM-FR-15 | IT Support's viewing of the audit log is itself logged. | PRD §10.1 |
 | ADM-FR-16 | Add/remove/merge/split/re-sequence roles and approval tiers; remap co-signer/adjudicator matrix. | PRD §4.0 — **not implemented** (static RoleId set, TD-805) |
 | ADM-FR-17 | Second-person confirmation for regulatory-parameter changes. | PRD §10.4; scope of "regulatory" = W1 |
+| ADM-FR-18 | Roles × permissions matrix over the permission catalogue (library `PermissionMatrix`): search, per-module tri-state, protected administrator permissions locked; save sends one `role.permissions-change` request per changed role (`diffRoleGrants` → `{ grant[], revoke[], reason }`), approved in Operations (requester can't approve). | Invariant 12; API contract §4 |
+| ADM-FR-19 | Lock / unlock a user's sign-in with a required reason (`ConfirmDialog reason="required"`); audited, evented, notified. | Assumption AUTH-OQ2; backend has no lock/unlock endpoint yet (BE request) |
+| ADM-FR-20 | Export users (`GET /identity/users/export`) and roles & limits (`GET /identity/roles/export`) as CSV; each export permission-checked and audited. | API contract §4 |
+| ADM-FR-21 | MFA reset routed through Operations (`user.mfa-reset`) in demo mode; disabled in API mode until the backend endpoint exists (TD-036 / BE-31). | Invariant 9 (workflow-routed) |
+| ADM-FR-22 | Every admin screen, tab, button and export is guarded by a catalogue permission key; System Admin holds them all by default. | Invariant 12 |
 
 ## 4. Business rules and parameters
 | Rule key | Meaning | Default | Source |
@@ -67,6 +73,8 @@ Tenant administration of named users, roles and sign-on limits, per-role session
 | `user.deactivate` | Deactivate | same · 24 h | ADM-OPS1 |
 | `user.reactivate` | Reactivate | same · 24 h | ADM-OPS1 |
 | `role.custom-change` | Clone / edit / delete custom role | same · 48 h | ADM-OPS1 |
+| `role.permissions-change` | Save on Roles & permissions | Second-person confirmation · System Admin / CRO / Head of Risk (any) · 48 h (same as `role.custom-change`, backend default) | API contract §4 |
+| `user.mfa-reset` | Reset MFA (demo mode) | Second-person confirmation · 24 h | ADM-FR-21 |
 | `admin.sector-limits.change` | Sector limits tab | Risk review · Head of Risk / CRO · 48 h | PRD §6.6.1; assumption |
 | `rule.change` (core) | Any rule edit on Roles & limits / Rules & parameters | Defined in core (`src/lib/platform/core.ts`) | PRD §10.4 |
 | `access.request` (core) | Self-registration verified | System Admin approval · 48 h | PRD §4 |
@@ -80,6 +88,8 @@ Tenant administration of named users, roles and sign-on limits, per-role session
 | `admin.user-reactivated` | Reactivation approved | The user, System Admin |
 | `admin.user-mfa-reset` | MFA reset | The user |
 | `admin.role-catalogue-changed` | Custom role created/updated/deleted | System Admin, Head of Risk |
+| `admin.role-permissions-changed` | Role permission change approved | System Admin, Head of Risk, holders of the role |
+| `auth.account-locked` / `auth.account-unlocked` | Admin lock / unlock (templates owned by core auth) | The user, System Admin |
 | `admin.sector-limits-changed` | Sector limits approved | CRO, Head of Risk, Portfolio & MIS Officer |
 
 ## 7. Events and hook points
@@ -91,6 +101,11 @@ Tenant administration of named users, roles and sign-on limits, per-role session
 | event | `admin.user.mfa-reset` | MFA reset | — |
 | event | `admin.role.cloned` / `.updated` / `.deleted` | Custom role change applied | `{ clonedFrom }` |
 | event | `admin.sector-limits.changed` | Sector limits applied | `{ changes[] }` |
+| event | `identity.role.permissions-changed` | Role permission change applied | `{ grant[], revoke[] }` |
+| event | `identity.user.locked` / `identity.user.unlocked` | Admin lock / unlock | `{ by, reason }` |
+| event | `admin.users.exported` / `admin.roles.exported` | CSV export | `{ rows }` |
+| hook (before) | `identity.role.permissions-change.before` | Before a permission change is submitted | Can veto / enrich |
+| hook (after) | `identity.role.permissions-change.after` | After submission | Observe |
 | hook (before) | `admin.user.change.before` | Before user invite/role/status/MFA change is submitted | Can veto / enrich |
 | hook (after) | `admin.user.change.after` | After submission (or MFA reset applied) | Observe |
 | hook (before) | `admin.config.change.before` | Before rule / role / sector-limit change is submitted | Can veto / enrich |
@@ -99,7 +114,7 @@ Tenant administration of named users, roles and sign-on limits, per-role session
 ## 8. Integration points
 | Connector / system | Direction | Trigger | Data | Status |
 |---|---|---|---|---|
-| Identity & Access API (backend IdentityAccess) | out/in | User/role operations applied | Users, roles, permissions | Not wired (local store) |
+| Identity & Access API (backend IdentityAccess) `/api/v1/identity/*` | out/in | Users / roles / access requests / exports / permission changes | Users, roles, permissions, CSV | Built (API mode); demo uses local stores |
 | Rules & Parameters Engine API | in/out | Rule reads / approved changes | Rule values, history | Not wired (localStorage) |
 | Microsoft Entra ID | in | Sign-in | Identity, MFA | Auth module; admin shows MFA flag only |
 
@@ -113,6 +128,7 @@ Tenant administration of named users, roles and sign-on limits, per-role session
 | ID | Question | Current assumption |
 |---|---|---|
 | ADM-OPS1 | Who approves admin changes? | Second System Admin, CRO or Head of Risk |
+| ADM-OQ2 | Lock / unlock: backend has no admin endpoint or permission keys (`identity.users.lock` / `.unlock`). | Frontend guards lock with `identity.users.deactivate` and unlock with `identity.users.reactivate`; demo only (TD-972). |
 | ADM-OPS3 | Invitee gets no notification (Pending users not reachable) | Only System Admin notified |
 | W1 | Which parameters are "regulatory" and who confirms? | Every rule change routes through `rule.change` |
 | W2 | Session timeout / device binding / IP allow-list defaults | 15 / 10 min; internal range for tighter roles |

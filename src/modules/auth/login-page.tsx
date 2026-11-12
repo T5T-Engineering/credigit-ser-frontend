@@ -4,12 +4,15 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { BriefcaseBusiness, Building2, Gavel, ShieldCheck, Users } from "lucide-react";
-import { Alert, Button, Divider, Field, Input, Logo, PasswordInput, RolePicker, SignInCard, Stack, Text, TextLink, type RoleOption } from "@credigit/web-ui";
-import { demoAccessEnabled, demoSignIn } from "@/components/auth-guard";
-import { DEMO_PASSWORD, signInWithPassword } from "@/lib/auth/accounts";
-import { msalEnabled, signInWithMicrosoft } from "@/lib/auth/msal";
+import { Alert, Button, Divider, Field, Input, Logo, PasswordInput, RolePicker, SignInCard, Spinner, Stack, Text, TextLink, type RoleOption } from "@credigit/web-ui";
+import { demoAccessEnabled } from "@/components/auth-guard";
+import { demoPassword } from "@/lib/auth/accounts";
+import { useAuthConfig } from "@/lib/auth/auth-config";
+import { msalConfigured } from "@/lib/auth/msal";
+import { completeEntraSignIn, signInDemo, signInMicrosoftWithRole, startSignIn } from "@/lib/auth/service";
 import { useHydrated, useSession } from "@/lib/auth/session";
-import { roleById, roleGroups, roles, type RoleGroup, type RoleId } from "@/lib/rbac/roles";
+import { apiEnabled } from "@/lib/api/config";
+import { roleGroups, roles, type RoleGroup, type RoleId } from "@/lib/rbac/roles";
 import { useDb } from "@/lib/data/store";
 import { moneyShort } from "@/lib/format";
 import { AuthShell } from "./auth-shell";
@@ -22,7 +25,10 @@ const groupIcon: Record<RoleGroup, typeof Users> = {
   Administration: Users,
 };
 
-/** Sign-in: Microsoft SSO (Entra ID), email + password (+ one-time code), and demo access by role. */
+/**
+ * Sign-in (AUTH-FR-03): the active mode from `/auth/config` decides the screen — Local (e-mail + password, then a
+ * one-time code) **or** MicrosoftEntra (one Microsoft button). Demo access by role is a prototype extra.
+ */
 export function LoginPage() {
   const router = useRouter();
   const params = useSearchParams();
@@ -30,7 +36,7 @@ export function LoginPage() {
   const notice = params.get("notice");
   const hydrated = useHydrated();
   const user = useSession((s) => s.user);
-  const signIn = useSession((s) => s.signIn);
+  const { config, error: configError, loading: configLoading } = useAuthConfig();
   const [msLoading, setMsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
@@ -62,24 +68,15 @@ export function LoginPage() {
 
   const onMicrosoft = async () => {
     setError(null);
-    if (!msalEnabled) {
-      setError("Microsoft sign-in isn't configured for this environment yet. Use email and password or demo access.");
+    if (!msalConfigured()) {
+      setError("Microsoft sign-in isn't configured for this environment yet. Ask your administrator.");
       return;
     }
     setMsLoading(true);
-    try {
-      const identity = await signInWithMicrosoft();
-      const mapped = identity.appRoles.find((r): r is RoleId => r in roleById);
-      const existing = useDb.getState().users.find((u) => u.email.toLowerCase() === identity.email.toLowerCase());
-      const sessionUser = { id: existing?.id ?? identity.oid, name: identity.name, email: identity.email, source: "microsoft" as const };
-      if (mapped ?? existing?.roleId) signIn(sessionUser, (mapped ?? existing!.roleId) as RoleId);
-      else setPickRoleFor(sessionUser);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      if (!/user_cancelled|popup_window_error/i.test(message)) setError(`Microsoft sign-in failed: ${message}`);
-    } finally {
-      setMsLoading(false);
-    }
+    const result = await completeEntraSignIn();
+    setMsLoading(false);
+    if (!result.ok) setError(result.error || null);
+    else if (result.pickRole) setPickRoleFor(result.pickRole);
   };
 
   const onPassword = async (e: FormEvent) => {
@@ -90,14 +87,18 @@ export function LoginPage() {
       return;
     }
     setPwLoading(true);
-    const result = await signInWithPassword(email, password);
+    const result = await startSignIn(email, password);
     setPwLoading(false);
     if (!result.ok) {
       setPwError(result.error);
       return;
     }
-    router.push(`/verify/?challenge=${result.challengeId}&next=${encodeURIComponent(next)}`);
+    router.push(`/verify/?challenge=${encodeURIComponent(result.challengeId)}&next=${encodeURIComponent(next)}`);
   };
+
+  const local = config?.mode === "Local" ? config.local : null;
+  const entra = config?.mode === "MicrosoftEntra";
+  const showDemo = demoAccessEnabled && !apiEnabled;
 
   return (
     <AuthShell>
@@ -106,19 +107,22 @@ export function LoginPage() {
           logo={<Logo size="medium" />}
           productName="Smart Enterprise Risk 360°"
           tagline="Credit and enterprise risk management for banks and microfinance institutions."
-          onMicrosoftSignIn={onMicrosoft}
+          microsoft={entra}
+          onMicrosoftSignIn={entra ? onMicrosoft : undefined}
           microsoftTheme="light"
           loading={msLoading}
-          error={error}
-          dividerLabel="or sign in with email"
+          error={error ?? configError}
+          dividerLabel={entra && showDemo ? "or" : null}
           footer={
             <Stack gap="small">
-              <Text variant="small" tone="muted">
-                New to the platform?{" "}
-                <TextLink href="/register/" as={Link}>
-                  Request access
-                </TextLink>
-              </Text>
+              {local?.registrationEnabled ? (
+                <Text variant="small" tone="muted">
+                  New to the platform?{" "}
+                  <TextLink href="/register/" as={Link}>
+                    Request access
+                  </TextLink>
+                </Text>
+              ) : null}
               <Text variant="caption" tone="subtle">
                 Named, MFA-protected logins only. Every action is written to an immutable audit log.
               </Text>
@@ -130,11 +134,17 @@ export function LoginPage() {
               Sign in with your new password.
             </Alert>
           ) : null}
+          {notice === "session-ended" ? (
+            <Alert tone="warning" title="Signed out">
+              Your session ended. Sign in again.
+            </Alert>
+          ) : null}
+          {configLoading ? <Spinner label="Loading sign-in options" /> : null}
           {pickRoleFor ? (
             <Alert tone="info" title={`Welcome, ${pickRoleFor.name}`}>
               No role is assigned to your account yet. Choose the role to use for this session.
             </Alert>
-          ) : (
+          ) : local ? (
             <form onSubmit={onPassword} noValidate>
               <Stack gap="medium">
                 <Field label="Work email" required>
@@ -145,30 +155,46 @@ export function LoginPage() {
                 </Field>
                 <div className="flex justify-end">
                   <TextLink href="/forgot-password/" as={Link}>
-                    Forgot password?
+                    Set or reset your password
                   </TextLink>
                 </div>
                 <Button type="submit" size="large" fullWidth loading={pwLoading}>
                   Continue
                 </Button>
                 <Text variant="caption" tone="subtle" align="center">
-                  We&apos;ll ask for a one-time code next — multi-factor sign-in is required.
+                  We&apos;ll e-mail you a one-time code next — multi-factor sign-in is required.
                 </Text>
               </Stack>
             </form>
-          )}
-          {demoAccessEnabled && !pickRoleFor ? (
+          ) : null}
+          {showDemo && local && !pickRoleFor ? (
             <Alert tone="info" title="Prototype sign-in">
-              Any demo user signs in with password <span className="font-mono font-semibold">{DEMO_PASSWORD}</span>
-              {sampleEmail ? (
+              {demoPassword ? (
                 <>
-                  , e.g. <span className="font-mono">{sampleEmail}</span>
+                  Any demo user signs in with the demo password configured for this deployment
+                  {sampleEmail ? (
+                    <>
+                      , e.g. <span className="font-mono">{sampleEmail}</span>
+                    </>
+                  ) : null}
+                  .
                 </>
-              ) : null}
-              . The one-time code is shown on screen because no email is sent in the demo.
+              ) : (
+                <>
+                  Demo users have no password until they choose one: use &ldquo;Set or reset your password&rdquo;
+                  {sampleEmail ? (
+                    <>
+                      {" "}
+                      with a demo e-mail such as <span className="font-mono">{sampleEmail}</span>
+                    </>
+                  ) : null}
+                  .
+                </>
+              )}{" "}
+              One-time codes are shown on screen because no e-mail is sent in the demo.
             </Alert>
           ) : null}
-          {demoAccessEnabled || pickRoleFor ? (
+          {showDemo || pickRoleFor ? (
             <Stack gap="small" className="pt-2">
               {pickRoleFor ? null : <Divider label="or explore the prototype by role" />}
               <RolePicker
@@ -179,8 +205,8 @@ export function LoginPage() {
                 layout="list"
                 searchPlaceholder="Search roles, e.g. Credit Analyst"
                 onSelect={(r) => {
-                  if (pickRoleFor) signIn({ ...pickRoleFor, source: "microsoft" }, r.id as RoleId);
-                  else demoSignIn(r.id as RoleId);
+                  if (pickRoleFor) signInMicrosoftWithRole(pickRoleFor, r.id as RoleId);
+                  else signInDemo(r.id as RoleId);
                 }}
               />
             </Stack>
