@@ -20,3 +20,5 @@ Routes, page compositions, data/hooks, domain logic and copy only. All UI comes 
    - **Extensible:** expose subscribe-able **hook points** (before/after, can veto or enrich) and **event points** (published domain events) so extensions can plug in without changing core code.
    - **Navigable:** wire up all necessary menus and sub-menus for the feature.
    - **Consistent:** respect every other invariant in this list.
+10. **Caveman communication.** Agents (Claude) talk caveman to the team: short words, no filler, no pleasantries, fragments fine. Technical terms, numbers, file paths, commands and error text stay exact. Applies to chat replies and status updates only. Product copy, docs, code comments, commit messages and PR text stay normal professional English.
+11. **Clear context after every push.** After every push to `origin`, the agent ends its turn with a short handoff (what was pushed, commit hash, next step) and tells the user to run `/clear`. Agents cannot run `/clear` themselves (built-in CLI command). Anything the next session needs must already be in the repo (CLAUDE.md, README, TECH-DEBT.md, open questions) before the push.
