@@ -40,6 +40,7 @@ Sign-in, self-registration with email verification, password reset and change. E
 | AUTH-FR-12 | Audit every sign-in, sign-out, failure, registration, verification, reset, change. | PRD §4, §10.1 |
 | AUTH-FR-13 | Demo access by role (prototype only; disable with `NEXT_PUBLIC_DEMO_ACCESS=false`). | Prototype convention |
 | AUTH-FR-14 | When the backend is configured (`NEXT_PUBLIC_API_BASE_URL`), "Sign in with Microsoft" uses the backend server-side code flow: `POST /auth/microsoft/start` → Microsoft → `/callback/` → `POST /auth/microsoft/token`; the role comes from the backend directory (`GET /identity/me`), not from the browser. | User instruction 2026-11-12; backend ADR-0013 amendment 1 |
+| AUTH-FR-15 | With the backend configured, email + password sign-in, registration, password reset and change use the backend (`/auth/login`, `/otp/verify`, `/otp/resend`, `/register`, `/password/forgot`, `/password/reset`, `/password/change`); passwords are checked and hashed by the backend; the role comes from the directory. In Development the one-time code is shown on the code screen (`developmentCode`). | User instruction 2026-11-12; backend ADR-0013 am. 2 |
 
 ## 4. Business rules and parameters
 All registered in core (`src/lib/platform/core.ts`, module `platform`) or admin.

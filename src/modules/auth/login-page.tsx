@@ -169,7 +169,7 @@ export function LoginPage() {
               </Stack>
             </form>
           )}
-          {demoAccessEnabled && !pickRoleFor ? (
+          {demoAccessEnabled && !backendSsoEnabled && !pickRoleFor ? (
             <Alert tone="info" title="Prototype sign-in">
               Any demo user signs in with password <span className="font-mono font-semibold">{DEMO_PASSWORD}</span>
               {sampleEmail ? (
