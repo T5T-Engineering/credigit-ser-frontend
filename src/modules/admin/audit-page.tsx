@@ -20,12 +20,12 @@ import {
 } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { useRole } from "@/lib/auth/session";
-import { useAudit } from "@/lib/data/hooks";
 import type { AuditEvent } from "@/lib/data/types";
 import { roleById } from "@/lib/rbac/roles";
 import { ruleDefinition } from "@/lib/platform/rules";
 import { dateTime } from "@/lib/format";
 import { useAuditLog } from "@/modules/workspace/use-audit-log";
+import { useAuditEntries } from "./use-audit-entries";
 import { DAY, nowMs } from "@/modules/workspace/data";
 
 /** What an audit entry is about, in words: rules show their label, not the technical key. */
@@ -41,7 +41,7 @@ const typeTone = { session: "neutral", decision: "success", configuration: "acce
 
 /** Audit log (PRD §4, §10.1, §10.3): immutable, append-only — who, what, before/after, timestamp, IP/device. */
 export function AuditPage() {
-  const audit = useAudit();
+  const { entries: audit, loading, error: loadError, backendTotal } = useAuditEntries();
   const role = useRole();
   const log = useAuditLog();
   const [search, setSearch] = useState("");
@@ -163,11 +163,16 @@ export function AuditPage() {
   return (
     <ModulePage module="audit" description="Every create, read, update, approve and override action — who, what, before/after value, timestamp, IP and device.">
       <Stack gap="large">
+        {loadError ? (
+          <Alert tone="warning" title="The server audit trail couldn&apos;t be loaded">
+            {loadError} Showing the app activity log only.
+          </Alert>
+        ) : null}
         <Alert tone="info" title="Append-only">
           Audit entries can&apos;t be edited or deleted by any role, including System Admin. Every AI-assisted output is logged with its model and version.
         </Alert>
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
-          <StatCard label="Events" value={audit.length} hint="In this tenant" icon={<ScrollText aria-hidden className="size-5" />} tone="accent" />
+          <StatCard label="Events" value={loading ? "…" : audit.length} hint={backendTotal !== null && backendTotal > audit.length ? `Latest of ${backendTotal} server entries` : "In this tenant"} icon={<ScrollText aria-hidden className="size-5" />} tone="accent" />
           <StatCard label="Last 7 days" value={audit.filter((e) => new Date(e.at).getTime() >= since).length} hint="All actions" icon={<Lock aria-hidden className="size-5" />} tone="info" />
           <StatCard label="Configuration changes" value={audit.filter((e) => typeOf(e.action) === "configuration").length} hint="Parameters, roles, limits" icon={<ShieldCheck aria-hidden className="size-5" />} tone="warning" />
           <StatCard label="Distinct users" value={new Set(audit.map((e) => e.actorId)).size} hint="Named individuals only" icon={<Users aria-hidden className="size-5" />} tone="success" />
