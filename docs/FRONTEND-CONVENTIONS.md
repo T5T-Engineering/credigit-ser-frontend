@@ -50,7 +50,7 @@ Use the `ModulePage` wrapper (`@/components/module-page`): module header (icon, 
 
 ## Checks before you report
 
-`npx tsc --noEmit`, `npm run lint`, and visual screenshots of your pages (`bash ../credigit-ser-web-component/scripts/screenshot.sh <url> <out.png> [w] [h]`, ≤1440x1800; 390 width for mobile). The dev server runs at http://localhost:3100. Sign in first: screenshots can't log in, so use `?demoRole=<role-id>` on any app URL (demo auto sign-in for screenshots; see `src/components/auth-guard.tsx`).
+`npx tsc --noEmit`, `npm run lint`, and visual screenshots of your pages (`bash ../credigit-ser-web-component/scripts/screenshot.sh <url> <out.png> [w] [h]`, ≤1440x1800; 390 width for mobile). The dev server runs at http://localhost:8061. Sign in first: screenshots can't log in, so use `?demoRole=<role-id>` on any app URL (demo auto sign-in for screenshots; see `src/components/auth-guard.tsx`).
 
 ## Platform services (invariants 8 & 9 — mandatory for every feature)
 

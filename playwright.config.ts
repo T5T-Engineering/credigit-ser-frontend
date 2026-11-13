@@ -7,7 +7,7 @@ import { defineConfig, devices } from "@playwright/test";
  *   npm run build && npm run test:e2e
  */
 const PORT = Number(process.env.E2E_PORT ?? 4700);
-/** Point at a running server instead (e.g. the dev server: E2E_BASE_URL=http://localhost:3100). */
+/** Point at a running server instead (e.g. the dev server: E2E_BASE_URL=http://localhost:8061). */
 const EXTERNAL = process.env.E2E_BASE_URL;
 
 export default defineConfig({
