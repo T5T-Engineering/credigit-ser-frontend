@@ -9,23 +9,27 @@ import { backendSsoEnabled } from "@/lib/auth/backend-sso";
 import { useSession } from "@/lib/auth/session";
 import { useRule } from "@/lib/platform/rules";
 import { operationHref } from "./operation-ui";
+import { useAppliesOnSave } from "./workflow-mode";
 
 type CatalogueDto = { version: string; baseline: string[]; protectedAdministratorPermissions: string[]; permissions: Array<PermissionDefinition & { area: string }> };
 type RoleDto = { id: string; name: string; group: string; description: string; modules: Record<string, "view" | "edit">; permissions: string[]; administrator: boolean; kind: string };
 type Submission = { operationId: string; status: string; applied: boolean };
 
 const changePermission = "identity.roles.change-permissions";
+const changeWorkflow = ["role.permissions-change"] as const;
 
 /** Matches a protected pattern such as "identity.users.*". */
 const matches = (patterns: readonly string[], key: string) => patterns.some((p) => (p.endsWith(".*") ? key.startsWith(p.slice(0, -1)) : p === key));
 
 /**
- * Admin → Permissions: what each role may do and see, from the backend catalogue and tenant role grants (ADR-0012). Changes are requests
- * (role.permissions-change) approved by a second person in Operations; the side menu follows the granted areas.
+ * Admin → Permissions: what each role may do and see, from the backend catalogue and tenant role grants (ADR-0012). Changes go through
+ * role.permissions-change: saved at once when its workflow has no approval steps, otherwise approved in Operations. The side menu
+ * follows the granted areas.
  */
 export function PermissionsPage() {
   const permissions = useSession((s) => s.access?.permissions);
   const canChange = permissions?.includes(changePermission) ?? false;
+  const saves = useAppliesOnSave(changeWorkflow).has(changeWorkflow[0]);
   const minReason = useRule<number>("operations.minCommentLength");
   const [catalogue, setCatalogue] = useState<CatalogueDto | null>(null);
   const [roles, setRoles] = useState<RoleDto[]>([]);
@@ -74,9 +78,16 @@ export function PermissionsPage() {
         body: JSON.stringify({ grant: diff.grant, revoke: diff.revoke, reason: reason.trim() }),
       });
       setResult(r);
-      setGrants({});
       setReason("");
-      setVersion((v) => v + 1);
+      if (r.applied) {
+        // The roles list is a read model updated a moment later; keep the saved grants instead of re-reading too early.
+        const saved = current[role.id] ?? [];
+        setRoles((list) => list.map((x) => (x.id === role.id ? { ...x, permissions: [...saved] } : x)));
+        setGrants({});
+      } else {
+        setGrants({});
+        setVersion((v) => v + 1);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -85,13 +96,17 @@ export function PermissionsPage() {
   };
 
   return (
-    <ModulePage module="admin" title="Permissions" description="What each role may do and see. Granted areas decide the side menu. Every change is approved by a second person in Operations.">
+    <ModulePage
+      module="admin"
+      title="Permissions"
+      description={`What each role may do and see. Granted areas decide the side menu. ${saves ? "Changes apply when you save." : "Every change is approved by a second person in Operations."}`}
+    >
       <Stack gap="large">
         {!backendSsoEnabled ? <Alert tone="info">Permissions are managed in the backend — configure NEXT_PUBLIC_API_BASE_URL.</Alert> : null}
         {error ? <Alert tone="danger">{error}</Alert> : null}
         {result ? (
-          <Alert tone="success" title={result.applied ? "Applied" : "Sent for approval"}>
-            {result.applied ? "The permission change is applied." : "A second person approves the change in Operations. "}
+          <Alert tone="success" title={result.applied ? "Saved" : "Sent for approval"}>
+            {result.applied ? "The permission change is saved. People with this role see it at their next page load." : "A second person approves the change in Operations. "}
             {!result.applied ? (
               <TextLink href={operationHref(result.operationId)} as={Link}>
                 Track request {result.operationId}
@@ -152,12 +167,12 @@ export function PermissionsPage() {
               <Text variant="small">
                 {changes === 0 ? "No changes yet." : `${diff.grant.length} to grant, ${diff.revoke.length} to revoke for ${role.name}.`}
               </Text>
-              <Field label="Reason for the change" htmlFor="perm-reason" required description="Shown to approvers and kept in the audit log.">
+              <Field label="Reason for the change" htmlFor="perm-reason" required description={saves ? "Kept in the audit log." : "Shown to approvers and kept in the audit log."}>
                 <Textarea id="perm-reason" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
               </Field>
               <div className="flex flex-wrap gap-2">
                 <Button disabled={changes === 0 || busy} loading={busy} onClick={() => void submit()}>
-                  Request permission change
+                  {saves ? "Save" : "Request permission change"}
                 </Button>
                 <Button variant="tertiary" disabled={changes === 0 || busy} onClick={() => setGrants({})}>
                   Discard changes
