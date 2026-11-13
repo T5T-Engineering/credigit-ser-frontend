@@ -74,7 +74,6 @@ defineTemplates([
 
 defineEvents([
   { name: "settings.brand.changed", module: "settings", description: "The tenant brand (colours, logos, font) changed after approval.", payloadExample: { summary: "Inter · custom logo", operationId: "OPS-…" } },
-  { name: "settings.demo-data.reset", module: "settings", description: "A user reset the data to its initial state." },
 ]);
 
 defineHookPoints([
