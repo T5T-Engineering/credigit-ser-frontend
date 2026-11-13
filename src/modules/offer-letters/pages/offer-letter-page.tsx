@@ -39,6 +39,7 @@ import {
   type ChecklistItem,
   type StepItem,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { useCan } from "@/lib/auth/session";
 import { useApplications, useCollateral, useFacilities, useObligors, useTenant, useUsers } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
@@ -237,14 +238,7 @@ function LetterRecord({ letter }: { letter: OfferLetter }) {
         />
       </div>
 
-      {notice ? (
-        <div className="print:hidden">
-          <Alert tone={notice.tone} title={notice.tone === "success" ? "Saved" : "Not saved"} action={<Button size="small" variant="text" onClick={() => setNotice(null)}>Dismiss</Button>}>
-            {notice.text}
-            {notice.tone === "success" ? " — recorded in the letter’s version history and the audit trail." : ""}
-          </Alert>
-        </div>
-      ) : null}
+      <OutcomePopup value={notice} map={outcomeCopy.toneText({ success: "Saved", danger: "Not saved" })} />
       {pending ? (
         <div className="print:hidden">
           <PendingOperationNotice instance={pending} title={reissuePending ? "Re-issue awaiting Legal sign-off" : "Awaiting Legal sign-off & issue"}>

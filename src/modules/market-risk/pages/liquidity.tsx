@@ -22,8 +22,8 @@ import {
   StackedBarChart,
   StatCard,
   Text,
-  useToast,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { pct } from "@/lib/format";
@@ -49,7 +49,7 @@ import { useMarketBase } from "../use-market";
 export function LiquidityPage() {
   const { bs, liq, rules } = useMarketBase();
   const canEdit = useCan("market-risk", "edit");
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const breaches = useMarketRisk((s) => s.breaches);
   const p = useMemo(() => {
     void rules; // recompute when business rules change

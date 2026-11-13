@@ -23,6 +23,7 @@ import {
   Text,
   Textarea,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { useApplications, useCollateral, useFacilities, useObligors, useTenant, useUsers } from "@/lib/data/hooks";
@@ -146,12 +147,7 @@ export function HouseTemplatePage() {
           </Stack>
         </div>
 
-        {notice ? (
-          <Alert tone={notice.tone} title={notice.tone === "success" ? "Template updated" : "Not saved"} action={<Button size="small" variant="text" onClick={() => setNotice(null)}>Dismiss</Button>}>
-            {notice.text}
-            {notice.tone === "success" ? ". Recorded in the audit trail." : ""}
-          </Alert>
-        ) : null}
+        <OutcomePopup value={notice} map={outcomeCopy.toneText({ success: "Template updated", danger: "Not saved" })} />
         {pending ? <PendingOperationNotice instance={pending} title={`v${working?.version} is awaiting Legal sign-off`}>To return it for changes, decide it in Operations. </PendingOperationNotice> : null}
         {working && !pending ? (
 

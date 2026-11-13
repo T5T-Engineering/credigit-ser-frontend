@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Mail, Smartphone } from "lucide-react";
 import { Alert, Badge, Button, Card, CardContent, OtpVerification, QrCode, Stack, Text } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { backendSsoEnabled } from "@/lib/auth/backend-sso";
 import {
@@ -91,7 +92,7 @@ export function SecurityPage() {
           ) : null}
           {backendSsoEnabled && !microsoft && !canManage ? <Alert tone="warning">You don&apos;t have permission to change your sign-in steps.</Alert> : null}
           {error && !setup && !switching ? <Alert tone="danger">{error}</Alert> : null}
-          {notice ? <Alert tone="success">{notice}</Alert> : null}
+          <OutcomePopup value={notice} map={outcomeCopy.text("Saved")} />
 
           {status && !microsoft ? (
             <Card padding="large" radius="large">

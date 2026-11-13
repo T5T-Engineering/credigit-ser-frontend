@@ -23,11 +23,13 @@ import {
   Stack,
   StatCard,
   StatusBadge,
+  SubmitButton,
   Text,
   Textarea,
   Timeline,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { newId } from "@/lib/data/store";
@@ -112,11 +114,11 @@ export function BcmPage() {
     <ModulePage
       module="operational-risk"
       description="Business Continuity Management — BCM plan currency, crisis-management readiness and fire-drill/evacuation compliance per the Crisis Management Policy, Fire Drill & Evacuation Framework and BCM Framework (ISO 22301)."
-      actions={canEdit ? <Button iconBefore={<PlusCircle aria-hidden />} onClick={() => setRecordOpen(true)}>Record test / exercise</Button> : undefined}
+      actions={canEdit ? <SubmitButton iconBefore={<PlusCircle aria-hidden />} onClick={() => setRecordOpen(true)}>Record test / exercise</SubmitButton> : undefined}
     >
       <Stack gap="large">
         <SubmitOutcome result={outcome} />
-        {flash && <Alert tone="success">{flash}</Alert>}
+        <OutcomePopup value={flash} map={outcomeCopy.text("Recorded")} />
         <Grid columns={{ base: 1, lg: 3 }} gap="large">
           <Card>
             <CardHeader>
@@ -262,7 +264,7 @@ function PlanReviewModal({ plan, onClose, onSubmit }: { plan: BcmPlan | null; on
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="tertiary" onClick={() => { reset(); onClose(); }}>Cancel</Button>
-          <Button onClick={() => { setTouched(true); if (targetError || commentError || !plan) return; void onSubmit(plan, rtoV, rpoV, comment.trim()); reset(); }}>Submit for approval</Button>
+          <SubmitButton onClick={() => { setTouched(true); if (targetError || commentError || !plan) return; void onSubmit(plan, rtoV, rpoV, comment.trim()); reset(); }}>Submit for approval</SubmitButton>
         </div>
       }
     >
@@ -305,12 +307,12 @@ function RecordExerciseModal({ open, plans, onOpenChange, onSubmit }: { open: bo
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="tertiary" onClick={() => { reset(); onOpenChange(false); }}>Cancel</Button>
-          <Button onClick={() => {
+          <SubmitButton onClick={() => {
             setTouched(true);
             if (!valid) return;
             void onSubmit({ id: newId("EX"), type: type as BcmExercise["type"], scope: scope.trim() || plan!.process, date: DEMO_NOW.toISOString(), result: result as TestResult, findings: Number(findings) || 0 }, planId || undefined, rto ? Number(rto) : undefined);
             reset();
-          }}>Save result</Button>
+          }}>Save result</SubmitButton>
         </div>
       }
     >

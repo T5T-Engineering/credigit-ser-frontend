@@ -26,6 +26,7 @@ import {
   Stack,
   StatCard,
   StatusBadge,
+  SubmitButton,
   Tabs,
   Text,
   Textarea,
@@ -275,9 +276,9 @@ function CovenantTestModal({ covenant, onClose, onBreach }: { covenant: CovRow; 
           <Button variant="tertiary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={evidence.trim().length < minEvidence}>
+          <SubmitButton onClick={save} disabled={evidence.trim().length < minEvidence}>
             Save result
-          </Button>
+          </SubmitButton>
         </>
       }
     >

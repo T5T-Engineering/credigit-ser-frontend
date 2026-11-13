@@ -24,10 +24,12 @@ import {
   Stack,
   StatCard,
   StatusBadge,
+  SubmitButton,
   Text,
   Tooltip,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useRole } from "@/lib/auth/session";
 import { useFacilities, useLookups } from "@/lib/data/hooks";
@@ -181,15 +183,15 @@ export function CollateralRegisterPage() {
             <Button variant="secondary" iconBefore={<BellRing aria-hidden className="size-4" />} onClick={remind}>
               Send reminders
             </Button>
-            <Button iconBefore={<Plus aria-hidden className="size-4" />} onClick={() => setAdding(true)}>
+            <SubmitButton iconBefore={<Plus aria-hidden className="size-4" />} onClick={() => setAdding(true)}>
               Register collateral
-            </Button>
+            </SubmitButton>
           </Stack>
         ) : undefined
       }
     >
       <Stack gap="large">
-        {message && <Alert tone="info">{message}</Alert>}
+        <OutcomePopup value={message} map={outcomeCopy.text("Reminders", "info")} />
         <Grid columns={{ base: 2, lg: 4 }} gap="medium">
           <StatCard label="Market value" value={moneyShort(totalMv)} hint={`${number(rows.length)} items · shares at MTM`} />
           <StatCard label="Forced-sale value" value={moneyShort(totalFsv)} hint="Independent valuers" />
@@ -313,9 +315,9 @@ function RegisterModal({ onClose }: { onClose: () => void }) {
           <Button variant="tertiary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={!valid}>
+          <SubmitButton onClick={save} disabled={!valid}>
             Register
-          </Button>
+          </SubmitButton>
         </>
       }
     >

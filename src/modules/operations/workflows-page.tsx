@@ -18,13 +18,14 @@ import {
   Modal,
   SectionHeader,
   Stack,
+  SubmitButton,
   Switch,
   Textarea,
   WorkflowDiagram,
   WorkflowStepEditor,
-  useToast,
   type WorkflowStep as UiWorkflowStep,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { allNavItems } from "@/lib/nav";
 import { useCan } from "@/lib/auth/session";
@@ -136,7 +137,7 @@ function WorkflowCard({ def, canEdit, onEdit }: { def: WorkflowDefinition; canEd
 }
 
 function WorkflowEditor({ def, onClose }: { def: WorkflowDefinition; onClose: () => void }) {
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const defaultSla = useRule<number>("operations.defaultSlaHours");
   const minComment = useRule<number>("operations.minCommentLength");
   const [steps, setSteps] = useState<UiWorkflowStep[]>(() => toUiSteps(def.steps));
@@ -179,9 +180,9 @@ function WorkflowEditor({ def, onClose }: { def: WorkflowDefinition; onClose: ()
           <Button variant="tertiary" onClick={onClose}>
             Cancel
           </Button>
-          <Button loading={busy} disabled={!valid || reason.trim().length < minComment} onClick={submit}>
+          <SubmitButton loading={busy} disabled={!valid || reason.trim().length < minComment} onClick={submit}>
             Submit for approval
-          </Button>
+          </SubmitButton>
         </Stack>
       }
     >

@@ -3,8 +3,9 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Pencil, RefreshCw, Send, SearchX, Undo2, X } from "lucide-react";
-import { Alert, Button, EmptyState, EntityHeader, Field, Skeleton, Stack, Tabs, Textarea } from "@credigit/web-ui";
+import { Pencil, RefreshCw, Send, SearchX, Undo2 } from "lucide-react";
+import { Alert, Button, EmptyState, EntityHeader, Field, Skeleton, Stack, SubmitButton, Tabs, Textarea } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useApplications, useFacilities, useLookups, useObligor, useObligors } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
@@ -247,19 +248,7 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
           }
         />
 
-        {notice && (
-          <Alert
-            tone="success"
-            title="Done"
-            action={
-              <Button variant="text" size="small" iconBefore={<X aria-hidden />} onClick={() => setNotice(null)}>
-                Dismiss
-              </Button>
-            }
-          >
-            {notice}
-          </Alert>
-        )}
+        <OutcomePopup value={notice} map={outcomeCopy.text("Done")} />
         {error && !editing && (
           <Alert tone="danger" title="Couldn’t complete that">
             {error}
@@ -322,9 +311,9 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
                 <Button size="small" variant="tertiary" onClick={cancelEdit}>
                   Discard
                 </Button>
-                <Button size="small" iconBefore={<Send aria-hidden />} onClick={submitEdit} disabled={!dirty} loading={submitting}>
+                <SubmitButton size="small" iconBefore={<Send aria-hidden />} onClick={submitEdit} disabled={!dirty} loading={submitting}>
                   Submit for approval
-                </Button>
+                </SubmitButton>
               </span>
             }
           >

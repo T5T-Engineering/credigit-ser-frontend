@@ -16,6 +16,7 @@ import {
   RuleRow,
   RuleValueInput,
   Stack,
+  SubmitButton,
   Text,
   Textarea,
   type RuleSummary,
@@ -128,9 +129,9 @@ export function RuleChangeDialog({ def, onClose, initial }: { def: RuleDefinitio
             <Button variant="tertiary" onClick={onClose}>
               Cancel
             </Button>
-            <Button loading={busy} disabled={unchanged || Boolean(inputError)} onClick={() => void submit()}>
+            <SubmitButton loading={busy} disabled={unchanged || Boolean(inputError)} onClick={() => void submit()}>
               Submit for approval
-            </Button>
+            </SubmitButton>
           </>
         )
       }

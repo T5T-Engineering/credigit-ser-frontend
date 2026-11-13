@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Badge, Button, Card, CardContent, Field, Input, PermissionMatrix, Select, Stack, Text, Textarea, diffGrants, type PermissionDefinition, type PermissionGrants } from "@credigit/web-ui";
+import { Alert, Badge, Button, Card, CardContent, Field, Input, PermissionMatrix, Select, Stack, SubmitButton, Text, Textarea, diffGrants, type PermissionDefinition, type PermissionGrants } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { identityCall } from "@/lib/auth/backend-identity";
 import { backendSsoEnabled } from "@/lib/auth/backend-sso";
@@ -220,14 +220,14 @@ export function GroupsPage() {
             </Field>
             <div className="flex flex-wrap gap-2">
               {selected === NEW ? (
-                <Button disabled={!name.trim() || diff.grant.length === 0 || busy} loading={busy} onClick={() => void send("/identity/groups", { name: name.trim(), description: description.trim(), permissions: diff.grant }, `The group ${name.trim()} was created.`)}>
+                <SubmitButton disabled={!name.trim() || diff.grant.length === 0 || busy} loading={busy} onClick={() => void send("/identity/groups", { name: name.trim(), description: description.trim(), permissions: diff.grant }, `The group ${name.trim()} was created.`)}>
                   {savesChanges ? "Create group" : "Request new group"}
-                </Button>
+                </SubmitButton>
               ) : group ? (
                 <>
-                  <Button disabled={diff.grant.length + diff.revoke.length === 0 || busy} loading={busy} onClick={() => void send(`/identity/groups/${encodeURIComponent(group.id)}/permission-changes`, { grant: diff.grant, revoke: diff.revoke }, `${group.name}: ${diff.grant.length} granted, ${diff.revoke.length} revoked. Members see it on their next page or when they return to the app.`)}>
+                  <SubmitButton disabled={diff.grant.length + diff.revoke.length === 0 || busy} loading={busy} onClick={() => void send(`/identity/groups/${encodeURIComponent(group.id)}/permission-changes`, { grant: diff.grant, revoke: diff.revoke }, `${group.name}: ${diff.grant.length} granted, ${diff.revoke.length} revoked. Members see it on their next page or when they return to the app.`)}>
                     {savesChanges ? "Save" : "Request permission change"} ({diff.grant.length} + / {diff.revoke.length} −)
-                  </Button>
+                  </SubmitButton>
                   {has(permissions, "identity.groups.delete") ? (
                     <Button variant="danger" disabled={busy} onClick={() => void send(`/identity/groups/${encodeURIComponent(group.id)}/deletion`, {}, `The group ${group.name} was deleted.`)}>
                       {savesChanges ? "Delete group" : "Request deletion"}

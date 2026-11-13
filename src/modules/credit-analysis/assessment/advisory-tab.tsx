@@ -19,10 +19,12 @@ import {
   Matrix,
   SegmentedControl,
   Stack,
+  SubmitButton,
   Text,
   Textarea,
   type MatrixCell,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { usePendingFor } from "@/lib/platform/operations";
 import { useRule } from "@/lib/platform/rules";
 import type { Obligor, Posture } from "@/lib/data/types";
@@ -252,11 +254,7 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
         </Card>
       )}
 
-      {message && (
-        <Alert tone={message.tone} title={message.tone === "success" ? "Done" : "Couldn’t submit"}>
-          {message.text}
-        </Alert>
-      )}
+      <OutcomePopup value={message} map={outcomeCopy.toneText({ success: "Done", danger: "Couldn’t submit" })} />
       {pendingSignOff && (
         <Alert
           tone="info"
@@ -366,9 +364,9 @@ function GatingRow({ obligor, g, override, canEdit }: { obligor: Obligor; g: Gat
             <Textarea value={rationale} onChange={(e) => setRationale(e.target.value)} rows={2} />
           </Field>
           <span className="flex flex-wrap gap-2">
-            <Button size="small" onClick={submit} loading={busy}>
+            <SubmitButton size="small" onClick={submit} loading={busy}>
               Submit override request
-            </Button>
+            </SubmitButton>
             <Button size="small" variant="tertiary" onClick={() => setOpen(false)}>
               Cancel
             </Button>

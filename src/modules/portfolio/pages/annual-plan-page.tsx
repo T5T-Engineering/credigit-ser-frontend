@@ -16,9 +16,9 @@ import {
   Stack,
   StatusBadge,
   Text,
-  useToast,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { publish } from "@/lib/platform/events";
@@ -73,7 +73,7 @@ export function AnnualPlanPage() {
   const canEdit = useCan("portfolio", "edit");
   const actor = useActor();
   const { actor: me } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const submit = useSubmitOperation();
   const uploaded = usePortfolioStore((s) => s.uploadedPlans);
   const activeId = usePortfolioStore((s) => s.activePlanId);

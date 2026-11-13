@@ -29,10 +29,12 @@ import {
   StackedBarChart,
   StatCard,
   Steps,
+  SubmitButton,
   Text,
   Textarea,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { DEMO_NOW } from "@/lib/data/seed";
@@ -174,7 +176,7 @@ export function KriPage() {
       description="Forward-looking Key Risk Indicator framework alongside the loss-event register — Green/Amber/Red banding against Board-approved tolerance, escalated on the same standard as credit exceptions."
     >
       <Stack gap="large">
-        {flash && <Alert tone={flash.tone}>{flash.text}</Alert>}
+        <OutcomePopup value={flash} map={outcomeCopy.toneText({ success: "Escalated", danger: "Not escalated" })} />
         <SubmitOutcome result={outcome} appliedText="Applied — the workflow for this operation has no approval steps." />
         {reds.length > 0 && (
           <Alert tone="danger" title={`${reds.length} KRIs in Red — outside Board-approved tolerance`}>
@@ -314,7 +316,7 @@ export function KriPage() {
             <div className="flex flex-wrap justify-end gap-2">
               {canEdit && <Button variant="tertiary" iconBefore={<SlidersHorizontal aria-hidden />} onClick={() => setProposeFor(selected)}>Propose threshold change</Button>}
               {canEdit && selected.rag !== "green" && !selected.acknowledged?.acknowledgedBy && <Button variant="secondary" onClick={() => acknowledge(selected)}>Acknowledge</Button>}
-              {canEscalate && selected.rag === "red" && selected.level < 4 && <Button iconBefore={<ArrowUpRight aria-hidden />} onClick={() => void escalate(selected)}>Escalate to Level {selected.level + 1}</Button>}
+              {canEscalate && selected.rag === "red" && selected.level < 4 && <SubmitButton iconBefore={<ArrowUpRight aria-hidden />} onClick={() => void escalate(selected)}>Escalate to Level {selected.level + 1}</SubmitButton>}
             </div>
           )
         }
@@ -411,7 +413,7 @@ function ThresholdModal({ kri, onClose, onSubmit }: { kri: KriReading | null; on
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="tertiary" onClick={close}>Cancel</Button>
-          <Button
+          <SubmitButton
             onClick={() => {
               setTouched(true);
               if (error || reasonError) return;
@@ -423,7 +425,7 @@ function ThresholdModal({ kri, onClose, onSubmit }: { kri: KriReading | null; on
             }}
           >
             Submit for approval
-          </Button>
+          </SubmitButton>
         </div>
       }
     >

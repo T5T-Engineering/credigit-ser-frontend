@@ -11,6 +11,7 @@ import {
   PermissionMatrix,
   Select,
   Stack,
+  SubmitButton,
   Text,
   Textarea,
   ValidationScope,
@@ -214,9 +215,9 @@ export function PermissionsPage() {
                 </Field>
               </ValidationScope>
               <div className="flex flex-wrap gap-2">
-                <Button disabled={changes === 0 || busy} loading={busy} onClick={() => void submit()}>
+                <SubmitButton disabled={changes === 0 || busy} loading={busy} onClick={() => void submit()}>
                   {saves ? "Save" : "Request permission change"}
-                </Button>
+                </SubmitButton>
                 <Button variant="tertiary" disabled={changes === 0 || busy} onClick={() => setGrants({})}>
                   Discard changes
                 </Button>

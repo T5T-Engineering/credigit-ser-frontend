@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { ArrowRight, CircleCheck, FileSignature, Send, Undo2 } from "lucide-react";
-import { Alert, Button, Stack, Text, useToast, type ChecklistItem } from "@credigit/web-ui";
+import { Alert, Button, Stack, Text, type ChecklistItem } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { roleById } from "@/lib/rbac/roles";
 import { chainStatus, collateralDueDiligenceDone, copBand, currentSteps, isBreach, recommendationLabel, stageAfterAnalysis } from "../logic";
 import { inGroup } from "../params";
@@ -29,7 +30,7 @@ export function gateItems(c: AppCtx): ChecklistItem[] {
 
 export function NextStepCard({ c, onOpenTab }: { c: AppCtx; onOpenTab: (tab: string) => void }) {
   const { app, roleId, canEdit } = c;
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const pending = usePendingFor(SUBJECT.approval, app.id);
   const isInitiatorRole = inGroup("initiators", roleId);
   const run = (p: Promise<ActionResult>, ok: string) =>

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { BadgeCheck } from "lucide-react";
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ChecklistPanel, DocumentList, Field, FileUpload, Grid, Select, Stack, useToast } from "@credigit/web-ui";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, ChecklistPanel, DocumentList, Field, FileUpload, Grid, Select, Stack } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { useDbActions, useLookups } from "@/lib/data/hooks";
 import { getRule } from "@/lib/platform/rules";
 import type { DocumentRecord } from "@/lib/data/types";
@@ -35,7 +36,7 @@ export function useOcrCompletion(docs: DocumentRecord[]) {
 export function DocumentsTab({ c }: { c: AppCtx }) {
   const { user } = useLookups();
   const ocr = useSimulatedOcr();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const [kind, setKind] = useState<DocumentRecord["kind"]>("Management accounts");
   const [files, setFiles] = useState<File[]>([]);
   const canUpload = c.canEdit && inGroup("uploaders", c.roleId);

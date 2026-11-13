@@ -19,6 +19,7 @@ import {
   Input,
   Stack,
   StatCard,
+  SubmitButton,
   Switch,
   Text,
   Textarea,
@@ -271,9 +272,9 @@ function RoleDrawer({
         canEdit ? (
           <div className="flex flex-wrap justify-end gap-2">
             {role.custom ? (
-              <Button variant="danger" iconBefore={<Trash2 aria-hidden className="size-4" />} onClick={() => void remove()}>
+              <SubmitButton variant="danger" iconBefore={<Trash2 aria-hidden className="size-4" />} onClick={() => void remove()}>
                 Request delete
-              </Button>
+              </SubmitButton>
             ) : (
               <Button variant="text" iconBefore={<RotateCcw aria-hidden className="size-4" />} onClick={restoreDefaults}>
                 Restore defaults
@@ -284,9 +285,9 @@ function RoleDrawer({
                 Request clone
               </Button>
             ) : null}
-            <Button loading={busy} onClick={() => void save()}>
+            <SubmitButton loading={busy} onClick={() => void save()}>
               Submit for approval
-            </Button>
+            </SubmitButton>
           </div>
         ) : undefined
       }

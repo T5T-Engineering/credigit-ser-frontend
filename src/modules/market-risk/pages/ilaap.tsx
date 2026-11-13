@@ -25,8 +25,8 @@ import {
   Stack,
   StatusBadge,
   Text,
-  useToast,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { dateTime, pct } from "@/lib/format";
@@ -64,7 +64,7 @@ const decisionMap = { approve: "approved", reject: "declined", return: "returned
 export function IlaapPage() {
   const { bs, liq, rules } = useMarketBase();
   const canEdit = useCan("market-risk", "edit");
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const s = useMarketRisk();
   const current = s.rasVersions[0]!;
   const ruleValues = useMemo(() => {
