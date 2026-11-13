@@ -156,7 +156,8 @@ function UsersView() {
               u.status === "Suspended"
                 ? { label: "Request reactivation", icon: <UserCheck aria-hidden className="size-4" />, onSelect: () => setConfirm({ kind: "reactivate", user: u }) }
                 : { label: "Request deactivation", icon: <UserX aria-hidden className="size-4" />, danger: true, onSelect: () => setConfirm({ kind: "deactivate", user: u }) },
-              { label: "Reset MFA", icon: <KeyRound aria-hidden className="size-4" />, onSelect: () => void resetMfa(u) },
+              // Backend sign-in has no authenticator enrolment to reset (e-mailed code or Entra ID MFA).
+              ...(directoryEnabled ? [] : [{ label: "Reset MFA", icon: <KeyRound aria-hidden className="size-4" />, onSelect: () => void resetMfa(u) }]),
             ]}
           />
         ) : (
@@ -240,6 +241,8 @@ function UsersView() {
   );
 }
 
+const signInMethodLabel = (method?: string) => (method === "microsoft" ? "Microsoft (Entra ID)" : method === "password" ? "E-mail and password + one-time code" : "Not signed in yet");
+
 function UserDetails({ user, canEdit, onAction, onResetMfa }: { user: User; canEdit: boolean; onAction: (p: Pending) => void; onResetMfa: () => void }) {
   const roleOptions = useRoleOptions();
   const pending = usePendingFor("User", user.id);
@@ -249,13 +252,21 @@ function UserDetails({ user, canEdit, onAction, onResetMfa }: { user: User; canE
       <DescriptionList
         columns={1}
         items={[
-          { label: "User ID", value: user.id, mono: true, copyValue: user.id },
-          { label: "Role", value: roleName(user.roleId), hint: roleById[user.roleId].authority },
+          { label: "Role", value: roleName(user.roleId), hint: roleById[user.roleId]?.authority },
           { label: "Branch", value: user.branch },
           { label: "Status", status: user.status, statusTones: statusTone },
-          { label: "MFA", value: user.mfa ? "Enrolled (Microsoft Authenticator)" : "Not enrolled — sign-in blocked until enrolment" },
+          {
+            label: "MFA",
+            value: directoryEnabled
+              ? user.signInMethod === "microsoft"
+                ? "Your organisation's Microsoft sign-in (Entra ID)"
+                : "One-time code e-mailed at every sign-in"
+              : user.mfa
+                ? "Enrolled"
+                : "Not enrolled — sign-in blocked until enrolment",
+          },
           { label: "Last sign-in", value: user.lastLogin ? dateTime(user.lastLogin) : "Never" },
-          { label: "Sign-in method", value: "Microsoft Entra ID (SSO)" },
+          ...(directoryEnabled ? [{ label: "Last sign-in method", value: signInMethodLabel(user.signInMethod) }] : []),
         ]}
       />
       {canEdit ? (
@@ -273,9 +284,11 @@ function UserDetails({ user, canEdit, onAction, onResetMfa }: { user: User; canE
                 Request deactivation
               </Button>
             )}
-            <Button variant="tertiary" onClick={onResetMfa}>
-              Reset MFA
-            </Button>
+            {directoryEnabled ? null : (
+              <Button variant="tertiary" onClick={onResetMfa}>
+                Reset MFA
+              </Button>
+            )}
           </div>
         </Stack>
       ) : (
