@@ -24,6 +24,8 @@ export type User = {
   status: "Active" | "Suspended" | "Pending";
   mfa: boolean;
   lastLogin?: ISODate;
+  /** How the last session was started (backend directory): "password" or "microsoft". */
+  signInMethod?: string;
 };
 
 /** CBN-style sector taxonomy (tenant-configurable per PRD §6.6.1). */

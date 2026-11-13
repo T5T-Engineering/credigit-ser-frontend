@@ -24,6 +24,8 @@ type DirectoryUser = {
   pendingOperationId?: string | null;
   source?: string;
   updatedAt?: string;
+  lastSignInAt?: string | null;
+  lastSignInMethod?: string | null;
 };
 
 type Submission = { operationId: string; status: string; applied: boolean };
@@ -38,6 +40,8 @@ function toUser(u: DirectoryUser): User & { pendingOperationId?: string | null }
     status: u.status === "Active" ? "Active" : u.status === "Pending" ? "Pending" : "Suspended",
     // Every backend sign-in is multi-factor: e-mailed one-time code (local) or Entra ID MFA.
     mfa: true,
+    lastLogin: u.lastSignInAt ?? undefined,
+    signInMethod: u.lastSignInMethod ?? undefined,
     pendingOperationId: u.pendingOperationId,
   };
 }
