@@ -93,6 +93,7 @@ Microsoft sign-in uses MSAL.js with a popup and the authorization-code flow with
    | `NEXT_PUBLIC_AZURE_AD_TENANT_ID` | Directory (tenant) ID, or `organizations` for any work account |
    | `NEXT_PUBLIC_AZURE_AD_REDIRECT_URI` | Optional. Defaults to `<origin>/login/` |
    | `NEXT_PUBLIC_DEMO_ACCESS` | `true` shows the demo role picker; `false` allows Microsoft sign-in only |
+   | `NEXT_PUBLIC_APP_ENVIRONMENT` | Environment label in the sidebar and header badge (e.g. `Development`, `UAT`). Leave empty in production to hide it. |
 
    These are public build-time values. They identify the app and contain no secrets. Rebuild after changing them.
 

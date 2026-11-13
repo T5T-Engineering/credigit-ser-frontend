@@ -12,7 +12,6 @@ export type Tenant = {
   name: string;
   shortName: string;
   type: "Commercial bank" | "Microfinance bank" | "Merchant bank";
-  environment: "Development" | "UAT" | "Production";
 };
 
 export type User = {
