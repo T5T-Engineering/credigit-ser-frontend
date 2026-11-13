@@ -1,8 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Badge, Button, Card, CardContent, Field, PermissionMatrix, Select, Stack, Text, Textarea, diffGrants, type PermissionDefinition, type PermissionGrants } from "@credigit/web-ui";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  Field,
+  PermissionMatrix,
+  Select,
+  Stack,
+  Text,
+  Textarea,
+  ValidationScope,
+  diffGrants,
+  useValidation,
+  type PermissionDefinition,
+  type PermissionGrants,
+} from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
+import { useUnsavedChangesWarning } from "@/lib/ui/unsaved-changes";
 import { identityCall } from "@/lib/auth/backend-identity";
 import { backendSsoEnabled } from "@/lib/auth/backend-sso";
 import { useSession } from "@/lib/auth/session";
@@ -37,8 +55,10 @@ export function PermissionsPage() {
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
+  const [reasonError, setReasonError] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [version, setVersion] = useState(0);
+  const validation = useValidation();
 
   useEffect(() => {
     if (!backendSsoEnabled) return;
@@ -61,6 +81,7 @@ export function PermissionsPage() {
   const current = role && grants[role.id] ? grants : initial;
   const diff = role ? diffGrants(initial[role.id] ?? [], current[role.id] ?? []) : { grant: [], revoke: [] };
   const changes = diff.grant.length + diff.revoke.length;
+  useUnsavedChangesWarning(changes > 0);
   const modules = useMemo(() => {
     const ids = [...new Set((catalogue?.permissions ?? []).map((p) => p.module))];
     return ids.map((id) => ({ id, label: id.split("-").map((w) => w[0]!.toUpperCase() + w.slice(1)).join(" ") }));
@@ -68,7 +89,9 @@ export function PermissionsPage() {
 
   const submit = async () => {
     if (!role) return;
-    if (reason.trim().length < minReason) return setOutcome({ ok: false, message: `Give a reason of at least ${minReason} characters.` });
+    const tooShort = reason.trim().length > 0 && reason.trim().length < minReason;
+    setReasonError(tooShort ? `Give a reason of at least ${minReason} characters.` : undefined);
+    if (!validation.validate() || tooShort) return;
     setBusy(true);
     try {
       const r = await identityCall<Submission>(`/identity/roles/${encodeURIComponent(role.id)}/permission-changes`, {
@@ -84,6 +107,7 @@ export function PermissionsPage() {
           : "A second person approves the change in Operations before it applies.",
       });
       setReason("");
+      validation.reset();
       if (r.applied) void refreshOwnAccess();
       if (r.applied) {
         // The roles list is a read model updated a moment later; keep the saved grants instead of re-reading too early.
@@ -111,6 +135,11 @@ export function PermissionsPage() {
         {!backendSsoEnabled ? <Alert tone="info">Permissions are managed in the backend — configure NEXT_PUBLIC_API_BASE_URL.</Alert> : null}
         {error ? <Alert tone="danger">{error}</Alert> : null}
         <SaveOutcomeModal outcome={outcome} onClose={() => setOutcome(null)} />
+        {changes > 0 ? (
+          <Alert tone="warning" title="Unsaved changes">
+            {`${changes} permission change${changes === 1 ? "" : "s"} for ${role?.name ?? "this role"}. Give a reason and ${saves ? "save" : "request the change"} below, or they are lost when you leave or refresh.`}
+          </Alert>
+        ) : null}
         <Card>
           <CardContent className="flex flex-col gap-4 pt-6">
             <Field label="Role" htmlFor="perm-role">
@@ -122,6 +151,7 @@ export function PermissionsPage() {
                   setRoleId(e.target.value);
                   setGrants({});
                   setOutcome(null);
+                  validation.reset();
                 }}
               />
             </Field>
@@ -164,9 +194,25 @@ export function PermissionsPage() {
               <Text variant="small">
                 {changes === 0 ? "No changes yet." : `${diff.grant.length} to grant, ${diff.revoke.length} to revoke for ${role.name}.`}
               </Text>
-              <Field label="Reason for the change" htmlFor="perm-reason" required description={saves ? "Kept in the audit log." : "Shown to approvers and kept in the audit log."}>
-                <Textarea id="perm-reason" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
-              </Field>
+              <ValidationScope value={validation}>
+                <Field
+                  label="Reason for the change"
+                  htmlFor="perm-reason"
+                  required
+                  error={reasonError}
+                  description={saves ? "Kept in the audit log." : "Shown to approvers and kept in the audit log."}
+                >
+                  <Textarea
+                    id="perm-reason"
+                    rows={3}
+                    value={reason}
+                    onChange={(e) => {
+                      setReason(e.target.value);
+                      if (reasonError && e.target.value.trim().length >= minReason) setReasonError(undefined);
+                    }}
+                  />
+                </Field>
+              </ValidationScope>
               <div className="flex flex-wrap gap-2">
                 <Button disabled={changes === 0 || busy} loading={busy} onClick={() => void submit()}>
                   {saves ? "Save" : "Request permission change"}
