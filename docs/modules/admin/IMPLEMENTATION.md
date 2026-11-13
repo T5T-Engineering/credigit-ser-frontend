@@ -28,6 +28,8 @@ Layering: page (`*-page.tsx`) → `operation-ui.tsx` / `rule-editor.tsx` → pla
 | `src/modules/admin/permissions-page.tsx` | Role permission matrix (backend `/identity/permissions`, `/identity/roles`) |
 | `src/modules/admin/groups-page.tsx` | Permission groups (backend `/identity/groups`) |
 | `src/modules/admin/entra-mapping-page.tsx` | Entra role mapping (backend `/identity/entra-mappings`, ADR-0016) |
+| `src/modules/admin/workflow-mode.ts` | `useAppliesOnSave` — reads `/operations/workflows`; screens show "Save" when a workflow has no approval steps |
+| `src/modules/admin/directory.ts` | Backend users and `useDirectoryRoleModules` (role → side-menu modules from current permissions, shown on Roles & limits) |
 | `src/app/(app)/admin/**/page.tsx`, `src/app/(app)/audit/page.tsx` | Thin route files |
 
 ## 3. Routes / endpoints / public API
@@ -38,7 +40,7 @@ Layering: page (`*-page.tsx`) → `operation-ui.tsx` / `rule-editor.tsx` → pla
 | `/admin/parameters?tab=approvals\|rar\|ifrs9\|haircuts\|sectors\|products\|platform` | `ParametersPage` | → Rules & parameters |
 | `/admin/permissions` | `PermissionsPage` | → Permissions |
 | `/admin/groups` | `GroupsPage` | → Permission groups |
-| `/admin/entra-mapping` | `EntraMappingPage` | → Entra role mapping |
+| `/admin/entra-mapping` | `EntraMappingPage` | Hidden from the menu (user decision 2026-11-13); direct URL only |
 | `/audit` | `AuditPage` | Administration → Audit log |
 
 Exported for other modules: `roleName`, `roleSecurity`, `roleIdleTimeoutMinutes` (app shell idle sign-out), store read hooks above, `RuleEditorList`, `RuleChangeDialog`, `submitWithHooks`.

@@ -34,6 +34,7 @@ import { requestRuleChange } from "@/lib/platform/core";
 import { submitOperation, useOperationsStore, type SubmitResult } from "@/lib/platform/operations";
 import { ruleDefinition, useRule, type RuleValue } from "@/lib/platform/rules";
 import { ConfigNotice } from "./config-notice";
+import { useDirectoryRoleModules } from "./directory";
 import { operationHref, PendingBadge, submitWithHooks } from "./operation-ui";
 import { IPV4_OR_CIDR, roleName, ruleKeys } from "./rule-keys";
 import { useConfiguredRoles, type ConfiguredRole, type CustomRole } from "./store";
@@ -54,6 +55,7 @@ export function RolesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = configured.find((r) => r.id === selectedId) ?? null;
   const tiered = configured.filter((r) => r.tier !== null);
+  const directoryModules = useDirectoryRoleModules();
 
   const columns: DataTableColumn<ConfiguredRole>[] = [
     {
@@ -137,14 +139,26 @@ export function RolesPage() {
           </CardContent>
         </Card>
       </Stack>
-      {selected ? <RoleDrawer key={selected.id} role={selected} canEdit={canEdit} onClose={() => setSelectedId(null)} tiered={tiered} /> : null}
+      {selected ? <RoleDrawer key={selected.id} role={selected} canEdit={canEdit} onClose={() => setSelectedId(null)} tiered={tiered} directoryModules={directoryModules} /> : null}
     </ModulePage>
   );
 }
 
 type Outcome = { label: string; result: SubmitResult };
 
-function RoleDrawer({ role, canEdit, onClose, tiered }: { role: ConfiguredRole; canEdit: boolean; onClose: () => void; tiered: ConfiguredRole[] }) {
+function RoleDrawer({
+  role,
+  canEdit,
+  onClose,
+  tiered,
+  directoryModules,
+}: {
+  role: ConfiguredRole;
+  canEdit: boolean;
+  onClose: () => void;
+  tiered: ConfiguredRole[];
+  directoryModules: Record<string, Record<string, "view" | "edit">> | null;
+}) {
   const minReason = useRule<number>("operations.minCommentLength");
   const apex = role.limitNgn !== null && !Number.isFinite(role.limitNgn);
   const hasLimit = role.limitNgn !== null && !apex;
@@ -241,7 +255,8 @@ function RoleDrawer({ role, canEdit, onClose, tiered }: { role: ConfiguredRole; 
     setOutcomes([{ label: "Delete role", result: await submitCustom("delete", role.custom, reason.trim()) }]);
   };
 
-  const modules = Object.entries(role.modules) as Array<[ModuleKey, "view" | "edit"]>;
+  // With the backend, what members actually see (from the role's current permissions); otherwise the app's role definition.
+  const modules = Object.entries(directoryModules?.[role.id] ?? role.modules) as Array<[ModuleKey, "view" | "edit"]>;
   const pendingKey = (key: string) => <PendingBadge subjectType="Rule" subjectId={key} />;
 
   return (
@@ -338,6 +353,15 @@ function RoleDrawer({ role, canEdit, onClose, tiered }: { role: ConfiguredRole; 
               </Chip>
             ))}
           </ChipList>
+          {directoryModules ? (
+            <Text variant="small" tone="muted">
+              This is what people with this role see in the side menu. Change it in{" "}
+              <TextLink href="/admin/permissions" as={Link}>
+                Permissions
+              </TextLink>
+              .
+            </Text>
+          ) : null}
           {role.id === "system-admin" ? <Text variant="small" tone="muted">System Admin has configuration, not credit, authority — it can&apos;t approve credit.</Text> : null}
         </Stack>
       </Stack>

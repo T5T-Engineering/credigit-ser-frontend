@@ -74,6 +74,24 @@ export function useDirectoryUsers(): { users: User[]; loading: boolean; error: s
   return { users, loading, error, reload };
 }
 
+/** Side-menu module access per role from the backend (derived from each role's current permissions); null without a backend. */
+export function useDirectoryRoleModules(): Record<string, Record<string, "view" | "edit">> | null {
+  const [modules, setModules] = useState<Record<string, Record<string, "view" | "edit">> | null>(null);
+
+  useEffect(() => {
+    if (!directoryEnabled) return;
+    let cancelled = false;
+    identityCall<Array<{ id: string; modules: Record<string, "view" | "edit"> }>>("/identity/roles")
+      .then((roles) => !cancelled && setModules(Object.fromEntries(roles.map((r) => [r.id, r.modules]))))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return modules;
+}
+
 async function submit(path: string, body: unknown): Promise<SubmitResult> {
   try {
     const r = await identityCall<Submission>(path, { method: "POST", body: JSON.stringify(body) });
