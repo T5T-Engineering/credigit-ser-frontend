@@ -27,6 +27,7 @@ Page compositions over `@credigit/web-ui` (`BrandProvider` / `useBrand`, preset 
 |---|---|---|
 | `/settings` | `ProfilePage` | Settings → Profile & security |
 | `/settings/password` | `ChangePasswordPage` (auth module) | Settings → Password |
+| `/settings/security` | `SecurityPage` (`src/modules/settings/security-page.tsx`; backend `/identity/me/mfa…`, QR via `QrCode`) | Settings → Security |
 | `/settings/branding` (`?preset=`, `?preview=pending`) | `BrandingPage` | Settings → Branding |
 
 ## 4. Data model

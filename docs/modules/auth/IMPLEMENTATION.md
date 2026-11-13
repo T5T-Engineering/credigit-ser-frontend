@@ -41,6 +41,7 @@ BACKEND SEAM: replace `accounts.ts` with Identity & Access API calls; keep MSAL.
 | `/forgot-password` | `ForgotPasswordPage` | link from login |
 | `/reset-password` | `ResetPasswordPage` | — |
 | `/settings/password` | `ChangePasswordPage` | Administration → Settings → Password |
+| `/verify?challenge=` (backend) | `BackendVerifyPage` — e-mailed or authenticator-app code by `channel` (AUTH-FR-16) | — |
 | `/` | redirect to dashboard or login | — |
 
 Public API (`accounts.ts`): `signInWithPassword`, `register`, `verifyCode`, `resendCode`, `requestPasswordReset`, `resetPassword`, `changePassword`, `decideAccessRequest`, `usePendingAccessRequests`, `passwordPolicy`, `maskEmail`.

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { MailCheck, ShieldCheck } from "lucide-react";
+import { MailCheck, ShieldCheck, Smartphone } from "lucide-react";
 import { Alert, AuthCard, Button, Logo, OtpVerification, Text } from "@credigit/web-ui";
 import { backendChallenge, backendResend, backendVerify, type BackendChallenge } from "@/lib/auth/backend-auth";
 import { useSession } from "@/lib/auth/session";
@@ -60,20 +60,38 @@ export function BackendVerifyPage() {
 
   const meta = copy[challenge.purpose];
   const Icon = meta.icon;
+  // ADR-0017: the code comes from the person's authenticator app — nothing was e-mailed, so no "sent to" line and no resend.
+  const fromApp = challenge.channel === "authenticator";
 
   return (
     <AuthShell>
-      <AuthCard logo={<Logo size="small" />} icon={<Icon />} title={meta.title} description={meta.description} back={meta.back} linkComponent={Link}>
+      <AuthCard
+        logo={<Logo size="small" />}
+        icon={fromApp ? <Smartphone /> : <Icon />}
+        title={fromApp ? "Enter the code from your authenticator app" : meta.title}
+        description={meta.description}
+        back={meta.back}
+        linkComponent={Link}
+      >
         <OtpVerification
-          destination={challenge.maskedEmail}
+          length={challenge.codeLength}
+          destination={fromApp ? undefined : challenge.maskedEmail}
           errorMessage={error ?? undefined}
-          onResend={async () => {
-            const fresh = await backendResend(challenge.challengeId);
-            if (fresh) setChallenge(fresh);
-            setError(fresh ? null : "A new code couldn't be sent. Start again.");
-          }}
+          onResend={
+            fromApp
+              ? undefined
+              : async () => {
+                  const fresh = await backendResend(challenge.challengeId);
+                  if (fresh) setChallenge(fresh);
+                  setError(fresh ? null : "A new code couldn't be sent. Start again.");
+                }
+          }
           hint={
-            challenge.developmentCode ? (
+            fromApp ? (
+              <Text variant="small" tone="muted">
+                Open your authenticator app and enter the {challenge.codeLength}-digit code it shows for this account. Lost your phone? Ask your System Admin to reset your sign-in steps.
+              </Text>
+            ) : challenge.developmentCode ? (
               <Alert tone="info" title="Development — e-mail is off">
                 Your code is <span className="font-mono text-lg font-semibold tracking-[0.2em]">{challenge.developmentCode}</span>
               </Alert>
@@ -101,7 +119,9 @@ export function BackendVerifyPage() {
           }}
         />
         <Text variant="caption" tone="subtle" align="center">
-          The code expires at {new Date(challenge.expiresAt).toLocaleTimeString()}. After {challenge.maxAttempts} wrong codes you&apos;ll need a new one.
+          {fromApp
+            ? `This sign-in step expires at ${new Date(challenge.expiresAt).toLocaleTimeString()}. After ${challenge.maxAttempts} wrong codes you'll need to start again.`
+            : `The code expires at ${new Date(challenge.expiresAt).toLocaleTimeString()}. After ${challenge.maxAttempts} wrong codes you'll need a new one.`}
         </Text>
       </AuthCard>
     </AuthShell>

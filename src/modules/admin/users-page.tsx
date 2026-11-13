@@ -43,7 +43,8 @@ import { useRule } from "@/lib/platform/rules";
 import { useAuditLog } from "@/modules/workspace/use-audit-log";
 import { ConfigNotice } from "./config-notice";
 import { AccessRequests } from "./access-requests";
-import { changeDirectoryUserRole, deactivateDirectoryUser, directoryEnabled, inviteDirectoryUser, reactivateDirectoryUser, useDirectoryUsers } from "./directory";
+import { changeDirectoryUserRole, deactivateDirectoryUser, directoryEnabled, inviteDirectoryUser, reactivateDirectoryUser, resetDirectoryUserMfa, useDirectoryUsers } from "./directory";
+import { mfaMethodLabel } from "@/lib/auth/backend-mfa";
 import { PendingBadge, submitWithHooks, SubmitOutcome } from "./operation-ui";
 import { roleName } from "./rule-keys";
 import { useConfiguredRoles } from "./store";
@@ -57,7 +58,7 @@ function useRoleOptions() {
   return useMemo(() => roleGroups.flatMap((g) => roles.filter((r) => r.group === g).map((r) => ({ value: r.id, label: `${configured.find((c) => c.id === r.id)?.name ?? r.name} (${g})` }))), [configured]);
 }
 
-type Pending = { kind: "deactivate" | "reactivate" | "role"; user: User; to?: RoleId };
+type Pending = { kind: "deactivate" | "reactivate" | "role" | "mfa-reset"; user: User; to?: RoleId };
 
 /** Admin → Users (PRD §4: named individuals, MFA-enforced). Invites, role changes and (de)activation route through Operations. */
 export function UsersPage() {
@@ -129,7 +130,9 @@ function UsersView() {
     { id: "role", header: "Role", accessor: (u) => roleName(u.roleId), sortable: true },
     { id: "group", header: "Group", accessor: (u) => roleById[u.roleId]?.group, hidden: true },
     { id: "branch", header: "Branch", accessor: "branch", sortable: true },
-    { id: "mfa", header: "MFA", accessor: (u) => (u.mfa ? "Enrolled" : "Not enrolled"), cell: (u) => (u.mfa ? <Badge tone="success">Enrolled</Badge> : <Badge tone="warning">Not enrolled</Badge>) },
+    directoryEnabled
+      ? { id: "mfa", header: "MFA", accessor: (u) => mfaMethodLabel(u.mfaMethod), cell: (u) => <Badge tone="success">{mfaMethodLabel(u.mfaMethod)}</Badge> }
+      : { id: "mfa", header: "MFA", accessor: (u) => (u.mfa ? "Enrolled" : "Not enrolled"), cell: (u) => (u.mfa ? <Badge tone="success">Enrolled</Badge> : <Badge tone="warning">Not enrolled</Badge>) },
     {
       id: "lastLogin",
       header: "Last sign-in",
@@ -156,8 +159,12 @@ function UsersView() {
               u.status === "Suspended"
                 ? { label: "Request reactivation", icon: <UserCheck aria-hidden className="size-4" />, onSelect: () => setConfirm({ kind: "reactivate", user: u }) }
                 : { label: "Request deactivation", icon: <UserX aria-hidden className="size-4" />, danger: true, onSelect: () => setConfirm({ kind: "deactivate", user: u }) },
-              // Backend sign-in has no authenticator enrolment to reset (e-mailed code or Entra ID MFA).
-              ...(directoryEnabled ? [] : [{ label: "Reset MFA", icon: <KeyRound aria-hidden className="size-4" />, onSelect: () => void resetMfa(u) }]),
+              // Backend: only an authenticator app can be reset (back to e-mailed codes); never your own (ADR-0017).
+              ...(directoryEnabled
+                ? u.mfaMethod === "authenticator" && u.id !== me?.id
+                  ? [{ label: "Reset MFA", icon: <KeyRound aria-hidden className="size-4" />, onSelect: () => setConfirm({ kind: "mfa-reset", user: u }) }]
+                  : []
+                : [{ label: "Reset MFA", icon: <KeyRound aria-hidden className="size-4" />, onSelect: () => void resetMfa(u) }]),
             ]}
           />
         ) : (
@@ -233,7 +240,7 @@ function UsersView() {
       <InviteModal open={inviteOpen} onOpenChange={setInviteOpen} existingEmails={users.map((u) => u.email.toLowerCase())} />
 
       <Drawer open={selected !== null} onOpenChange={(o) => !o && setSelectedId(null)} title={selected?.name ?? "User"} description={selected?.email}>
-        {selected ? <UserDetails user={selected} canEdit={canEdit} onAction={setConfirm} onResetMfa={() => void resetMfa(selected)} /> : null}
+        {selected ? <UserDetails user={selected} canEdit={canEdit} isSelf={selected.id === me?.id} onAction={setConfirm} onResetMfa={() => void resetMfa(selected)} /> : null}
       </Drawer>
 
       {confirm ? <ConfirmModal key={`${confirm.kind}:${confirm.user.id}:${confirm.to ?? ""}`} pending={confirm} isSelf={confirm.user.id === me?.id} onClose={() => setConfirm(null)} /> : null}
@@ -243,7 +250,7 @@ function UsersView() {
 
 const signInMethodLabel = (method?: string) => (method === "microsoft" ? "Microsoft (Entra ID)" : method === "password" ? "E-mail and password + one-time code" : "Not signed in yet");
 
-function UserDetails({ user, canEdit, onAction, onResetMfa }: { user: User; canEdit: boolean; onAction: (p: Pending) => void; onResetMfa: () => void }) {
+function UserDetails({ user, canEdit, isSelf, onAction, onResetMfa }: { user: User; canEdit: boolean; isSelf: boolean; onAction: (p: Pending) => void; onResetMfa: () => void }) {
   const roleOptions = useRoleOptions();
   const pending = usePendingFor("User", user.id);
   return (
@@ -258,9 +265,7 @@ function UserDetails({ user, canEdit, onAction, onResetMfa }: { user: User; canE
           {
             label: "MFA",
             value: directoryEnabled
-              ? user.signInMethod === "microsoft"
-                ? "Your organisation's Microsoft sign-in (Entra ID)"
-                : "One-time code e-mailed at every sign-in"
+              ? `${mfaMethodLabel(user.mfaMethod)}${user.signInMethod === "microsoft" ? " — Microsoft sign-in uses the organisation's Entra ID MFA" : ""}`
               : user.mfa
                 ? "Enrolled"
                 : "Not enrolled — sign-in blocked until enrolment",
@@ -284,7 +289,13 @@ function UserDetails({ user, canEdit, onAction, onResetMfa }: { user: User; canE
                 Request deactivation
               </Button>
             )}
-            {directoryEnabled ? null : (
+            {directoryEnabled ? (
+              user.mfaMethod === "authenticator" && !isSelf ? (
+                <Button variant="tertiary" onClick={() => onAction({ kind: "mfa-reset", user })}>
+                  Reset MFA
+                </Button>
+              ) : null
+            ) : (
               <Button variant="tertiary" onClick={onResetMfa}>
                 Reset MFA
               </Button>
@@ -302,6 +313,7 @@ const copy = {
   deactivate: { title: "Request deactivation?", button: "Request deactivation", type: "user.deactivate", verb: "Deactivate" },
   reactivate: { title: "Request reactivation?", button: "Request reactivation", type: "user.reactivate", verb: "Reactivate" },
   role: { title: "Request role change?", button: "Request role change", type: "user.role-change", verb: "Change role of" },
+  "mfa-reset": { title: "Reset sign-in steps?", button: "Reset MFA", type: "user.mfa-reset", verb: "Reset sign-in steps of" },
 } as const;
 
 function ConfirmModal({ pending, isSelf, onClose }: { pending: Pending; isSelf: boolean; onClose: () => void }) {
@@ -318,7 +330,9 @@ function ConfirmModal({ pending, isSelf, onClose }: { pending: Pending; isSelf: 
     const subject = { type: "User", id: user.id, title: user.name, href: `/admin?user=${user.id}` };
     const r = await submitWithHooks("admin.user.change", { action: kind, userId: user.id, to, reason: reason.trim() }, (ctx) =>
       directoryEnabled
-        ? kind === "role"
+        ? kind === "mfa-reset"
+          ? resetDirectoryUserMfa(user.id, ctx.reason)
+          : kind === "role"
           ? changeDirectoryUserRole(user.id, ctx.to!, ctx.reason)
           : kind === "deactivate"
             ? deactivateDirectoryUser(user.id, ctx.reason)
@@ -362,6 +376,8 @@ function ConfirmModal({ pending, isSelf, onClose }: { pending: Pending; isSelf: 
           ? `${user.name} will be signed out and blocked once a second person approves. Their history and audit trail are kept.`
           : kind === "reactivate"
             ? `${user.name} will be able to sign in again with MFA once approved.`
+            : kind === "mfa-reset"
+            ? `${user.name} goes back to codes sent by e-mail (for example after losing their phone) and every open session is signed out. They can set up an authenticator app again in Settings → Security.`
             : `${user.name}: ${roleName(user.roleId)} → ${roleName(to!)}. Applies at the next sign-in once approved.`
       }
       footer={
