@@ -47,19 +47,25 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     if (!user) router.replace(`/login/?next=${encodeURIComponent(pathname)}`);
   }, [hydrated, user, roleId, router, pathname]);
 
-  // Load what the backend grants this user (menus and access checks follow it; ADR-0012 / ADR-0014).
+  // Load what the backend grants this user (menus and access checks follow it; ADR-0012 / ADR-0014). Re-read on every page change and
+  // when the tab comes back into view, so a permission an admin just saved shows without signing out.
   const setAccess = useSession((s) => s.setAccess);
   const userId = user?.id;
   useEffect(() => {
     if (!hydrated || !userId) return;
     let cancelled = false;
-    void loadBackendAccess().then((access) => {
-      if (!cancelled && access) setAccess(access);
-    });
+    const refresh = () =>
+      void loadBackendAccess().then((access) => {
+        if (!cancelled && access) setAccess(access);
+      });
+    const onVisible = () => document.visibilityState === "visible" && refresh();
+    refresh();
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [hydrated, userId, roleId, setAccess]);
+  }, [hydrated, userId, roleId, pathname, setAccess]);
 
   if (!hydrated || !user) {
     return (

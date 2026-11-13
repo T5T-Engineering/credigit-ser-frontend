@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { Alert, Badge, Button, Card, CardContent, Field, PermissionMatrix, Select, Stack, Text, TextLink, Textarea, diffGrants, type PermissionDefinition, type PermissionGrants } from "@credigit/web-ui";
+import { Alert, Badge, Button, Card, CardContent, Field, PermissionMatrix, Select, Stack, Text, Textarea, diffGrants, type PermissionDefinition, type PermissionGrants } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { identityCall } from "@/lib/auth/backend-identity";
 import { backendSsoEnabled } from "@/lib/auth/backend-sso";
 import { useSession } from "@/lib/auth/session";
 import { useRule } from "@/lib/platform/rules";
-import { operationHref } from "./operation-ui";
+import { failed, refreshOwnAccess, SaveOutcomeModal, type SaveOutcome } from "./save-outcome";
 import { useAppliesOnSave } from "./workflow-mode";
 
 type CatalogueDto = { version: string; baseline: string[]; protectedAdministratorPermissions: string[]; permissions: Array<PermissionDefinition & { area: string }> };
@@ -37,7 +36,7 @@ export function PermissionsPage() {
   const [grants, setGrants] = useState<PermissionGrants>({});
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<Submission | null>(null);
+  const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
   const [busy, setBusy] = useState(false);
   const [version, setVersion] = useState(0);
 
@@ -69,16 +68,23 @@ export function PermissionsPage() {
 
   const submit = async () => {
     if (!role) return;
-    if (reason.trim().length < minReason) return setError(`Give a reason of at least ${minReason} characters.`);
+    if (reason.trim().length < minReason) return setOutcome({ ok: false, message: `Give a reason of at least ${minReason} characters.` });
     setBusy(true);
-    setError(null);
     try {
       const r = await identityCall<Submission>(`/identity/roles/${encodeURIComponent(role.id)}/permission-changes`, {
         method: "POST",
         body: JSON.stringify({ grant: diff.grant, revoke: diff.revoke, reason: reason.trim() }),
       });
-      setResult(r);
+      setOutcome({
+        ok: true,
+        applied: r.applied,
+        operationId: r.operationId,
+        message: r.applied
+          ? `${role.name}: ${diff.grant.length} granted, ${diff.revoke.length} revoked. People with this role see the change on their next page or when they return to the app.`
+          : "A second person approves the change in Operations before it applies.",
+      });
       setReason("");
+      if (r.applied) void refreshOwnAccess();
       if (r.applied) {
         // The roles list is a read model updated a moment later; keep the saved grants instead of re-reading too early.
         const saved = current[role.id] ?? [];
@@ -89,7 +95,7 @@ export function PermissionsPage() {
         setVersion((v) => v + 1);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setOutcome(failed(e));
     } finally {
       setBusy(false);
     }
@@ -104,16 +110,7 @@ export function PermissionsPage() {
       <Stack gap="large">
         {!backendSsoEnabled ? <Alert tone="info">Permissions are managed in the backend — configure NEXT_PUBLIC_API_BASE_URL.</Alert> : null}
         {error ? <Alert tone="danger">{error}</Alert> : null}
-        {result ? (
-          <Alert tone="success" title={result.applied ? "Saved" : "Sent for approval"}>
-            {result.applied ? "The permission change is saved. People with this role see it at their next page load." : "A second person approves the change in Operations. "}
-            {!result.applied ? (
-              <TextLink href={operationHref(result.operationId)} as={Link}>
-                Track request {result.operationId}
-              </TextLink>
-            ) : null}
-          </Alert>
-        ) : null}
+        <SaveOutcomeModal outcome={outcome} onClose={() => setOutcome(null)} />
         <Card>
           <CardContent className="flex flex-col gap-4 pt-6">
             <Field label="Role" htmlFor="perm-role">
@@ -124,7 +121,7 @@ export function PermissionsPage() {
                 onChange={(e) => {
                   setRoleId(e.target.value);
                   setGrants({});
-                  setResult(null);
+                  setOutcome(null);
                 }}
               />
             </Field>

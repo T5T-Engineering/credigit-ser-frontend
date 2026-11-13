@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { Alert, Badge, Button, Card, CardContent, Field, Input, PermissionMatrix, Select, Stack, Text, TextLink, Textarea, diffGrants, type PermissionDefinition, type PermissionGrants } from "@credigit/web-ui";
+import { Alert, Badge, Button, Card, CardContent, Field, Input, PermissionMatrix, Select, Stack, Text, Textarea, diffGrants, type PermissionDefinition, type PermissionGrants } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { identityCall } from "@/lib/auth/backend-identity";
 import { backendSsoEnabled } from "@/lib/auth/backend-sso";
@@ -10,7 +9,7 @@ import { useSession } from "@/lib/auth/session";
 import { dateTime } from "@/lib/format";
 import { useRule } from "@/lib/platform/rules";
 import { useDirectoryUsers } from "./directory";
-import { operationHref } from "./operation-ui";
+import { failed, refreshOwnAccess, SaveOutcomeModal, type SaveOutcome } from "./save-outcome";
 import { useAppliesOnSave } from "./workflow-mode";
 
 type CatalogueDto = { protectedAdministratorPermissions: string[]; permissions: Array<PermissionDefinition & { area: string }> };
@@ -46,7 +45,7 @@ export function GroupsPage() {
   const [until, setUntil] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<Submission | null>(null);
+  const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
   const [busy, setBusy] = useState(false);
   const [version, setVersion] = useState(0);
 
@@ -78,17 +77,18 @@ export function GroupsPage() {
   // Membership expiry is judged at page load (re-evaluated on reload).
   const [now] = useState(() => Date.now());
 
-  const send = async (path: string, body: unknown) => {
-    if (reason.trim().length < minReason) return setError(`Give a reason of at least ${minReason} characters.`);
+  const send = async (path: string, body: unknown, done: string) => {
+    if (reason.trim().length < minReason) return setOutcome({ ok: false, message: `Give a reason of at least ${minReason} characters.` });
     setBusy(true);
-    setError(null);
     try {
-      setResult(await identityCall<Submission>(path, { method: "POST", body: JSON.stringify({ ...(body as object), reason: reason.trim() }) }));
+      const r = await identityCall<Submission>(path, { method: "POST", body: JSON.stringify({ ...(body as object), reason: reason.trim() }) });
+      setOutcome({ ok: true, applied: r.applied, operationId: r.operationId, message: r.applied ? done : "A second person approves the change in Operations before it applies." });
       setGrants({});
       setReason("");
       setVersion((v) => v + 1);
+      if (r.applied) void refreshOwnAccess();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setOutcome(failed(e));
     } finally {
       setBusy(false);
     }
@@ -97,7 +97,7 @@ export function GroupsPage() {
   const select = (id: string) => {
     setSelected(id);
     setGrants({});
-    setResult(null);
+    setOutcome(null);
     setError(null);
   };
 
@@ -106,16 +106,14 @@ export function GroupsPage() {
       <Stack gap="large">
         {!backendSsoEnabled ? <Alert tone="info">Permission groups are managed in the backend — configure NEXT_PUBLIC_API_BASE_URL.</Alert> : null}
         {error ? <Alert tone="danger">{error}</Alert> : null}
-        {result ? (
-          <Alert tone="success" title={result.applied ? "Saved" : "Sent for approval"}>
-            {result.applied ? "The change is saved. " : "A second person approves the change in Operations. "}
-            {!result.applied ? (
-              <TextLink href={operationHref(result.operationId)} as={Link}>
-                Track request {result.operationId}
-              </TextLink>
-            ) : null}
-          </Alert>
-        ) : null}
+        <SaveOutcomeModal
+          outcome={outcome}
+          onClose={() => {
+            setOutcome(null);
+            // Re-read once more: the groups list is a read model updated a moment after a saved change (TD-954).
+            setVersion((v) => v + 1);
+          }}
+        />
         <Card>
           <CardContent className="flex flex-col gap-4 pt-6">
             <Field label="Group" htmlFor="group-select">
@@ -167,7 +165,7 @@ export function GroupsPage() {
                           </Text>
                         </span>
                         {has(permissions, "identity.groups.change-members") ? (
-                          <Button size="small" variant="tertiary" disabled={busy} onClick={() => void send(`/identity/groups/${encodeURIComponent(group.id)}/members/${encodeURIComponent(m.userId)}/removal`, {})}>
+                          <Button size="small" variant="tertiary" disabled={busy} onClick={() => void send(`/identity/groups/${encodeURIComponent(group.id)}/members/${encodeURIComponent(m.userId)}/removal`, {}, `${m.userName} was removed from ${group.name}.`)}>
                             {savesMembers ? "Remove" : "Request removal"}
                           </Button>
                         ) : null}
@@ -192,7 +190,7 @@ export function GroupsPage() {
                   <Button
                     variant="secondary"
                     disabled={!memberId || busy}
-                    onClick={() => void send(`/identity/groups/${encodeURIComponent(group.id)}/members`, { userId: memberId, expiresAt: until ? new Date(`${until}T23:59:59`).toISOString() : null })}
+                    onClick={() => void send(`/identity/groups/${encodeURIComponent(group.id)}/members`, { userId: memberId, expiresAt: until ? new Date(`${until}T23:59:59`).toISOString() : null }, `${users.find((u) => u.id === memberId)?.name ?? "The user"} was added to ${group.name}. They get its permissions on their next page or when they return to the app.`)}
                   >
                     {savesMembers ? "Add member" : "Request membership"}
                   </Button>
@@ -222,16 +220,16 @@ export function GroupsPage() {
             </Field>
             <div className="flex flex-wrap gap-2">
               {selected === NEW ? (
-                <Button disabled={!name.trim() || diff.grant.length === 0 || busy} loading={busy} onClick={() => void send("/identity/groups", { name: name.trim(), description: description.trim(), permissions: diff.grant })}>
+                <Button disabled={!name.trim() || diff.grant.length === 0 || busy} loading={busy} onClick={() => void send("/identity/groups", { name: name.trim(), description: description.trim(), permissions: diff.grant }, `The group ${name.trim()} was created.`)}>
                   {savesChanges ? "Create group" : "Request new group"}
                 </Button>
               ) : group ? (
                 <>
-                  <Button disabled={diff.grant.length + diff.revoke.length === 0 || busy} loading={busy} onClick={() => void send(`/identity/groups/${encodeURIComponent(group.id)}/permission-changes`, { grant: diff.grant, revoke: diff.revoke })}>
+                  <Button disabled={diff.grant.length + diff.revoke.length === 0 || busy} loading={busy} onClick={() => void send(`/identity/groups/${encodeURIComponent(group.id)}/permission-changes`, { grant: diff.grant, revoke: diff.revoke }, `${group.name}: ${diff.grant.length} granted, ${diff.revoke.length} revoked. Members see it on their next page or when they return to the app.`)}>
                     {savesChanges ? "Save" : "Request permission change"} ({diff.grant.length} + / {diff.revoke.length} −)
                   </Button>
                   {has(permissions, "identity.groups.delete") ? (
-                    <Button variant="danger" disabled={busy} onClick={() => void send(`/identity/groups/${encodeURIComponent(group.id)}/deletion`, {})}>
+                    <Button variant="danger" disabled={busy} onClick={() => void send(`/identity/groups/${encodeURIComponent(group.id)}/deletion`, {}, `The group ${group.name} was deleted.`)}>
                       {savesChanges ? "Delete group" : "Request deletion"}
                     </Button>
                   ) : null}
