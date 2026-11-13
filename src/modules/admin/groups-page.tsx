@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Badge, Button, Card, CardContent, Field, Input, PermissionMatrix, Select, Stack, SubmitButton, Text, Textarea, diffGrants, type PermissionDefinition, type PermissionGrants } from "@credigit/web-ui";
+import { Alert, Badge, Button, Card, CardContent, ConfirmDialog, Field, Input, PermissionMatrix, Select, Stack, SubmitButton, Text, Textarea, diffGrants, type PermissionDefinition, type PermissionGrants } from "@credigit/web-ui";
 import { ModulePage } from "@/components/module-page";
 import { identityCall } from "@/lib/auth/backend-identity";
 import { backendSsoEnabled } from "@/lib/auth/backend-sso";
@@ -48,6 +48,8 @@ export function GroupsPage() {
   const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
   const [busy, setBusy] = useState(false);
   const [version, setVersion] = useState(0);
+  // Delete group / add or remove a member: confirmed in a dialog that asks for its own reason.
+  const [confirm, setConfirm] = useState<{ title: string; description: string; label: string; danger?: boolean; path: string; body: unknown; done: string } | null>(null);
 
   useEffect(() => {
     if (!backendSsoEnabled) return;
@@ -77,14 +79,17 @@ export function GroupsPage() {
   // Membership expiry is judged at page load (re-evaluated on reload).
   const [now] = useState(() => Date.now());
 
-  const send = async (path: string, body: unknown, done: string) => {
-    if (reason.trim().length < minReason) return setOutcome({ ok: false, message: `Give a reason of at least ${minReason} characters.` });
+  const send = async (path: string, body: unknown, done: string, why: string = reason) => {
+    if (why.trim().length < minReason) return setOutcome({ ok: false, message: `Give a reason of at least ${minReason} characters.` });
     setBusy(true);
     try {
-      const r = await identityCall<Submission>(path, { method: "POST", body: JSON.stringify({ ...(body as object), reason: reason.trim() }) });
+      const r = await identityCall<Submission>(path, { method: "POST", body: JSON.stringify({ ...(body as object), reason: why.trim() }) });
       setOutcome({ ok: true, applied: r.applied, operationId: r.operationId, message: r.applied ? done : "A second person approves the change in Operations before it applies." });
-      setGrants({});
-      setReason("");
+      // Dialog-confirmed actions (own reason) keep unsaved permission edits and the page reason as they are.
+      if (why === reason) {
+        setGrants({});
+        setReason("");
+      }
       setVersion((v) => v + 1);
       if (r.applied) void refreshOwnAccess();
     } catch (e) {
@@ -165,7 +170,22 @@ export function GroupsPage() {
                           </Text>
                         </span>
                         {has(permissions, "identity.groups.change-members") ? (
-                          <Button size="small" variant="tertiary" disabled={busy} onClick={() => void send(`/identity/groups/${encodeURIComponent(group.id)}/members/${encodeURIComponent(m.userId)}/removal`, {}, `${m.userName} was removed from ${group.name}.`)}>
+                          <Button
+                            size="small"
+                            variant="tertiary"
+                            disabled={busy}
+                            onClick={() =>
+                              setConfirm({
+                                title: `Remove ${m.userName} from ${group.name}?`,
+                                description: `${m.userName} loses this group's permissions${savesMembers ? "" : " once a second person approves in Operations"}. Their role's permissions are unchanged.`,
+                                label: savesMembers ? "Remove" : "Request removal",
+                                danger: true,
+                                path: `/identity/groups/${encodeURIComponent(group.id)}/members/${encodeURIComponent(m.userId)}/removal`,
+                                body: {},
+                                done: `${m.userName} was removed from ${group.name}.`,
+                              })
+                            }
+                          >
                             {savesMembers ? "Remove" : "Request removal"}
                           </Button>
                         ) : null}
@@ -190,7 +210,17 @@ export function GroupsPage() {
                   <Button
                     variant="secondary"
                     disabled={!memberId || busy}
-                    onClick={() => void send(`/identity/groups/${encodeURIComponent(group.id)}/members`, { userId: memberId, expiresAt: until ? new Date(`${until}T23:59:59`).toISOString() : null }, `${users.find((u) => u.id === memberId)?.name ?? "The user"} was added to ${group.name}. They get its permissions on their next page or when they return to the app.`)}
+                    onClick={() => {
+                      const who = users.find((u) => u.id === memberId)?.name ?? "The user";
+                      setConfirm({
+                        title: `Add ${who} to ${group.name}?`,
+                        description: `${who} gets this group's permissions on top of their role${until ? ` until ${until}` : " with no end date"}${savesMembers ? "" : ", once a second person approves in Operations"}.`,
+                        label: savesMembers ? "Add member" : "Request membership",
+                        path: `/identity/groups/${encodeURIComponent(group.id)}/members`,
+                        body: { userId: memberId, expiresAt: until ? new Date(`${until}T23:59:59`).toISOString() : null },
+                        done: `${who} was added to ${group.name}. They get its permissions on their next page or when they return to the app.`,
+                      });
+                    }}
                   >
                     {savesMembers ? "Add member" : "Request membership"}
                   </Button>
@@ -229,7 +259,21 @@ export function GroupsPage() {
                     {savesChanges ? "Save" : "Request permission change"} ({diff.grant.length} + / {diff.revoke.length} −)
                   </SubmitButton>
                   {has(permissions, "identity.groups.delete") ? (
-                    <Button variant="danger" disabled={busy} onClick={() => void send(`/identity/groups/${encodeURIComponent(group.id)}/deletion`, {}, `The group ${group.name} was deleted.`)}>
+                    <Button
+                      variant="danger"
+                      disabled={busy}
+                      onClick={() =>
+                        setConfirm({
+                          title: `Delete the group ${group.name}?`,
+                          description: `Its ${group.members.length} member${group.members.length === 1 ? "" : "s"} lose the group's permissions${savesChanges ? "" : " once a second person approves in Operations"}. Their roles are unchanged.`,
+                          label: savesChanges ? "Delete group" : "Request deletion",
+                          danger: true,
+                          path: `/identity/groups/${encodeURIComponent(group.id)}/deletion`,
+                          body: {},
+                          done: `The group ${group.name} was deleted.`,
+                        })
+                      }
+                    >
                       {savesChanges ? "Delete group" : "Request deletion"}
                     </Button>
                   ) : null}
@@ -239,6 +283,20 @@ export function GroupsPage() {
           </CardContent>
         </Card>
       </Stack>
+      <ConfirmDialog
+        open={confirm !== null}
+        onOpenChange={(open) => !open && setConfirm(null)}
+        title={confirm?.title ?? ""}
+        description={confirm?.description}
+        tone={confirm?.danger ? "danger" : "default"}
+        confirmLabel={confirm?.label}
+        reason="required"
+        minReasonLength={minReason}
+        reasonDescription={savesChanges && savesMembers ? "Kept in the audit log." : "Shown to approvers and kept in the audit log."}
+        onConfirm={async (why) => {
+          if (confirm) await send(confirm.path, confirm.body, confirm.done, why);
+        }}
+      />
     </ModulePage>
   );
 }
