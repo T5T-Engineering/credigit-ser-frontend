@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
   DataTable,
+  SubmitButton,
   type DataTableColumn,
   DescriptionList,
   Drawer,
@@ -25,8 +26,8 @@ import {
   Text,
   Textarea,
   Input,
-  useToast,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { date, dateTime } from "@/lib/format";
@@ -59,7 +60,7 @@ export function Ifrs9ModelsPage() {
   const canEdit = useCan("ifrs9", "edit");
   const actor = useActorName();
   const audit = useAuditLog();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const submitOperation = useSubmitOperation();
   const interval = useRule<number>("ifrs9.model.reviewIntervalMonths");
   const instances = useOperationsStore((s) => s.instances);
@@ -314,7 +315,7 @@ export function Ifrs9ModelsPage() {
         footer={
           open && canSubmit(open) ? (
             <Stack direction="horizontal" gap="small" wrap>
-              <Button onClick={() => startSubmit(open)}>Submit for validation &amp; approval</Button>
+              <SubmitButton onClick={() => startSubmit(open)}>Submit for validation &amp; approval</SubmitButton>
             </Stack>
           ) : undefined
         }
@@ -370,9 +371,9 @@ export function Ifrs9ModelsPage() {
             <Button variant="tertiary" onClick={() => setSubmitFor(null)}>
               Cancel
             </Button>
-            <Button onClick={() => void confirm()} disabled={change.trim().length < 5}>
+            <SubmitButton onClick={() => void confirm()} disabled={change.trim().length < 5}>
               Submit to Operations
-            </Button>
+            </SubmitButton>
           </Stack>
         }
       >

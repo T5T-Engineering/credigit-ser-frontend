@@ -19,6 +19,7 @@ import {
   Textarea,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useRole } from "@/lib/auth/session";
 import { useApplications, useLookups } from "@/lib/data/hooks";
@@ -199,11 +200,7 @@ export function LegalReviewPage() {
   return (
     <ModulePage module="collateral" description="Legal workflow — collateral search at origination (in parallel with BDM review), genuineness of security documents, vaulting and legal sufficiency sign-off.">
       <Stack gap="large">
-        {message && (
-          <Alert tone={message.tone} title={message.tone === "danger" ? "Not completed" : "Submitted"}>
-            {message.text}
-          </Alert>
-        )}
+        <OutcomePopup value={message} map={outcomeCopy.toneText({ success: "Submitted", danger: "Not completed" })} />
         {!can.legal && (
           <Alert tone="info" title="View only">
             Legal actions are performed by the Legal Officer. Your role can view the queue.

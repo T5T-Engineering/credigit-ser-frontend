@@ -21,16 +21,17 @@ import {
   Input,
   KeyValueEditor,
   Stack,
+  SubmitButton,
   Tabs,
   TemplateVariableList,
   Text,
   Textarea,
   fromKeyValuePairs,
   toKeyValuePairs,
-  useToast,
   type DataTableColumn,
   type KeyValuePair,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { useCan, useSession } from "@/lib/auth/session";
 import { useDb } from "@/lib/data/store";
@@ -106,7 +107,7 @@ function TemplateDrawer({ id, onClose }: { id: string; onClose: () => void }) {
   const base = baseTemplate(id);
   const template = base ? { ...base, ...override } : undefined;
   const { actor } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const canEdit = useCan("operations", "edit");
   const testRoles = useRule<string[]>("operations.testSendRoles");
   const minComment = useRule<number>("operations.minCommentLength");
@@ -233,9 +234,9 @@ function TemplateDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                   >
                     Discard edits
                   </Button>
-                  <Button loading={busy} disabled={!dirty || !subject.trim() || !inApp.trim() || reason.trim().length < minComment} onClick={submitChange}>
+                  <SubmitButton loading={busy} disabled={!dirty || !subject.trim() || !inApp.trim() || reason.trim().length < minComment} onClick={submitChange}>
                     Submit for approval
-                  </Button>
+                  </SubmitButton>
                 </Stack>
               </Stack>
             </CardContent>

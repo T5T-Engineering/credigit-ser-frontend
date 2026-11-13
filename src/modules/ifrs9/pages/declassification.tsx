@@ -22,8 +22,8 @@ import {
   StatCard,
   StatusBadge,
   Text,
-  useToast,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { newId } from "@/lib/data/store";
 import { useCan } from "@/lib/auth/session";
@@ -49,7 +49,7 @@ export function DeclassificationPage() {
   const canEdit = useCan("ifrs9", "edit");
   const actor = useActorName();
   const audit = useAuditLog();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const submitOperation = useSubmitOperation();
   const params = useMemo(() => cureParams(), [rules]); // eslint-disable-line react-hooks/exhaustive-deps
   const decls = useIfrs9((s) => s.declassifications);

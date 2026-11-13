@@ -23,8 +23,8 @@ import {
   StatCard,
   Switch,
   Text,
-  useToast,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import Link from "next/link";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
@@ -56,7 +56,7 @@ export function StressTestingPage() {
   const { bs, liq, rows, rules } = useMarketBase();
   const canEdit = useCan("market-risk", "edit");
   const { actor } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const storedDraft = useMarketRisk((s) => s.draft);
   const setDraft = useMarketRisk((s) => s.setDraft);
   const allRuns = useMarketRisk((s) => s.runs);

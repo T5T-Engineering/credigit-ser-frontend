@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, DataTable, Field, Grid, Modal, Select, Stack, StatCard, StatusBadge, type DataTableColumn } from "@credigit/web-ui";
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, DataTable, Field, Grid, Modal, Select, Stack, StatCard, StatusBadge, SubmitButton, type DataTableColumn } from "@credigit/web-ui";
 import { useCan } from "@/lib/auth/session";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { date, money } from "@/lib/format";
@@ -106,7 +106,7 @@ export function RegulatorySection() {
         footer={
           <div className="flex justify-end gap-2">
             <Button variant="tertiary" onClick={() => setLinking(null)}>Cancel</Button>
-            <Button
+            <SubmitButton
               disabled={!policyId}
               onClick={() => {
                 updateCircular(linking!.id, { status: policyId === "none" ? "No action required" : "Linked to policy", policyId: policyId === "none" ? undefined : policyId });
@@ -116,7 +116,7 @@ export function RegulatorySection() {
               }}
             >
               Save
-            </Button>
+            </SubmitButton>
           </div>
         }
       >

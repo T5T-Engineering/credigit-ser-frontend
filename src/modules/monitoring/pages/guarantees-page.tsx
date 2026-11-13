@@ -15,6 +15,7 @@ import {
   Stack,
   StatCard,
   StatusBadge,
+  SubmitButton,
   Tabs,
   Text,
   TextLink,
@@ -22,6 +23,7 @@ import {
   type DataTableColumn,
   type Tone,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { useFacilities, useLookups, useObligors } from "@/lib/data/hooks";
@@ -198,18 +200,7 @@ export function GuaranteesPage() {
   return (
     <ModulePage module="monitoring" description="Advance payment guarantees, temporary overdrafts and collateral monitoring.">
       <Stack gap="large">
-        {notice && (
-          <Alert
-            tone="success"
-            action={
-              <Button size="small" variant="text" onClick={() => setNotice(null)}>
-                Dismiss
-              </Button>
-            }
-          >
-            {notice}
-          </Alert>
-        )}
+        <OutcomePopup value={notice} map={outcomeCopy.text("Done")} />
         <Grid columns={{ base: 2, lg: 4 }} gap="medium">
           <StatCard label="Live APG exposure" value={moneyShort(apgExposure)} hint={`${apgs.length} guarantees tracked`} />
           <StatCard label={`APGs expiring ≤ ${apgWarnDays} days`} value={number(apgs.filter((a) => a.status === "Expiring soon").length)} tone="warning" />
@@ -307,9 +298,9 @@ function StatusActionModal({ target, onClose, onDone }: { target: ActionTarget; 
           <Button variant="tertiary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={note.trim().length < minNote || !!pending}>
+          <SubmitButton onClick={save} disabled={note.trim().length < minNote || !!pending}>
             {target.status === "Released" ? "Submit for approval" : "Confirm"}
-          </Button>
+          </SubmitButton>
         </>
       }
     >

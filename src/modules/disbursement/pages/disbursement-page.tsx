@@ -37,6 +37,7 @@ import {
   type DataTableColumn,
   type DecisionSubmission,
 } from "@credigit/web-ui";
+import { OutcomePopup } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { useApplications, useObligors } from "@/lib/data/hooks";
@@ -448,11 +449,7 @@ function Workspace({ row, requests, onClose }: { row: FacilityRow; requests: Dis
         description={`Facility ${facility.id}${app ? ` · application ${app.id}` : ""}`}
       >
         <Stack gap="large">
-          {done ? (
-            <Alert tone={done.ok ? "success" : "danger"} title={done.ok ? "Done" : "Not done"}>
-              {done.text}
-            </Alert>
-          ) : null}
+          <OutcomePopup value={done} map={(d) => (d.ok ? { title: "Done", description: d.text } : { tone: "danger", title: "Not done", description: d.text })} />
           {pendingOp ? (
             <PendingOperationNotice instance={pendingOp} title="Awaiting Checker authorisation">
               {pendingOp.requestedBy.id === userId ? "You prepared it, so a different Checker must decide. " : ""}

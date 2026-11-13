@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Alert, Badge, Button, Card, CardContent, Field, Input, Select, Stack, Text, TextLink, Textarea } from "@credigit/web-ui";
+import { Alert, Badge, Button, Card, CardContent, Field, Input, Select, Stack, SubmitButton, Text, TextLink, Textarea } from "@credigit/web-ui";
+import { OutcomePopup } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { identityCall } from "@/lib/auth/backend-identity";
 import { backendSsoEnabled } from "@/lib/auth/backend-sso";
@@ -86,16 +87,7 @@ export function EntraMappingPage() {
       <Stack gap="large">
         {!backendSsoEnabled ? <Alert tone="info">The Entra role mapping is managed in the backend — configure NEXT_PUBLIC_API_BASE_URL.</Alert> : null}
         {error ? <Alert tone="danger">{error}</Alert> : null}
-        {result ? (
-          <Alert tone="success" title={result.applied ? "Applied" : "Sent for approval"}>
-            {result.applied ? "The change is applied. " : "A second person approves the change in Operations. "}
-            {!result.applied ? (
-              <TextLink href={operationHref(result.operationId)} as={Link}>
-                Track request {result.operationId}
-              </TextLink>
-            ) : null}
-          </Alert>
-        ) : null}
+        <OutcomePopup value={result} map={(r) => (r.applied ? { title: "Applied", description: "The change is applied." } : { tone: "info", title: "Sent for approval", description: "A second person approves the change in Operations.", action: <TextLink href={operationHref(r.operationId)} as={Link}>Track request {r.operationId}</TextLink> })} />
 
         <Card>
           <CardContent className="flex flex-col gap-3 pt-6">
@@ -174,9 +166,9 @@ export function EntraMappingPage() {
                 <Textarea id="map-reason" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
               </Field>
               <div className="flex flex-wrap gap-2">
-                <Button disabled={!value.trim() || !roleId || busy} loading={busy} onClick={() => void send("/identity/entra-mappings", { kind, value: value.trim(), label: label.trim() || null, roleId })}>
+                <SubmitButton disabled={!value.trim() || !roleId || busy} loading={busy} onClick={() => void send("/identity/entra-mappings", { kind, value: value.trim(), label: label.trim() || null, roleId })}>
                   Request mapping
-                </Button>
+                </SubmitButton>
               </div>
             </CardContent>
           </Card>

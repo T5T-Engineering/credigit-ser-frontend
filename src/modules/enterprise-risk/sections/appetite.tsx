@@ -24,6 +24,7 @@ import {
   RagIndicator,
   Sparkline,
   Stack,
+  SubmitButton,
   Text,
   Textarea,
   type DataTableColumn,
@@ -166,9 +167,9 @@ export function AppetiteSection() {
                 Propose limit change
               </Button>
               {selected.rag !== "green" && !escalations[selected.id] && (
-                <Button iconBefore={<ArrowUpRight aria-hidden />} onClick={() => void escalate(selected)}>
+                <SubmitButton iconBefore={<ArrowUpRight aria-hidden />} onClick={() => void escalate(selected)}>
                   Escalate to {roleNames(escalationRoles(selected))}
-                </Button>
+                </SubmitButton>
               )}
             </div>
           ) : undefined
@@ -242,7 +243,7 @@ function RasChangeModal({ metric, onClose, onSubmit }: { metric: Row | null; onC
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="tertiary" onClick={() => { reset(); onClose(); }}>Cancel</Button>
-          <Button onClick={() => { setTouched(true); if (error || reasonError) return; void onSubmit(l, t, reason.trim()); reset(); }}>Submit for approval</Button>
+          <SubmitButton onClick={() => { setTouched(true); if (error || reasonError) return; void onSubmit(l, t, reason.trim()); reset(); }}>Submit for approval</SubmitButton>
         </div>
       }
     >

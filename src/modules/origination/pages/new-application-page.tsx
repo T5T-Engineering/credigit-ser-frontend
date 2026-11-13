@@ -28,6 +28,7 @@ import {
   Select,
   Stack,
   StatusBadge,
+  SubmitButton,
   Table,
   TableBody,
   TableCell,
@@ -36,10 +37,10 @@ import {
   TableRow,
   Text,
   Textarea,
-  useToast,
   Wizard,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { useApplications, useCollateral, useDbActions, useFacilities, useObligors, useSectors, useUsers } from "@/lib/data/hooks";
@@ -110,7 +111,7 @@ export function NewApplicationPage() {
 
 function NewApplicationWizard({ meId }: { meId: string }) {
   const router = useRouter();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const db = useDbActions();
   const patchExtra = useOriginationStore((s) => s.patch);
   const { user: me, roleId } = useMe();
@@ -425,7 +426,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
           <Stack gap="medium">
             <FileUpload accept={getRule<string>("origination.docs.acceptedTypes")} multiple maxSizeMb={getRule<number>("origination.docs.maxUploadMb")} files={picked} onFilesChange={setPicked} />
             <Stack direction="horizontal" gap="small" wrap>
-              <Button
+              <SubmitButton
                 disabled={!picked.length}
                 onClick={() => {
                   addFiles(picked);
@@ -433,7 +434,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
                 }}
               >
                 Upload {picked.length ? `${picked.length} file(s)` : ""}
-              </Button>
+              </SubmitButton>
               <Button variant="tertiary" iconBefore={<FileStack aria-hidden />} onClick={addSamples}>
                 Use sample customer pack
               </Button>

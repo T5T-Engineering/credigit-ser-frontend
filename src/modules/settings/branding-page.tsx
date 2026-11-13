@@ -23,6 +23,7 @@ import {
   Stack,
   StatCard,
   StatusBadge,
+  SubmitButton,
   Table,
   TableBody,
   TableCell,
@@ -154,9 +155,9 @@ function Branding() {
                   Discard preview
                 </Button>
                 {canRequest ? (
-                  <Button size="small" iconBefore={<Send aria-hidden className="size-4" />} disabled={Boolean(pending)} onClick={() => setSubmitOpen(true)}>
+                  <SubmitButton size="small" iconBefore={<Send aria-hidden className="size-4" />} disabled={Boolean(pending)} onClick={() => setSubmitOpen(true)}>
                     Request as tenant brand
-                  </Button>
+                  </SubmitButton>
                 ) : null}
               </span>
             </div>
@@ -231,9 +232,9 @@ function SubmitBrandModal({ brand, onClose }: { brand: BrandConfig; onClose: () 
             <Button variant="tertiary" onClick={onClose}>
               Cancel
             </Button>
-            <Button loading={busy} onClick={() => void submit()}>
+            <SubmitButton loading={busy} onClick={() => void submit()}>
               Submit for approval
-            </Button>
+            </SubmitButton>
           </>
         )
       }

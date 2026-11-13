@@ -27,6 +27,7 @@ import {
   Stack,
   StatusBadge,
   Steps,
+  SubmitButton,
   Table,
   TableBody,
   TableCell,
@@ -39,6 +40,7 @@ import {
   Textarea,
   type DocumentItem,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useRole } from "@/lib/auth/session";
 import { useAudit, useDocuments, useFacilities, useLookups } from "@/lib/data/hooks";
@@ -203,11 +205,7 @@ export function CollateralItemPage() {
           ]}
         />
 
-        {message && (
-          <Alert tone={message.tone} title={message.tone === "danger" ? "Not completed" : "Done"}>
-            {message.text}
-          </Alert>
-        )}
+        <OutcomePopup value={message} map={outcomeCopy.toneText({ success: "Done", danger: "Not completed" })} />
         {pending && pendingType !== "collateral.valuation.verify" && <PendingApproval subjectType="Collateral" subjectId={c.id} />}
 
         {!c.eligible && (
@@ -547,7 +545,7 @@ export function CollateralItemPage() {
                           onFilesChange={setFiles}
                         />
                         <Stack direction="horizontal" gap="small">
-                          <Button
+                          <SubmitButton
                             disabled={!files.length}
                             onClick={() => {
                               uploadDocuments(c, files);
@@ -555,7 +553,7 @@ export function CollateralItemPage() {
                             }}
                           >
                             Upload {files.length ? `(${files.length})` : ""}
-                          </Button>
+                          </SubmitButton>
                           <Text variant="caption" tone="subtle" className="self-center">
                             Every re-upload is kept as a new version.
                           </Text>

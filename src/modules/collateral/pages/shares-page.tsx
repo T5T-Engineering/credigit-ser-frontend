@@ -21,6 +21,7 @@ import {
   Stack,
   StatCard,
   StatusBadge,
+  SubmitButton,
   Table,
   TableBody,
   TableCell,
@@ -32,6 +33,7 @@ import {
   Textarea,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useRole } from "@/lib/auth/session";
 import { useLookups } from "@/lib/data/hooks";
@@ -184,11 +186,7 @@ export function SharesPage() {
       }
     >
       <Stack gap="large">
-        {message && (
-          <Alert tone={message.tone} title={message.tone === "danger" ? "Not completed" : "Done"}>
-            {message.text}
-          </Alert>
-        )}
+        <OutcomePopup value={message} map={outcomeCopy.toneText({ success: "Done", danger: "Not completed" })} />
         <Alert tone="info" title={
             <>
               SEC / CSCS connector <PhaseBadge phase={2} className="ml-2 align-middle" />
@@ -317,9 +315,9 @@ export function SharesPage() {
               <Button variant="tertiary" onClick={() => (setReleaseFor(null), setEvidence(""))}>
                 Cancel
               </Button>
-              <Button onClick={release} disabled={evidence.trim().length < minText}>
+              <SubmitButton onClick={release} disabled={evidence.trim().length < minText}>
                 Submit for verification
-              </Button>
+              </SubmitButton>
             </>
           }
         >

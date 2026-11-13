@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
   DataTable,
+  SubmitButton,
   type DataTableColumn,
   Field,
   Grid,
@@ -31,8 +32,8 @@ import {
   Text,
   SegmentedControl,
   Textarea,
-  useToast,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import Link from "next/link";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
@@ -73,7 +74,7 @@ export function MarketRiskPage() {
   const { rows, capital, bs, rules } = useMarketBase();
   const canEdit = useCan("market-risk", "edit");
   const { actor } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const breaches = useMarketRisk((s) => s.breaches);
   const instances = useOperationsStore((s) => s.instances);
   const stopLossWarn = useRule<number>("market-risk.stopLossEarlyWarningPct") / 100;
@@ -635,9 +636,9 @@ export function MarketRiskPage() {
             <Button variant="tertiary" onClick={() => setClosing(null)}>
               Cancel
             </Button>
-            <Button onClick={close} disabled={note.trim().length < 5}>
+            <SubmitButton onClick={close} disabled={note.trim().length < 5}>
               Submit for approval
-            </Button>
+            </SubmitButton>
           </Stack>
         }
       >

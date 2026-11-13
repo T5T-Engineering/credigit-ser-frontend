@@ -23,6 +23,7 @@ import {
   Text,
   TextLink,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { number, pct } from "@/lib/format";
@@ -60,11 +61,7 @@ export function ConnectorsPage() {
   return (
     <ModulePage module="connectors" description="Health of the connectors feeding the Risk Data Spine through the staging / reconciliation layer — status, freshness, throughput, latency and errors. All telemetry here is simulated.">
       <Stack gap="large">
-        {notice && (
-          <Alert tone={notice.tone} action={<Button size="small" variant="tertiary" onClick={() => setNotice(null)}>Dismiss</Button>}>
-            {notice.text}
-          </Alert>
-        )}
+        <OutcomePopup value={notice} map={outcomeCopy.toneText({ success: "Done", danger: "Not done" })} />
         {problems.length > 0 && (
           <Alert tone={problems.some((p) => p.effectiveStatus === "Failed") ? "danger" : "warning"} title={`${problems.length} connector${problems.length > 1 ? "s need" : " needs"} attention`}>
             {problems.map((p) => `${p.name}: ${p.statusNote ?? p.effectiveStatus}`).join(" · ")}

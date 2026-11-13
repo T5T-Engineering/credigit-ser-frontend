@@ -6,7 +6,8 @@
  */
 import { useCallback } from "react";
 import { format, getQuarter } from "date-fns";
-import { useToast, type ChecklistItem } from "@credigit/web-ui";
+import { type ChecklistItem } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { publish } from "@/lib/platform/events";
 import { runHooks } from "@/lib/platform/hooks";
@@ -26,7 +27,7 @@ export const boardPeriod = () => `Q${getQuarter(DEMO_NOW)} ${format(DEMO_NOW, "y
 export function useExecutiveGovernance() {
   const actor = useActor();
   const { actor: me } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const submit = useSubmitOperation();
   const period = boardPeriod();
   const summaryKey = `exec-summary:${period}`;

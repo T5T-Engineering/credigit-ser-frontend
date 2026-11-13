@@ -27,10 +27,12 @@ import {
   Stack,
   StatCard,
   StatusBadge,
+  SubmitButton,
   Text,
   Textarea,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { newId } from "@/lib/data/store";
@@ -140,10 +142,10 @@ export function LossEventsPage() {
     <ModulePage
       module="operational-risk"
       description="Lagging loss-event register — operational losses and near misses with root cause, business line and monetary impact, checked continuously against the Operational Risk Loss Limit Framework."
-      actions={canEdit ? <Button iconBefore={<FilePlus2 aria-hidden />} onClick={() => setLogOpen(true)}>Log loss event</Button> : undefined}
+      actions={canEdit ? <SubmitButton iconBefore={<FilePlus2 aria-hidden />} onClick={() => setLogOpen(true)}>Log loss event</SubmitButton> : undefined}
     >
       <Stack gap="large">
-        {flash && <Alert tone={flash.tone} title={flash.title}>{flash.text}</Alert>}
+        <OutcomePopup value={flash} map={outcomeCopy.toneText({ success: "Done", danger: "Not done" })} />
         <SubmitOutcome result={outcome} />
         <Grid columns={{ base: 1, sm: 2, lg: 4 }} gap="medium">
           <StatCard label="Gross loss YTD" value={<span className="font-mono">{moneyShort(gross)}</span>} hint={`${ytd.filter((e) => !e.nearMiss).length} loss events · ${ytd.filter((e) => e.nearMiss).length} near misses`} icon={<Receipt aria-hidden />} />
@@ -371,7 +373,7 @@ function LogEventModal({ open, onOpenChange, onSubmit, singleEvent }: { open: bo
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="tertiary" onClick={close}>Cancel</Button>
-          <Button
+          <SubmitButton
             onClick={() => {
               setTouched(true);
               if (!valid) return;
@@ -398,7 +400,7 @@ function LogEventModal({ open, onOpenChange, onSubmit, singleEvent }: { open: bo
             }}
           >
             Log event
-          </Button>
+          </SubmitButton>
         </div>
       }
     >

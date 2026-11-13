@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
   DataTable,
+  SubmitButton,
   type DataTableColumn,
   DescriptionList,
   Field,
@@ -23,8 +24,8 @@ import {
   StatusBadge,
   Text,
   Textarea,
-  useToast,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { newId } from "@/lib/data/store";
 import { DEMO_NOW } from "@/lib/data/seed";
@@ -65,7 +66,7 @@ export function IcaapPage() {
   const canEdit = useCan("ifrs9", "edit");
   const audit = useAuditLog();
   const actor = useActorName();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const submitOperation = useSubmitOperation();
   const runs = useIfrs9((s) => s.stressRuns);
   const addRun = useIfrs9((s) => s.addStressRun);
@@ -404,7 +405,7 @@ export function IcaapPage() {
                     {proposing ? "Cancel changes" : "Propose scenario changes"}
                   </Button>
                 )}
-                <Button onClick={() => void runAll()}>Run stress test</Button>
+                <SubmitButton onClick={() => void runAll()}>Run stress test</SubmitButton>
               </Stack>
             )}
           </CardHeader>
@@ -424,9 +425,9 @@ export function IcaapPage() {
                       <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
                     </Field>
                     <div>
-                      <Button onClick={() => void submitScenarios()} disabled={!changes.length || reason.trim().length < 5}>
+                      <SubmitButton onClick={() => void submitScenarios()} disabled={!changes.length || reason.trim().length < 5}>
                         Submit for approval
-                      </Button>
+                      </SubmitButton>
                     </div>
                   </Stack>
                 </Card>
@@ -474,7 +475,7 @@ export function IcaapPage() {
               <CardTitle>ICAAP report sign-off</CardTitle>
               <CardDescription>Head of Risk review → CRO endorsement → Board approval, routed through Operations.</CardDescription>
             </Stack>
-            {canEdit && !pendingIcaap && <Button onClick={() => void submitIcaap()}>Submit ICAAP for sign-off</Button>}
+            {canEdit && !pendingIcaap && <SubmitButton onClick={() => void submitIcaap()}>Submit ICAAP for sign-off</SubmitButton>}
           </CardHeader>
           <CardContent>
             <Stack gap="medium">

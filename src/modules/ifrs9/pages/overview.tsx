@@ -23,8 +23,8 @@ import {
   TableRow,
   Text,
   WaterfallChart,
-  useToast,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { date, dateTime, money, pct } from "@/lib/format";
@@ -44,7 +44,7 @@ export function Ifrs9OverviewPage() {
   const { input, rows } = useEcl();
   const canEdit = useCan("ifrs9", "edit");
   const audit = useAuditLog();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const submitOperation = useSubmitOperation();
   const postings = useIfrs9((s) => s.postings);
   const [open, setOpen] = useState<EclRow | null>(null);

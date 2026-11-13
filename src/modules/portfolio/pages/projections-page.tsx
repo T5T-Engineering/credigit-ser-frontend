@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { AiInsightCard, Alert, AreaChart, Badge, ChipList, Chip, DataTable, Grid, PhaseBadge, SegmentedControl, Stack, StatusBadge, Text, useToast, type DataTableColumn } from "@credigit/web-ui";
+import { AiInsightCard, Alert, AreaChart, Badge, ChipList, Chip, DataTable, Grid, PhaseBadge, SegmentedControl, Stack, StatusBadge, Text, type DataTableColumn } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { publish } from "@/lib/platform/events";
@@ -29,7 +30,7 @@ export function ProjectionsPage() {
   const [scenario, setScenario] = useState<Scenario>("Base");
   const actor = useActor();
   const { actor: me } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const submit = useSubmitOperation();
   const canView = useCan("portfolio", "view");
   const key = `projection-commentary:${scenario}`;

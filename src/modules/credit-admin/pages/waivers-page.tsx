@@ -24,11 +24,13 @@ import {
   Stack,
   StatCard,
   StatusBadge,
+  SubmitButton,
   Text,
   Textarea,
   TextLink,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { DEMO_NOW } from "@/lib/data/seed";
@@ -210,11 +212,7 @@ function Waivers() {
           <StatCard label="Sanctions for breach" value={String(kpi.sanctions)} icon={<ShieldAlert aria-hidden />} tone="danger" hint="Feed the Operational Risk loss-event register" />
         </Grid>
 
-        {notice ? (
-          <Alert tone={notice.ok ? "success" : "danger"} title={notice.ok ? "Done" : "Not done"} action={<Button size="small" variant="text" onClick={() => setNotice(null)}>Dismiss</Button>}>
-            {notice.ok ? notice.message : notice.reason}
-          </Alert>
-        ) : null}
+        <OutcomePopup value={notice} map={outcomeCopy.okMessage()} />
 
         <Alert tone="info" title="Routing (Operations workflow)">
           A waiver or deferral is approved at the same tier that approved the original facility, or higher. Requests within Credit Administration&apos;s delegated tolerance — {toleranceNote()} — can be approved by Credit Administration. Sanctions for breach route to the escalation
@@ -334,11 +332,7 @@ function RequestDrawer({ row, isRequester, onClose }: { row: Row; isRequester: b
       }
     >
       <Stack gap="large">
-        {result ? (
-          <Alert tone={result.ok ? "success" : "danger"} title={result.ok ? "Done" : "Not done"}>
-            {result.ok ? result.message : result.reason}
-          </Alert>
-        ) : null}
+        <OutcomePopup value={result} map={outcomeCopy.okMessage()} />
         <DescriptionList
           columns={2}
           items={[
@@ -458,9 +452,9 @@ function NewRequestModal({ open, onOpenChange, defaultFacility, onCreated }: { o
           <Button variant="tertiary" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button loading={busy} onClick={() => void submit()}>
+          <SubmitButton loading={busy} onClick={() => void submit()}>
             Submit for approval
-          </Button>
+          </SubmitButton>
         </>
       }
     >

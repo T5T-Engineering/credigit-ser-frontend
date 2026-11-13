@@ -23,6 +23,7 @@ import {
   Textarea,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/auth/session";
 import { date } from "@/lib/format";
@@ -223,11 +224,7 @@ function ClauseDrawer({ clause, usage, canEdit, onClose }: { clause: Clause; usa
       }
     >
       <Stack gap="large">
-        {result ? (
-          <Alert tone={result.tone} title={result.tone === "success" ? "Submitted" : "Not submitted"}>
-            {result.text}
-          </Alert>
-        ) : null}
+        <OutcomePopup value={result} map={outcomeCopy.toneText({ success: "Submitted", danger: "Not submitted" })} />
         {pending ? <PendingOperationNotice instance={pending} title="Change awaiting approval" /> : null}
         <DescriptionList
           columns={2}

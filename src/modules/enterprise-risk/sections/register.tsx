@@ -6,6 +6,7 @@ import {
   Button,
   Field,
   Modal,
+  SubmitButton,
   Textarea,
   Card,
   CardContent,
@@ -64,7 +65,7 @@ function AcceptanceModal({ risk, onClose, onSubmit }: { risk: EnterpriseRisk | n
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="tertiary" onClick={close}>Cancel</Button>
-          <Button onClick={() => { setTouched(true); if (error || !risk) return; void onSubmit(risk, text.trim()); setText(""); setTouched(false); }}>Submit for approval</Button>
+          <SubmitButton onClick={() => { setTouched(true); if (error || !risk) return; void onSubmit(risk, text.trim()); setText(""); setTouched(false); }}>Submit for approval</SubmitButton>
         </div>
       }
     >
@@ -198,7 +199,7 @@ export function RegisterSection() {
           selected && canEdit ? (
             <div className="flex flex-wrap justify-end gap-2">
               {!selected.acceptedBy && <AcceptButton risk={selected} onClick={() => setAccepting(selected)} />}
-              <Button
+              <SubmitButton
                 onClick={() => {
                   updateRisk(selected.id, { lastReviewed: DEMO_NOW.toISOString() });
                   audit("Reviewed enterprise risk", "Enterprise risk", selected.id, `Last reviewed ${date(selected.lastReviewed)}`, `Reviewed ${date(DEMO_NOW)}`);
@@ -206,7 +207,7 @@ export function RegisterSection() {
                 }}
               >
                 Record review
-              </Button>
+              </SubmitButton>
             </div>
           ) : undefined
         }

@@ -17,6 +17,7 @@ import {
   Input,
   Modal,
   Stack,
+  SubmitButton,
   Tabs,
   Text,
   Textarea,
@@ -292,9 +293,9 @@ function SectorLimitsSection({ canEdit }: { canEdit: boolean }) {
         canEdit ? (
           <span className="flex items-center gap-2">
             <PendingBadge subjectType="SectorLimits" subjectId="sectors" />
-            <Button disabled={dirty.length === 0 || invalid || Boolean(pending)} onClick={() => { setResult(null); setConfirmOpen(true); }}>
+            <SubmitButton disabled={dirty.length === 0 || invalid || Boolean(pending)} onClick={() => { setResult(null); setConfirmOpen(true); }}>
               Request change {dirty.length ? `(${dirty.length})` : ""}
-            </Button>
+            </SubmitButton>
           </span>
         ) : null
       }
@@ -324,7 +325,7 @@ function SectorLimitsSection({ canEdit }: { canEdit: boolean }) {
               <Button variant="tertiary" onClick={() => setConfirmOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={() => void submit()}>Submit for approval</Button>
+              <SubmitButton onClick={() => void submit()}>Submit for approval</SubmitButton>
             </>
           )
         }

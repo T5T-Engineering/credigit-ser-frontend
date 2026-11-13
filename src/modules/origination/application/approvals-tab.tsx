@@ -19,9 +19,9 @@ import {
   Text,
   TextLink,
   WorkflowInstanceCard,
-  useToast,
   type DecisionAction,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { dateTime, money, moneyShort } from "@/lib/format";
 import { roleById } from "@/lib/rbac/roles";
 import { canDecide, currentStep, getDefinition, instanceSteps, useOperationsStore } from "@/lib/platform/operations";
@@ -40,7 +40,7 @@ const toEngine: Record<DecisionAction, "approve" | "reject" | "return"> = { appr
 export function ApprovalsTab({ c }: { c: AppCtx }) {
   const { app, users } = c;
   const { actor } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const [stepUpOpen, setStepUpOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const resolver = useRef<((ok: boolean) => void) | null>(null);

@@ -36,6 +36,7 @@ import {
   type ChecklistStatus,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { useCan } from "@/lib/auth/session";
 import { useAudit, useCollateral, useDocuments, useSectors, useUsers } from "@/lib/data/hooks";
 import { usePendingFor } from "@/lib/platform/operations";
@@ -137,11 +138,7 @@ function FacilityRecord() {
         }
       />
 
-      {result ? (
-        <Alert tone={result.ok ? "success" : "danger"} title={result.ok ? "Done" : "Not done"} action={<Button size="small" variant="text" onClick={() => setResult(null)}>Dismiss</Button>}>
-          {result.ok ? result.message : result.reason}
-        </Alert>
-      ) : null}
+      <OutcomePopup value={result} map={outcomeCopy.okMessage()} />
       {pendingRelease ? <PendingOperationNotice instance={pendingRelease} title="Release for disbursement awaiting confirmation" /> : null}
       {pending ? (
         row.released ? (

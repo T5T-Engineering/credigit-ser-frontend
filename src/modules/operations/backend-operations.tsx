@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CheckCheck } from "lucide-react";
 import { Alert, Badge, Button, Card, CardContent, DescriptionList, Field, Grid, Spinner, Stack, Text, Textarea, WorkflowInstanceCard } from "@credigit/web-ui";
+import { OutcomePopup } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { identityCall } from "@/lib/auth/backend-identity";
 import { backendSsoEnabled } from "@/lib/auth/backend-sso";
@@ -139,11 +140,7 @@ export function BackendOperationPage() {
     <ModulePage module="operations" title={op?.title ?? "Platform request"} description={op ? `${op.operationType} · ${op.id}` : id}>
       <Stack gap="large">
         {error ? <Alert tone="danger">{error}</Alert> : null}
-        {done ? (
-          <Alert tone="success" title={`Decision recorded — ${done}`}>
-            The request is updated; the change applies when the workflow completes.
-          </Alert>
-        ) : null}
+        <OutcomePopup value={done} map={(d) => ({ title: `Decision recorded — ${d}`, description: "The request is updated; the change applies when the workflow completes." })} />
         {!op ? (
           error ? null : <Spinner label="Loading the request" />
         ) : (

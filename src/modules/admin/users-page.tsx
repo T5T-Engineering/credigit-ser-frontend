@@ -23,6 +23,7 @@ import {
   Select,
   Stack,
   StatCard,
+  SubmitButton,
   Text,
   Textarea,
   type DataTableColumn,
@@ -181,9 +182,9 @@ function UsersView() {
       description="Named users only — no shared logins. MFA is enforced on every sign-in. Invitations, role changes and deactivations are approved by a second person in Operations."
       actions={
         canEdit ? (
-          <Button iconBefore={<UserPlus aria-hidden className="size-4" />} onClick={() => setInviteOpen(true)}>
+          <SubmitButton iconBefore={<UserPlus aria-hidden className="size-4" />} onClick={() => setInviteOpen(true)}>
             Invite user
-          </Button>
+          </SubmitButton>
         ) : null
       }
     >
@@ -285,9 +286,9 @@ function UserDetails({ user, canEdit, isSelf, onAction, onResetMfa }: { user: Us
                 Request reactivation
               </Button>
             ) : (
-              <Button variant="danger" disabled={Boolean(pending)} onClick={() => onAction({ kind: "deactivate", user })}>
+              <SubmitButton variant="danger" disabled={Boolean(pending)} onClick={() => onAction({ kind: "deactivate", user })}>
                 Request deactivation
-              </Button>
+              </SubmitButton>
             )}
             {directoryEnabled ? (
               user.mfaMethod === "authenticator" && !isSelf ? (
@@ -468,7 +469,7 @@ function InviteModal({ open, onOpenChange, existingEmails }: { open: boolean; on
             <Button variant="tertiary" onClick={close}>
               Cancel
             </Button>
-            <Button onClick={() => void submit()}>Request invitation</Button>
+            <SubmitButton onClick={() => void submit()}>Request invitation</SubmitButton>
           </>
         )
       }
