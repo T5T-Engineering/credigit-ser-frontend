@@ -105,7 +105,7 @@ Exported for other modules: `roleName`, `roleSecurity`, `roleIdleTimeoutMinutes`
 | ADM-FR-07 | `admin.roleName.*` + `roleName()` | — | Done |
 | ADM-FR-08 | `roles-page.tsx` (`rbac.limit.*`) | — | Done |
 | ADM-FR-09 | session rules + `app-frame.tsx` idle timer | session-timeout.spec | Partial (device binding / IP allow-list stored, not enforced) |
-| ADM-FR-10 | `roles-page.tsx`, `role.custom-change` | — | Partial (custom roles can't be assigned, TD-805) |
+| ADM-FR-10 | `roles-page.tsx`, `role.custom-change` | — | Partial — "Request clone" hidden (`CLONE_ROLES_ENABLED = false`) because custom roles can't be assigned (TD-805); existing custom roles can still be edited or deleted |
 | ADM-FR-11 | `parameters-page.tsx`, `rule-editor.tsx` | rule-change.spec | Done |
 | ADM-FR-12 | `admin.sector-limits.change` | — | Done |
 | ADM-FR-13 | `admin.product.maxTenorMonths.*` | — | Done |

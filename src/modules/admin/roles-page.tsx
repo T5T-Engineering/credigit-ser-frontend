@@ -40,6 +40,8 @@ import { IPV4_OR_CIDR, roleName, ruleKeys } from "./rule-keys";
 import { useConfiguredRoles, type ConfiguredRole, type CustomRole } from "./store";
 import type { CustomRolePayload } from "./platform";
 
+/** Role cloning (PRD §4, ADM-FR-10) is hidden until cloned roles can be assigned to users (TD-805). */
+const CLONE_ROLES_ENABLED = false;
 const limitLabel = (n: number | null) => (n === null ? "—" : Number.isFinite(n) ? moneyShort(n) : "Apex (no ceiling)");
 const moduleLabel = (m: ModuleKey) => allNavItems.find((i) => i.module === m)?.label ?? m;
 const roleKeysOf = (id: string) => [ruleKeys.roleName(id), ruleKeys.limit(id), ruleKeys.idleTimeout(id), ruleKeys.deviceBinding(id), ruleKeys.ipAllowList(id)];
@@ -277,9 +279,11 @@ function RoleDrawer({
                 Restore defaults
               </Button>
             )}
-            <Button variant="tertiary" iconBefore={<Copy aria-hidden className="size-4" />} onClick={() => void clone()}>
-              Request clone
-            </Button>
+            {CLONE_ROLES_ENABLED ? (
+              <Button variant="tertiary" iconBefore={<Copy aria-hidden className="size-4" />} onClick={() => void clone()}>
+                Request clone
+              </Button>
+            ) : null}
             <Button loading={busy} onClick={() => void save()}>
               Submit for approval
             </Button>

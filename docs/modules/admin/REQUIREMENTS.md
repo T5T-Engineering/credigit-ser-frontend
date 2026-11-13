@@ -123,3 +123,4 @@ Tenant administration of named users, roles and sign-on limits, per-role session
 | W3 | Role tier numbering vs 7-tier chart-flow | See OPEN-QUESTIONS |
 | W6 | Time-box for IT Support business-data access | Not time-boxed; viewing logged once per session |
 | 3 | Sign-on limits per tier | Illustrative NGN values |
+| ADM-Q1 | PRD §4 requires cloning roles (ADM-FR-10), but cloned roles can't be assigned to users yet (TD-805). Confirm hiding the action until they can. | "Request clone" hidden in Roles & limits; requirement kept |
