@@ -14,7 +14,7 @@ Page compositions over `@credigit/web-ui` (`BrandProvider` / `useBrand`, preset 
 
 | Path | Role |
 |---|---|
-| `src/modules/settings/profile-page.tsx` | Profile & security: identity, SSO / demo, MFA, idle timeout, limit, step-up, sign-out, demo-data reset |
+| `src/modules/settings/profile-page.tsx` | Profile & security: identity, SSO / demo, MFA, idle timeout, limit, step-up, sign-out (the demo-data reset moved to the command palette only, 2026-11-13) |
 | `src/modules/settings/branding-page.tsx` | Personal preview, presets, shareable preview links, `SubmitBrandModal` (hooks + `submitOperation("brand.change")`), pending state |
 | `src/modules/settings/brand-store.ts` | `useBrandingStore` (`credigit.brand.tenant`), `setApprovedBrand`, `TenantBrandSync`, `brandFingerprint` |
 | `src/modules/settings/presets.ts` | Brand presets (TD-801) |
@@ -58,7 +58,6 @@ Page compositions over `@credigit/web-ui` (`BrandProvider` / `useBrand`, preset 
 | `brand.change` (REQ §5) | registered `platform.ts`; submitted `branding-page.tsx` `SubmitBrandModal`; pending via `usePendingFor("Branding", "tenant")` |
 | `settings.brand-changed` (REQ §6) | `platform.ts` `apply` |
 | `settings.brand.changed` | `platform.ts` `apply` |
-| `settings.demo-data.reset` | `profile-page.tsx` reset confirm |
 | hooks `settings.brand.change.before/after` | `branding-page.tsx` |
 
 ## 8. Tests
@@ -81,11 +80,11 @@ Page compositions over `@credigit/web-ui` (`BrandProvider` / `useBrand`, preset 
 | SET-FR-04 | `branding-page.tsx`, `platform.ts` | branding | Done |
 | SET-FR-05 | `brand-store.ts` `TenantBrandSync` | branding | Partial (per browser store, no tenant API) |
 | SET-FR-06 | `presets.ts`, `branding-page.tsx` | — | Done (presets in code, TD-801) |
-| SET-FR-07 | `profile-page.tsx` | — | Done (demo only) |
+| SET-FR-07 | — | — | Withdrawn 2026-11-13 (removed from Settings at user request; command palette "Reset to initial data" remains) |
 
 ## 10. Gaps against the invariants
 
-- **Inv 12:** requester check is a role-id list rule, not `settings.branding.request-change`; preview / reset have no permission check (`settings.branding.preview`, `settings.demo-data.reset`).
+- **Inv 12:** requester check is a role-id list rule, not `settings.branding.request-change`; preview has no permission check (`settings.branding.preview`).
 - **Inv 8:** `brand.change` default approvers (System Admin, MD) and 48 h SLA, and the `settings.brand-changed` recipient (`["system-admin"]`), are literals without a TD id.
 - **Inv 9 notified:** only System Admin is told a tenant-wide brand changed; other users are not notified.
 - **Inv 9 audited:** demo reset writes no before state; personal previews are audited but publish no event.

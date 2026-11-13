@@ -63,7 +63,7 @@ The role ids are in `src/lib/rbac/roles.ts`. Some examples: `account-officer`, `
 `directorate-head`, `cro`, `head-of-risk`, `md`, `system-admin` and `it-support`.
 
 Changes you make (applications, decisions, users, parameters, branding) are saved in **this browser only**. To restore
-the original data, use **Settings → Profile & security → Reset demo data** or the command palette (Ctrl/⌘ K → "Reset
+the original data, use the command palette (Ctrl/⌘ K → "Reset
 demo data"). To hide demo access in a deployment, set `NEXT_PUBLIC_DEMO_ACCESS=false`.
 
 ## Microsoft single sign-on (Entra ID)
