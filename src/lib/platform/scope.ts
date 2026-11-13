@@ -19,6 +19,11 @@ export function currentActor(): Actor {
   return user && roleId ? { id: user.id, name: user.name, roleId, tenantId } : { ...SYSTEM_ACTOR, tenantId };
 }
 
+/** Whether the signed-in user holds a backend permission (false in demo access, which has no backend permission set). */
+export function actorHolds(permission: string): boolean {
+  return useSession.getState().access?.permissions.includes(permission) ?? false;
+}
+
 export function useScope(): { actor: Actor; role: Role | undefined } {
   const user = useSession((s) => s.user);
   const roleId = useSession((s) => s.roleId);

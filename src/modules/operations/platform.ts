@@ -109,6 +109,7 @@ const toggleSteps = (): WorkflowStep[] => [
 
 registerOperation<TogglePayload>({
   type: "extension.toggle",
+  finalApproverEligible: true,
   name: "Extension enable / disable",
   module: M,
   description: "Enable or disable an event subscriber or hook handler (configuration change, second-person approval).",

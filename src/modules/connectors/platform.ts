@@ -63,6 +63,7 @@ export type ConfigChangePayload = { connectorId: string; schedule: string; enabl
 
 registerOperation<ConfigChangePayload>({
   type: "connectors.config.change",
+  finalApproverEligible: true,
   name: "Connector configuration change",
   module: M,
   description: "Change a connector's schedule or enable / pause it. Pausing stops scheduled runs and lets downstream data go stale.",
