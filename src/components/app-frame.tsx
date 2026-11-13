@@ -8,6 +8,7 @@ import {
   AppHeader,
   AppShell,
   CommandPalette,
+  environmentTone,
   Logo,
   NotificationCenter,
   SessionTimeoutDialog,
@@ -23,6 +24,7 @@ import { roles, canAccess } from "@/lib/rbac/roles";
 import { useRole, useSession } from "@/lib/auth/session";
 import { useApplications, useDbActions, useNotifications, useObligors, useTenant } from "@/lib/data/hooks";
 import { ago } from "@/lib/format";
+import { appEnvironment } from "@/lib/platform/environment";
 import { useRule, useRulesStore } from "@/lib/platform/rules";
 import { roleIdleTimeoutMinutes } from "@/modules/admin/rule-keys";
 import { TenantBrandSync } from "@/modules/settings/brand-store";
@@ -153,7 +155,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
                 <Logo tone="reverse" size="small" />
               </Link>
             }
-            environment={`${tenant.shortName} · ${tenant.environment}`}
+            environment={appEnvironment ? `${tenant.shortName} · ${appEnvironment}` : tenant.shortName}
             user={{ name: user.name, role: role?.name ?? "" }}
             linkComponent={Link}
           />
@@ -164,7 +166,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
             onSearchClick={() => setPaletteOpen(true)}
             searchLabel="Search obligors, applications, pages…"
             showShortcut
-            environment={{ label: tenant.environment, tone: tenant.environment === "Production" ? "success" : "warning" }}
+            environment={appEnvironment ? { label: appEnvironment, tone: environmentTone(appEnvironment) } : undefined}
             notifications={
               <NotificationCenter
                 notifications={myNotifications}
