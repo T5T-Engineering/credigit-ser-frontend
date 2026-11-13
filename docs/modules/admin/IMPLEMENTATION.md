@@ -29,6 +29,7 @@ Layering: page (`*-page.tsx`) → `operation-ui.tsx` / `rule-editor.tsx` → pla
 | `src/modules/admin/groups-page.tsx` | Permission groups (backend `/identity/groups`) |
 | `src/modules/admin/entra-mapping-page.tsx` | Entra role mapping (backend `/identity/entra-mappings`, ADR-0016) |
 | `src/modules/admin/workflow-mode.ts` | `useAppliesOnSave` — reads `/operations/workflows`; screens show "Save" when a workflow has no approval steps |
+| `src/modules/admin/save-outcome.tsx` | `SaveOutcomeModal` (library `Modal`) for save results; `refreshOwnAccess` re-reads the admin's own access after a saved change |
 | `src/modules/admin/directory.ts` | Backend users and `useDirectoryRoleModules` (role → side-menu modules from current permissions, shown on Roles & limits) |
 | `src/app/(app)/admin/**/page.tsx`, `src/app/(app)/audit/page.tsx` | Thin route files |
 
