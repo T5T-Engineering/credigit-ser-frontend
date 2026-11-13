@@ -40,6 +40,7 @@ export type BrandChangePayload = { brand: BrandConfig; summary: string; reason: 
 
 registerOperation<BrandChangePayload>({
   type: "brand.change",
+  finalApproverEligible: true,
   name: "Tenant brand change",
   module: "settings",
   description: "Change the tenant's colours, logos and font for every user. Requested by the System Admin, approved by one approver.",

@@ -62,6 +62,7 @@ const step = (id: string, name: string, approverRoles: RoleId[], slaHours: numbe
 type RuleChangePayload = { key: string; value: RuleValue; reason: string };
 registerOperation<RuleChangePayload>({
   type: "rule.change",
+  finalApproverEligible: true,
   name: "Business rule change",
   module: "operations",
   description: "Change a business rule / tenant parameter. Second-person approval (configurability with control).",
@@ -88,6 +89,7 @@ registerOperation<AccessPayload>({
 
 registerOperation<WorkflowDefinition>({
   type: "workflow.change",
+  finalApproverEligible: true,
   name: "Workflow definition change",
   module: "operations",
   description: "Change the approval steps, approvers or SLAs of an operation type.",
@@ -102,6 +104,7 @@ registerOperation<WorkflowDefinition>({
 type TemplatePayload = { id: string; subject: string; body: string; inApp: string };
 registerOperation<TemplatePayload>({
   type: "template.change",
+  finalApproverEligible: true,
   name: "Notification template change",
   module: "operations",
   description: "Change the wording of a notification template.",

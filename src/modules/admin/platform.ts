@@ -143,6 +143,7 @@ const log = (action: string, entityType: string, entityId: string, before?: stri
 export type UserInvitePayload = { user: User; reason: string };
 registerOperation<UserInvitePayload>({
   type: "user.invite",
+  finalApproverEligible: true,
   name: "User invitation",
   module: "admin",
   description: "Invite a named user with a role.",
@@ -158,6 +159,7 @@ registerOperation<UserInvitePayload>({
 export type UserRoleChangePayload = { userId: string; from: RoleId; to: RoleId; reason: string };
 registerOperation<UserRoleChangePayload>({
   type: "user.role-change",
+  finalApproverEligible: true,
   name: "User role change",
   module: "admin",
   description: "Change a user's role (and so their module access and sign-on limit).",
@@ -175,6 +177,7 @@ registerOperation<UserRoleChangePayload>({
 export type UserStatusPayload = { userId: string; reason: string };
 registerOperation<UserStatusPayload>({
   type: "user.deactivate",
+  finalApproverEligible: true,
   name: "User deactivation",
   module: "admin",
   description: "Revoke a user's access. Their history and audit trail are kept.",
@@ -192,6 +195,7 @@ registerOperation<UserStatusPayload>({
 
 registerOperation<UserStatusPayload>({
   type: "user.reactivate",
+  finalApproverEligible: true,
   name: "User reactivation",
   module: "admin",
   description: "Restore a deactivated user's access (MFA still required).",
@@ -209,6 +213,7 @@ registerOperation<UserStatusPayload>({
 export type CustomRolePayload = { action: "create" | "update" | "delete"; role: CustomRole; reason: string };
 registerOperation<CustomRolePayload>({
   type: "role.custom-change",
+  finalApproverEligible: true,
   name: "Custom role change",
   module: "admin",
   description: "Create (clone), change or delete a tenant-defined role.",

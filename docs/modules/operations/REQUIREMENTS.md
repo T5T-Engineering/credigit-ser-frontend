@@ -44,6 +44,7 @@ The "Operations" workflow is the single approval engine required by invariant 9:
 | OPS-FR-13 | Event catalogue + event log (wildcard subscriptions) and hook-point catalogue + handlers are browsable; enabling / disabling an extension goes through `extension.toggle`. | Invariant 9 (extensible) |
 | OPS-FR-14 | Every transition (submit, decision, final status, rule / workflow / template / extension change, notification sent) writes to the audit log. | PRD §10.1, §10.3 |
 | OPS-FR-15 | Event and hook points must be reachable by external systems (outbound webhooks / message publisher, inbound APIs). | Invariant 9 (externally reachable) — not met in the prototype |
+| OPS-FR-16 | Final approvers (backend permission `operations.requests.apply-directly`, default System Admin and IT Support / Platform Admin) apply their own configuration / administration changes directly on eligible workflows (rules, workflows, templates, extension toggles, connector config, users, custom roles, brand); the workflow editor has a "Final approvers apply their own changes directly" switch on eligible types; configuration pages tell holders their changes apply on save. Risk-policy and business approvals keep four-eyes. | User decision 2026-11-13; backend ADR-0018 |
 
 ## 4. Business rules and parameters
 
