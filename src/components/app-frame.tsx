@@ -11,6 +11,7 @@ import {
   environmentTone,
   Logo,
   NotificationCenter,
+  ResultDialogHost,
   SessionTimeoutDialog,
   SideNav,
   Toaster,
@@ -215,6 +216,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
         limit={12}
       />
       <Toaster />
+      <ResultDialogHost />
       <TenantBrandSync />
       <SessionTimeoutDialog
         open={warnAt !== null}

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Button, Modal, TextLink } from "@credigit/web-ui";
+import { ResultDialog, TextLink } from "@credigit/web-ui";
 import { loadBackendAccess } from "@/lib/auth/backend-identity";
 import { useSession } from "@/lib/auth/session";
 import { operationHref } from "./operation-ui";
@@ -19,25 +19,20 @@ export async function refreshOwnAccess() {
 
 /** Popup confirming the result of a save so it can't be missed below the fold. */
 export function SaveOutcomeModal({ outcome, onClose }: { outcome: SaveOutcome | null; onClose: () => void }) {
-  const title = !outcome ? "" : !outcome.ok ? "Couldn't save" : outcome.applied ? "Saved" : "Sent for approval";
+  if (!outcome) return null;
   return (
-    <Modal
-      open={outcome !== null}
+    <ResultDialog
+      open
       onOpenChange={(open) => !open && onClose()}
-      size="small"
-      title={title}
-      description={outcome?.message}
-      footer={
-        <>
-          {outcome?.ok && !outcome.applied ? (
-            <TextLink href={operationHref(outcome.operationId)} as={Link}>
-              Track request {outcome.operationId}
-            </TextLink>
-          ) : null}
-          <Button variant={outcome?.ok ? "primary" : "secondary"} onClick={onClose}>
-            OK
-          </Button>
-        </>
+      tone={!outcome.ok ? "danger" : outcome.applied ? "success" : "info"}
+      title={!outcome.ok ? "Couldn't save" : outcome.applied ? "Saved" : "Sent for approval"}
+      description={outcome.message}
+      action={
+        outcome.ok && !outcome.applied ? (
+          <TextLink href={operationHref(outcome.operationId)} as={Link}>
+            Track request {outcome.operationId}
+          </TextLink>
+        ) : undefined
       }
     />
   );
