@@ -311,6 +311,7 @@ export const navigation: NavGroup[] = [
         pages: [
           { label: "Profile & security", href: "/settings" },
           { label: "Password", href: "/settings/password" },
+          { label: "Security", href: "/settings/security" },
           { label: "Branding", href: "/settings/branding" },
         ],
       },

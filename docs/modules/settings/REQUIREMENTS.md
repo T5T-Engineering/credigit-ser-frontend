@@ -36,6 +36,7 @@ Settings is where a user sees their own account, sign-in method and session rule
 | SET-FR-05 | Approved brand is applied in every browser session that sees the new version (`TenantBrandSync`); emails use the live brand. | Invariant 2 |
 | SET-FR-06 | Brand presets and shareable preview links (`?preset=…`, `?preview=pending`). | Assumption (demo); TD-801 |
 | SET-FR-07 | Demo access only: reset demo data and configuration (branding kept), audited and published. | Prototype only |
+| SET-FR-08 | Security: each person chooses their second sign-in step — an authenticator app (e.g. Microsoft Authenticator; QR code + manual key, confirmed with a first code) or e-mailed codes; switching back needs a current app code. Microsoft sign-in users see that Entra ID handles their MFA. Permission `identity.me.mfa` (baseline). | Backend ADR-0017; user decision 2026-11-13 |
 
 ## 4. Business rules and parameters
 

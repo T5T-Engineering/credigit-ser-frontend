@@ -26,6 +26,7 @@ type DirectoryUser = {
   updatedAt?: string;
   lastSignInAt?: string | null;
   lastSignInMethod?: string | null;
+  mfaMethod?: string | null;
 };
 
 type Submission = { operationId: string; status: string; applied: boolean };
@@ -42,6 +43,7 @@ function toUser(u: DirectoryUser): User & { pendingOperationId?: string | null }
     mfa: true,
     lastLogin: u.lastSignInAt ?? undefined,
     signInMethod: u.lastSignInMethod ?? undefined,
+    mfaMethod: u.mfaMethod ?? undefined,
     pendingOperationId: u.pendingOperationId,
   };
 }
@@ -111,3 +113,6 @@ export const changeDirectoryUserRole = (userId: string, roleId: RoleId, reason: 
 export const deactivateDirectoryUser = (userId: string, reason: string) => submit(`/identity/users/${encodeURIComponent(userId)}/deactivation`, { reason });
 
 export const reactivateDirectoryUser = (userId: string, reason: string) => submit(`/identity/users/${encodeURIComponent(userId)}/reactivation`, { reason });
+
+/** Back to e-mailed codes (lost phone; backend user.mfa-reset, ADR-0017). */
+export const resetDirectoryUserMfa = (userId: string, reason: string) => submit(`/identity/users/${encodeURIComponent(userId)}/mfa-reset`, { reason });

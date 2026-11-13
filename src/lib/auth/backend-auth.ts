@@ -21,6 +21,8 @@ export type BackendChallenge = {
   codeLength: number;
   maxAttempts: number;
   developmentCode?: string | null;
+  /** "authenticator": the code comes from the person's authenticator app — nothing was e-mailed and there is no resend (ADR-0017). */
+  channel?: "email" | "authenticator";
 };
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
