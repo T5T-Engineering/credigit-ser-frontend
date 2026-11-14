@@ -2,9 +2,28 @@
 
 | | |
 |---|---|
-| Status | Prototype (demo data) |
+| Status | Demo mode: prototype on browser data. Backend mode: pipeline, new / edit draft, record (next step, overview, documents, approvals, comments) on the backend API; demo-only sections listed on the record (TD-980) |
 | Requirements | [REQUIREMENTS.md](REQUIREMENTS.md) |
-| Last updated | 2026-11-12 (commit 0e09af1) |
+| Last updated | 2026-11-14 (backend mode, feature/origination-backend) |
+
+## 0. Backend mode (`src/modules/origination/backend/`)
+
+The three routes pick their page by `backendSsoEnabled` (`NEXT_PUBLIC_API_BASE_URL` set): `/origination` → `BackendPipelinePage`,
+`/origination/new` → `BackendNewApplicationPage`, `/origination/application` → `BackendApplicationPage`. The chart-flows page stays on
+the frontend rules in both modes. Audit, events, hooks, notifications, Operations routing and role-group checks all happen in the
+backend (backend `docs/modules/CreditOrigination/IMPLEMENTATION.md` §7); the frontend calls the API and mirrors permission keys.
+
+| File | Role |
+|---|---|
+| `backend/api.ts` | Backend DTO types, `originationApi` (list, mine, queue, get, route preview, export, create, update, submit, analysis, limit exception, override, submit for approval, withdraw, comments), `useBackend` loader |
+| `backend/view.ts` | Stage tones, SLA state (rule `origination.sla.dueSoonDays`), next-action text |
+| `backend/pipeline-page.tsx` | Scopes My queue (`/origination/queue`, `origination.queue.view`), My applications (`/applications/mine`, `.view-mine`), All (`/applications`, `.view`); filters; CSV export (`.export`) |
+| `backend/new-application-page.tsx` | Create (`.create`) or edit a draft `?id=` (`.update`, `expectedVersion`), "Save and submit" (`.submit`); products / Fast-Track variants / default tenor from rules; sector and branch from master data; route preview (`/chart-flow/route`) |
+| `backend/record-page.tsx` | Next-step actions: submit (`.submit`), record analysis (`origination.analysis.record`), limit exception (`origination.limit-exceptions.request`, min length `operations.minCommentLength`), override (`origination.recommendations.request-override`, `origination.override.minReasonLength`), submit for approval (`origination.approvals.submit`), withdraw (`origination.applications.withdraw`); tabs Overview, Documents (`SubjectDocuments`, subject `Application`, required types = `requiredKinds()` mapped to master-data `document-type` codes by code or label), Approvals (route snapshot, attempts, Operations requests → `/operations/item`), Comments (`origination.comments.create`, `origination.comments.maxLength`), "Not on the backend yet" (`DEMO_ONLY_SECTIONS`, TD-980) |
+
+Decisions on credit approvals, limit exceptions and overrides are taken on the backend Operations page (`BackendOperationPage`).
+Comments are posted without @mentions in backend mode (the API accepts `mentioned[]`; no user picker yet). No unit / e2e tests for
+backend mode (TD-955, TD-970).
 
 ## 1. Design overview
 
@@ -149,6 +168,8 @@ pages/* + application/*  →  actions.ts (hooks · audit · publish · notify)  
 | TD-123 | COP bands duplicated with credit-analysis |
 | TD-804 | Admin shows chart-flow read-only from the static chart-flow |
 | TD-951 | No facility booked for prototype-created applications reaching Conditions |
+| TD-979 | Origination part closed (backend mode uses the DMS and master data); collateral remains |
+| TD-980 | Backend mode lacks the sections the backend hasn't built (financials & COP, bureau, RAR, collateral, engine, covenants, memo, release) |
 
 ## 12. Backend divergence
 
