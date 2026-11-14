@@ -24,3 +24,4 @@ import "@/modules/workspace/platform";
 import "@/modules/admin/platform";
 import "@/modules/settings/platform";
 import "@/modules/operations/platform";
+import "@/modules/documents/platform";

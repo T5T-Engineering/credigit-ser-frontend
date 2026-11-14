@@ -30,13 +30,13 @@
         "NODE_ENV": "production",
         "APP_ENVIRONMENT": "test",
         "HOST": "0.0.0.0",
-        "PORT": "8061"
+        "PORT": "9061"
       },
       "env_uat": {
         "NODE_ENV": "production",
         "APP_ENVIRONMENT": "uat",
         "HOST": "0.0.0.0",
-        "PORT": "8061"
+        "PORT": "9061"
       }
     }
   ]
