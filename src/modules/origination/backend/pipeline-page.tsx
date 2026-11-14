@@ -43,6 +43,7 @@ function Pipeline() {
   const [stage, setStage] = useState(ALL);
   const [flow, setFlow] = useState(ALL);
   const [product, setProduct] = useState(ALL);
+  const [requestType, setRequestType] = useState(ALL);
   const [sla, setSla] = useState(ALL);
   const [exportError, setExportError] = useState<string | null>(null);
 
@@ -70,10 +71,11 @@ function Pipeline() {
         (stage === ALL || r.app.stage === stage) &&
         (flow === ALL || r.app.flow === flow) &&
         (product === ALL || r.app.facility.product === product) &&
+        (requestType === ALL || r.app.facility.requestType === requestType) &&
         (sla === ALL || r.sla === sla) &&
         (!q || r.id.toLowerCase().includes(q) || r.app.customer.name.toLowerCase().includes(q) || r.app.facility.purpose.toLowerCase().includes(q)),
     );
-  }, [base, search, stage, flow, product, sla]);
+  }, [base, search, stage, flow, product, requestType, sla]);
 
   const facet = (get: (r: Row) => string) => {
     const counts = new Map<string, number>();
@@ -93,6 +95,7 @@ function Pipeline() {
     stage: stage === ALL ? undefined : (stage as ApplicationFilter["stage"]),
     flow: flow === ALL ? undefined : (flow as ApplicationFilter["flow"]),
     product: product === ALL ? undefined : product,
+    requestType: requestType === ALL ? undefined : (requestType as ApplicationFilter["requestType"]),
     search: search.trim() || undefined,
   };
 
@@ -123,7 +126,7 @@ function Pipeline() {
     { id: "officer", header: "Initiator", accessor: (r) => r.app.createdBy.name, sortable: true },
   ];
 
-  const anyFilter = [stage, flow, product, sla].some((v) => v !== ALL) || search !== "";
+  const anyFilter = [stage, flow, product, requestType, sla].some((v) => v !== ALL) || search !== "";
 
   return (
     <ModulePage
@@ -172,6 +175,7 @@ function Pipeline() {
             { id: "stage", label: "Stage", value: stage, onChange: setStage, allLabel: "All stages", options: STAGES.map((s) => ({ value: s, label: s, count: base.filter((r) => r.app.stage === s).length })).filter((o) => o.count) },
             { id: "flow", label: "Flow", value: flow, onChange: setFlow, allLabel: "Both flows", options: facet((r) => r.app.flow) },
             { id: "product", label: "Product", value: product, onChange: setProduct, allLabel: "All products", options: facet((r) => r.app.facility.product) },
+            { id: "requestType", label: "Request type", value: requestType, onChange: setRequestType, allLabel: "All types", options: facet((r) => r.app.facility.requestType) },
             { id: "sla", label: "SLA", value: sla, onChange: setSla, allLabel: "Any SLA", options: (["Breached", "Due soon", "On track", "Closed"] as SlaState[]).map((s) => ({ value: s, label: s, count: base.filter((r) => r.sla === s).length })) },
           ]}
           onClearAll={

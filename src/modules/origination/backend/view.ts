@@ -35,7 +35,9 @@ export function backendNextAction(a: CreditApplication): string {
     case "Draft":
       return "Initiator to complete and submit";
     case "Analysis":
-      if (!a.analysis) return "Credit Analyst — record the analysis outcome";
+      if (a.bureauCheck && !a.bureauCheck.completedAt) return "Credit Analyst — bureau / CRMS results outstanding";
+      if (a.cop?.requiresExplanation && !a.cop.explanation) return "Credit Analyst — document the customer's COP explanation";
+      if (!a.analysis) return "Credit Analyst — run the credit checks and record the analysis";
       if (isBreach(a.analysis.limitGate) && a.limitException?.status !== "Granted")
         return a.limitException?.status === "Pending" ? "Limit exception awaiting decision" : "Credit Analyst — request a limit exception";
       if (a.override?.status === "Pending") return "Recommendation override awaiting decision";

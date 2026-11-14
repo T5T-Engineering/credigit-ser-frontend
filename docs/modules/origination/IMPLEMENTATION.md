@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Status | Demo mode: prototype on browser data. Backend mode: pipeline, new / edit draft, record (next step, overview, documents, approvals, comments) on the backend API; demo-only sections listed on the record (TD-980) |
+| Status | Demo mode: prototype on browser data. Backend mode: pipeline, new / edit draft, record (next step, overview, credit checks, analysis, covenants, documents + due diligence, approvals, comments) on the backend API; remaining demo-only sections listed on the record (TD-980) |
 | Requirements | [REQUIREMENTS.md](REQUIREMENTS.md) |
-| Last updated | 2026-11-14 (backend mode, feature/origination-backend) |
+| Last updated | 2026-11-14 (credit checks on the backend, feature/origination-credit-checks-backend; backend ADR-0024) |
 
 ## 0. Backend mode (`src/modules/origination/backend/`)
 
@@ -19,7 +19,8 @@ backend (backend `docs/modules/CreditOrigination/IMPLEMENTATION.md` §7); the fr
 | `backend/view.ts` | Stage tones, SLA state (rule `origination.sla.dueSoonDays`), next-action text |
 | `backend/pipeline-page.tsx` | Scopes My queue (`/origination/queue`, `origination.queue.view`), My applications (`/applications/mine`, `.view-mine`), All (`/applications`, `.view`); filters; CSV export (`.export`) |
 | `backend/new-application-page.tsx` | Create (`.create`) or edit a draft `?id=` (`.update`, `expectedVersion`), "Save and submit" (`.submit`); products / Fast-Track variants / default tenor from rules; sector and branch from master data; route preview (`/chart-flow/route`) |
-| `backend/record-page.tsx` | Next-step actions: submit (`.submit`), record analysis (`origination.analysis.record`), limit exception (`origination.limit-exceptions.request`, min length `operations.minCommentLength`), override (`origination.recommendations.request-override`, `origination.override.minReasonLength`), submit for approval (`origination.approvals.submit`), withdraw (`origination.applications.withdraw`); tabs Overview, Documents (`SubjectDocuments`, subject `Application`, required types = `requiredKinds()` mapped to master-data `document-type` codes by code or label), Approvals (route snapshot, attempts, Operations requests → `/operations/item`), Comments (`origination.comments.create`, `origination.comments.maxLength`), "Not on the backend yet" (`DEMO_ONLY_SECTIONS`, TD-980) |
+| `backend/credit-checks.tsx` | `CreditChecks` (bureau / CRMS runs: run checks `origination.bureau-checks.run`, key in results `.bureau-checks.record`; statements: request `origination.statements.request`, key in reconciled summaries `.statements.record`, compute COP `origination.cop.compute`, customer explanation `origination.cop-explanations.update`, min length `operations.minCommentLength`), `AnalysisForm` (engine inputs; bureau / COP inputs locked to their checks), `AnalysisDetail` (engine rationale, stored gate figures, on-demand gate `origination.limit-gate.run`), `Covenants` (tagged with reasons, add from library / remove with reason, `origination.covenants.update`), `DueDiligence` (Legal's collateral search, `origination.collateral-search.record`) |
+| `backend/record-page.tsx` | Next-step actions: submit (`.submit`), record analysis (`origination.analysis.record`), limit exception (`origination.limit-exceptions.request`, min length `operations.minCommentLength`), override (`origination.recommendations.request-override`, `origination.override.minReasonLength`), submit for approval (`origination.approvals.submit`), withdraw (`origination.applications.withdraw`); tabs Overview, Credit checks, Analysis, Covenants, Documents (`SubjectDocuments`, subject `Application`, required types and their state from `GET …/documents/checklist`; collateral search card), Approvals (route snapshot, attempts, Operations requests → `/operations/item`), Comments (`origination.comments.create`, `origination.comments.maxLength`), "Not on the backend yet" (`DEMO_ONLY_SECTIONS`, TD-980) |
 
 Decisions on credit approvals, limit exceptions and overrides are taken on the backend Operations page (`BackendOperationPage`).
 Comments are posted without @mentions in backend mode (the API accepts `mentioned[]`; no user picker yet). No unit / e2e tests for
