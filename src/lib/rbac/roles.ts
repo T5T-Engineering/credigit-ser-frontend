@@ -25,6 +25,7 @@ export type ModuleKey =
   | "admin"
   | "audit"
   | "settings"
+  | "documents"
   | "operations";
 
 export type Access = "view" | "edit";

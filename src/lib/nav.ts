@@ -9,6 +9,7 @@ import {
   Building2,
   Cable,
   FileSignature,
+  FolderOpen,
   Gauge,
   Inbox,
   KeyRound,
@@ -303,6 +304,20 @@ export const navigation: NavGroup[] = [
           { label: "Permissions", href: "/admin/permissions", permission: "identity.permissions.view" },
           { label: "Permission groups", href: "/admin/groups", permission: "identity.groups.view" },
           { label: "Rules & parameters", href: "/admin/parameters", permission: "platform.parameters.view" },
+          { label: "Master data", href: "/admin/master-data", permission: "master-data.values.manage-view" },
+        ],
+      },
+      {
+        module: "documents",
+        label: "Documents",
+        href: "/documents",
+        icon: FolderOpen,
+        prd: "§5.4",
+        permission: "documents.documents.view",
+        pages: [
+          { label: "Library", href: "/documents/library", permission: "documents.library.view" },
+          { label: "Retention", href: "/documents/retention", permission: "documents.retention.request-purge" },
+          { label: "Store", href: "/documents/store", permission: "documents.store.view" },
         ],
       },
       { module: "audit", label: "Audit log", href: "/audit", permission: "audit.log.view", icon: ScrollText, prd: "§10.3" },
@@ -333,7 +348,8 @@ export function navItemFor(pathname: string): NavItem | undefined {
 
 /** Permissions that show a nav item (API contract §5): any permission whose area is the item's module. */
 export function navItemPermissions(item: NavItem): PermissionKey[] {
-  return areaPermissions(item.module);
+  // Items whose keys sit in other areas (e.g. Documents) also show for their own page / view keys.
+  return [...new Set([...areaPermissions(item.module), ...(item.permission ? [item.permission] : []), ...(item.pages ?? []).map((p) => p.permission)])];
 }
 
 /** The view permission a path needs: the most specific matching sub-page, else the item's own key. */
