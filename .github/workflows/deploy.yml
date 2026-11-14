@@ -1,0 +1,124 @@
+# Reusable deployment of the static site to one GitHub Environment (dev | test | uat | staging | production). The
+# environment supplies its own secrets / vars and protection rules (production: required reviewers). Steps:
+#   1. build the static export with this environment's NEXT_PUBLIC_* variables (compiled in at build time)
+#   2. package out/ + a minimal `serve` runtime + pm2.config.json + serve.json, stamped with out/release.json
+#   3. copy the package to the host over SSH (host key pinned via DEPLOY_KNOWN_HOSTS)
+#   4. on the host: unpack to releases/<id>, switch `current`, `pm2 startOrReload pm2.config.json --env <env>`,
+#      health-check /release.json, roll back to the previous release on failure (scripts/deploy/activate.sh)
+name: deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '26.13.0'
+
+jobs:
+  deploy:
+    name: ${{ inputs.environment }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-frontend-${{ inputs.environment }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Check deploy settings
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || secrets.DEPLOY_PATH }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+        run: |
+          missing=()
+          for v in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS DEPLOY_PATH NEXT_PUBLIC_API_BASE_URL; do
+            [ -n "${!v}" ] || missing+=("$v")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Environment '${{ inputs.environment }}' is missing: ${missing[*]} (see docs/DEPLOYMENT.md)"; exit 1
+          fi
+
+      - id: meta
+        run: echo "release=${{ inputs.environment }}-${{ github.run_number }}-${GITHUB_SHA::8}" >> "$GITHUB_OUTPUT"
+
+      - run: npm ci
+
+      - name: Build static export for ${{ inputs.environment }}
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+          NEXT_PUBLIC_APP_ENVIRONMENT: ${{ vars.NEXT_PUBLIC_APP_ENVIRONMENT }}
+          NEXT_PUBLIC_DEMO_ACCESS: ${{ vars.NEXT_PUBLIC_DEMO_ACCESS || 'false' }}
+          NEXT_PUBLIC_BACKEND_DEV_IDENTITY: ${{ vars.NEXT_PUBLIC_BACKEND_DEV_IDENTITY || 'false' }}
+          NEXT_PUBLIC_BACKEND_DEV_TENANT: ${{ vars.NEXT_PUBLIC_BACKEND_DEV_TENANT }}
+          NEXT_PUBLIC_AZURE_AD_CLIENT_ID: ${{ vars.NEXT_PUBLIC_AZURE_AD_CLIENT_ID }}
+          NEXT_PUBLIC_AZURE_AD_TENANT_ID: ${{ vars.NEXT_PUBLIC_AZURE_AD_TENANT_ID }}
+          NEXT_PUBLIC_AZURE_AD_REDIRECT_URI: ${{ vars.NEXT_PUBLIC_AZURE_AD_REDIRECT_URI }}
+          NEXT_PUBLIC_WORKSPACE_MAX_PATCH_BYTES: ${{ vars.NEXT_PUBLIC_WORKSPACE_MAX_PATCH_BYTES }}
+          NEXT_PUBLIC_WORKSPACE_MAX_PATCH_DOCUMENTS: ${{ vars.NEXT_PUBLIC_WORKSPACE_MAX_PATCH_DOCUMENTS }}
+          NEXT_PUBLIC_WORKSPACE_SAVE_DELAY_MS: ${{ vars.NEXT_PUBLIC_WORKSPACE_SAVE_DELAY_MS }}
+          NEXT_PUBLIC_AUDIT_MAX_ROWS: ${{ vars.NEXT_PUBLIC_AUDIT_MAX_ROWS }}
+
+      - name: Package release (static files + serve runtime; no sources, no .env)
+        env:
+          RELEASE: ${{ steps.meta.outputs.release }}
+        run: |
+          set -euo pipefail
+          printf '{"release":"%s","commit":"%s","environment":"%s"}\n' "$RELEASE" "$GITHUB_SHA" "${{ inputs.environment }}" > out/release.json
+          SERVE_VERSION="$(node -p 'require("./package.json").dependencies.serve || require("./package.json").devDependencies.serve')"
+          mkdir -p runtime
+          npm install --prefix runtime --no-save --no-package-lock --omit=dev --ignore-scripts "serve@$SERVE_VERSION"
+          tar -czf "$RUNNER_TEMP/frontend-$RELEASE.tar.gz" out runtime serve.mjs serve.json pm2.config.json
+
+      - name: Install SSH key and pinned host key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Ship and activate release
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_SSH_PORT || '22' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || secrets.DEPLOY_PATH }}
+          RELEASE: ${{ steps.meta.outputs.release }}
+          PM2_ENV: ${{ inputs.environment }}
+          KEEP_RELEASES: ${{ vars.KEEP_RELEASES || '5' }}
+          HEALTH_RETRIES: ${{ vars.HEALTH_RETRIES || '30' }}
+          HEALTH_INTERVAL_SECONDS: ${{ vars.HEALTH_INTERVAL_SECONDS || '2' }}
+        run: |
+          set -euo pipefail
+          SSH_OPTS=(-i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -p "$DEPLOY_PORT")
+          SCP_OPTS=(-i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -P "$DEPLOY_PORT")
+          TARGET="$DEPLOY_USER@$DEPLOY_HOST"
+          INCOMING="$DEPLOY_PATH/incoming"
+          ssh "${SSH_OPTS[@]}" "$TARGET" "mkdir -p '$INCOMING'"
+          scp "${SCP_OPTS[@]}" "$RUNNER_TEMP/frontend-$RELEASE.tar.gz" "$TARGET:$INCOMING/$RELEASE.tar.gz"
+          scp "${SCP_OPTS[@]}" scripts/deploy/activate.sh "$TARGET:$INCOMING/activate-$RELEASE.sh"
+          ssh "${SSH_OPTS[@]}" "$TARGET" \
+            "KEEP_RELEASES='$KEEP_RELEASES' HEALTH_RETRIES='$HEALTH_RETRIES' HEALTH_INTERVAL_SECONDS='$HEALTH_INTERVAL_SECONDS' \
+             bash '$INCOMING/activate-$RELEASE.sh' '$DEPLOY_PATH' '$RELEASE' '$PM2_ENV'"
+
+      - name: Remove credentials from the runner
+        if: always()
+        run: rm -f ~/.ssh/deploy_key "$RUNNER_TEMP"/frontend-*.tar.gz

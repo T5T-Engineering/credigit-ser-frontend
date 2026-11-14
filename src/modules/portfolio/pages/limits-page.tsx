@@ -97,11 +97,11 @@ export function LimitsPage() {
   ];
 
   return (
-    <ModulePage module="portfolio" description="Sectoral & single-obligor limit report (§6.6.2) — the full facility book against internal sectoral limits and the statutory CBN limits, with breaches and near-breaches flagged.">
+    <ModulePage module="portfolio" description="Sectoral & single-obligor limit report — the full facility book against internal sectoral limits and the statutory CBN limits, with breaches and near-breaches flagged.">
       <Stack gap="large">
         {sectorBreaches.length || obligorFlags.length ? (
           <Alert tone="danger" title={`${sectorBreaches.filter((s) => s.status === "Breach").length} sector breaches · ${sectorBreaches.filter((s) => s.status === "Near breach").length} near-breaches · ${obligorFlags.length} obligor flags`}>
-            Breaches and near-breaches (≥ {p.earlyWarningPct.value}% of limit, tenant early-warning threshold) are notified to the roles in the limit-alert rule and escalated through the §6.4.4 protocol. New requests in these sectors are gated at origination (§5.6).
+            Breaches and near-breaches (≥ {p.earlyWarningPct.value}% of limit, tenant early-warning threshold) are notified to the roles in the limit-alert rule and escalated through the protocol. New requests in these sectors are gated at origination.
           </Alert>
         ) : null}
 
@@ -109,7 +109,7 @@ export function LimitsPage() {
           <KpiCard
             label="Single-obligor limit"
             value={moneyShort(sol)}
-            hint={`${solPct}% of SHF ${moneyShort(shf)} (demo SHF)`}
+            hint={`${solPct}% of SHF ${moneyShort(shf)}`}
             calc={{ metric: "single-obligor limit", formula: `${solPct}% × Shareholders' funds unimpaired by losses`, source: "CBN 3.2(a). Shareholders' funds: GL capital accounts (paid-up capital + reserves, net of identified losses) — demo value for this tenant.", prd: "§5.6, §8", demo: true }}
           />
           <KpiCard
@@ -157,8 +157,8 @@ export function LimitsPage() {
 
         <Panel
           title="Sectoral limits"
-          description={taxonomy === "tenant" ? "Tenant internal sector taxonomy vs the internal sectoral concentration limit (% of total loan book)." : "Re-aggregated onto the CBN standard industry classification for regulatory returns (§6.6.1 mapping, % splits applied)."}
-          calc={{ metric: "sectoral exposure", formula: "Sector outstanding balance / Total portfolio outstanding × 100; utilisation = exposure % / limit %", source: "Numerator: CBA facility ledger filtered by the sector code assigned at origination. Denominator: CBA facility ledger, full book. Sector limits: tenant parameters (demo values).", prd: "§8, §6.6.2", demo: true }}
+          description={taxonomy === "tenant" ? "Tenant internal sector taxonomy vs the internal sectoral concentration limit (% of total loan book)." : "Re-aggregated onto the CBN standard industry classification for regulatory returns (mapped with % splits)."}
+          calc={{ metric: "sectoral exposure", formula: "Sector outstanding balance / Total portfolio outstanding × 100; utilisation = exposure % / limit %", source: "Numerator: CBA facility ledger filtered by the sector code assigned at origination. Denominator: CBA facility ledger, full book. Sector limits: tenant parameters.", prd: "§8, §6.6.2", demo: true }}
           actions={
             <SegmentedControl
               label="Sector taxonomy"
@@ -195,7 +195,7 @@ export function LimitsPage() {
         <Panel
           title="Single-obligor limit"
           description={`Obligors above ${floor}% of the ${moneyShort(sol)} limit. Connected-group aggregation applies where groups are configured.`}
-          calc={{ metric: "single-obligor utilisation", formula: `(On-balance + ${pct(offWeight, 2)} × off-balance) / SHF; limit = ${solPct}% of SHF`, source: "CBN 3.2(a)–(b). The off-balance weighting applies to the statutory limit only; RWA uses CCFs (§9.1).", prd: "§8, §9.1" }}
+          calc={{ metric: "single-obligor utilisation", formula: `(On-balance + ${pct(offWeight, 2)} × off-balance) / SHF; limit = ${solPct}% of SHF`, source: "CBN 3.2(a)–(b). The off-balance weighting applies to the statutory limit only; RWA uses CCFs.", prd: "§8, §9.1" }}
         >
           <DataTable
             label="Single-obligor limit utilisation"
@@ -211,8 +211,8 @@ export function LimitsPage() {
         </Panel>
 
         <Grid columns={{ base: 1, lg: 2 }} gap="medium">
-          <RulesPanel title="Limit parameters in force" description="Business rules (Rules & Parameters Engine). Changes are requested in Operations, approved, audited and apply immediately across modules (§9.1)." keys={ruleKeys} />
-          <Panel title="Foreign-currency lending — currency matching" description="CBN BSD/DIR/GEN/LAB/08/037: FCY facilities only to obligors with revenue in that currency (§9.1). Ongoing portfolio control.">
+          <RulesPanel title="Limit parameters in force" description="Business rules (Rules & Parameters Engine). Changes are requested in Operations, approved, audited and apply immediately across modules." keys={ruleKeys} />
+          <Panel title="Foreign-currency lending — currency matching" description="CBN BSD/DIR/GEN/LAB/08/037: FCY facilities only to obligors with revenue in that currency. Ongoing portfolio control.">
             <DataTable
               label="FCY facilities"
               data={fcy}

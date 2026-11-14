@@ -17,9 +17,9 @@ import {
   Stack,
   StatusBadge,
   Text,
-  useToast,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/iam/permissions";
 import { DEMO_NOW } from "@/lib/data/seed";
@@ -76,7 +76,7 @@ export function ReportsPage() {
   const canExport = useCan("portfolio.data.export");
   const actor = useActor();
   const { actor: me } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const submit = useSubmitOperation();
   const blockOnBreak = useRule<boolean>(PORTFOLIO_RULES.blockReleaseOnReconBreak);
   const runs = usePortfolioStore((s) => s.runs);
@@ -207,7 +207,7 @@ export function ReportsPage() {
   const table = preview ? previewTable(preview.report, model) : null;
 
   return (
-    <ModulePage module="portfolio" description="Executive & regulatory reporting (§6.6.6): CBN-format returns, board packs and MIS on the cadence configured in the Rules & Parameters Engine — AI-drafted, then validated by the Portfolio & MIS Reporting Officer and released through the Operations workflow.">
+    <ModulePage module="portfolio" description="Executive & regulatory reporting: CBN-format returns, board packs and MIS on the cadence configured in the Rules & Parameters Engine — AI-drafted, then validated by the Portfolio & MIS Reporting Officer and released through the Operations workflow.">
       <Stack gap="large">
         {!reconciled ? (
           <Alert tone="warning" title="Release is blocked while a CBA reconciliation break is open">
@@ -217,12 +217,12 @@ export function ReportsPage() {
 
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
           <KpiCard label="Reports in catalogue" value={String(reportCatalogue.length)} hint={`${reportCatalogue.filter((r) => r.audience === "CBN return").length} CBN returns · ${reportCatalogue.filter((r) => r.audience === "Board pack").length} board packs`} calc={{ metric: "report catalogue", formula: "Configured report templates × cadence", source: "Rules & Parameters Engine reporting cadence (daily, weekly, monthly, quarterly, annual).", prd: "§6.6.6" }} />
-          <KpiCard label="Awaiting validation / release" value={String(awaiting.length)} hint="AI-drafted runs need a named human sign-off" tone="warning" calc={{ metric: "awaiting validation", formula: "Runs AI-drafted, returned, or submitted for release", source: "Auto-report generation (§6.12) — the MIS officer validates; release is approved in Operations.", prd: "§6.12" }} />
+          <KpiCard label="Awaiting validation / release" value={String(awaiting.length)} hint="AI-drafted runs need a named human sign-off" tone="warning" calc={{ metric: "awaiting validation", formula: "Runs AI-drafted, returned, or submitted for release", source: "Auto-report generation — the MIS officer validates; release is approved in Operations.", prd: "§6.12" }} />
           <KpiCard label="Released this month" value={String(released.length)} hint={format(DEMO_NOW, "MMMM yyyy")} tone="success" calc={{ metric: "released reports", formula: `Runs released since ${format(monthStart, "d MMM yyyy")}`, source: "Report run register (audit-logged).", prd: "§6.6.6" }} />
-          <KpiCard label="CBA reconciliation" value={reconciled ? "Clean" : `${recon.filter((r) => r.difference).length} break`} hint={`As at ${dateTime(DEMO_NOW)}`} tone={reconciled ? "success" : "warning"} calc={{ metric: "reconciliation status", formula: "Σ spine outstanding vs CBA GL, per ledger", source: "CBA connector staging/reconciliation layer (§5.1).", prd: "§5.1" }} />
+          <KpiCard label="CBA reconciliation" value={reconciled ? "Clean" : `${recon.filter((r) => r.difference).length} break`} hint={`As at ${dateTime(DEMO_NOW)}`} tone={reconciled ? "success" : "warning"} calc={{ metric: "reconciliation status", formula: "Σ spine outstanding vs CBA GL, per ledger", source: "CBA connector staging/reconciliation layer.", prd: "§5.1" }} />
         </Grid>
 
-        <Panel title="Report catalogue" description="CBN returns re-aggregate sectors onto the CBN classification regardless of the tenant taxonomy (§6.6.1). Return templates/codes are tenant configuration.">
+        <Panel title="Report catalogue" description="CBN returns re-aggregate sectors onto the CBN classification regardless of the tenant taxonomy. Return templates/codes are tenant configuration.">
           <DataTable label="Report catalogue" data={reportCatalogue} columns={catalogueColumns} getRowId={(r) => r.id} paginate={false} filters={[{ id: "audience", label: "Type" }, { id: "cadence", label: "Cadence" }]} searchable searchPlaceholder="Search reports" />
         </Panel>
 
@@ -267,7 +267,7 @@ export function ReportsPage() {
                 { label: "Released by", value: preview.run?.releasedBy },
               ]}
             />
-            <Text variant="caption">Source mapping (§8): {table.source}</Text>
+            <Text variant="caption">Source mapping: {table.source}</Text>
             <DataTable
               label={preview.report.name}
               data={table.rows}
@@ -321,7 +321,7 @@ function previewTable(rep: ReportDef, m: ReturnType<typeof usePortfolioModel>): 
     case "RPT-TOP":
     case "RPT-BRC":
       return {
-        source: "CBA facility ledger, ranked by outstanding exposure; IFRS 9 stage (§6.7.1); 360 RAR posture (§6.2.5).",
+        source: "CBA facility ledger, ranked by outstanding exposure; IFRS 9 stage; 360 RAR posture.",
         columns: [{ id: "rank", header: "#", numeric: true }, { id: "obligor", header: "Obligor" }, { id: "exposure", header: "Exposure", numeric: true }, { id: "shfPct", header: "% of SHF", numeric: true }, { id: "sector", header: "Sector" }, { id: "stage", header: "Stage" }, { id: "posture", header: "Posture" }],
         rows: m.exposures.slice(0, 20).map((e, i) => ({ rank: i + 1, obligor: e.obligor.name, exposure: e.exposure, shfPct: e.pctOfShf, sector: e.sector?.name ?? "—", stage: `Stage ${e.worstStage}`, posture: e.posture })),
       };
@@ -331,14 +331,14 @@ function previewTable(rep: ReportDef, m: ReturnType<typeof usePortfolioModel>): 
       const groups = new Map<string, typeof m.rows>();
       for (const r of m.rows) groups.set(sectorName.get(r.obligor.sectorId) ?? "—", [...(groups.get(sectorName.get(r.obligor.sectorId) ?? "—") ?? []), r]);
       return {
-        source: "Internal grades (§6.2.7), grade-score table GST-2026.1 (demo); exposure = outstanding + undrawn × CCF.",
+        source: "Internal grades, grade-score table GST-2026.1; exposure = outstanding + undrawn × CCF.",
         columns: [{ id: "sector", header: "Sector" }, { id: "exposure", header: "Exposure", numeric: true }, { id: "warr", header: "WARR", numeric: true }],
         rows: [...groups.entries()].map(([sector, list]) => ({ sector, exposure: sum(list, (r) => r.exposure), warr: computeWarr(list).warr })),
       };
     }
     case "RPT-DPD":
       return {
-        source: "CBA facility ledger due-date and last-payment fields (§8 Past-Due Obligations).",
+        source: "CBA facility ledger due-date and last-payment fields (Past-Due Obligations).",
         columns: [{ id: "facility", header: "Facility" }, { id: "obligor", header: "Obligor" }, { id: "branch", header: "Branch" }, { id: "dpd", header: "DPD", numeric: true }, { id: "outstanding", header: "Outstanding", numeric: true }, { id: "cls", header: "CBN class" }],
         rows: liveFacilities(m.facilities).filter((f) => f.dpd > 0).sort((a, b) => b.dpd - a.dpd).map((f) => ({ facility: f.id, obligor: obligorById.get(f.obligorId)?.name ?? f.obligorId, branch: f.branch, dpd: f.dpd, outstanding: f.outstanding, cls: f.cbnClass })),
       };
@@ -346,7 +346,7 @@ function previewTable(rep: ReportDef, m: ReturnType<typeof usePortfolioModel>): 
       const groups = new Map<string, number>();
       for (const f of liveFacilities(m.facilities)) groups.set(f.product, (groups.get(f.product) ?? 0) + onBalance(f));
       return {
-        source: "CBA facility ledger and Loan Origination records (§6.6.1).",
+        source: "CBA facility ledger and Loan Origination records.",
         columns: [{ id: "product", header: "Product" }, { id: "outstanding", header: "Outstanding", numeric: true }],
         rows: [...groups.entries()].map(([product, outstanding]) => ({ product, outstanding })),
       };

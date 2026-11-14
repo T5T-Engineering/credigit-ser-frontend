@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
   DataTable,
+  SubmitButton,
   type DataTableColumn,
   DescriptionList,
   Field,
@@ -23,8 +24,8 @@ import {
   StatusBadge,
   Text,
   Textarea,
-  useToast,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { newId } from "@/lib/data/store";
 import { DEMO_NOW } from "@/lib/data/seed";
@@ -68,7 +69,7 @@ export function IcaapPage() {
   const canRequestRuleChange = useCan("rules.rules.request-change");
   const audit = useAuditLog();
   const actor = useActorName();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const submitOperation = useSubmitOperation();
   const runs = useIfrs9((s) => s.stressRuns);
   const addRun = useIfrs9((s) => s.addStressRun);
@@ -230,7 +231,7 @@ export function IcaapPage() {
     {
       metric: "Stressed CAR",
       formula: "(Qualifying capital − ΔECL × (1 − tax)) / (RWA + ΔRWA)",
-      sources: "Scenario PD multiplier, LGD add-on and FX devaluation (rules ifrs9.scenario.*) applied to the ECL engine (§6.7.2 inputs)",
+      sources: "Scenario PD multiplier, LGD add-on and FX devaluation (rules ifrs9.scenario.*) applied to the ECL engine (ECL inputs)",
       prd: "§6.7.4",
     },
   ];
@@ -282,9 +283,9 @@ export function IcaapPage() {
   return (
     <ModulePage module="ifrs9" title="ICAAP" description="Internal Capital Adequacy Assessment Process — capital adequacy, Pillar 2 add-ons and macro stress testing.">
       <Stack gap="large">
-        <DemoNote title="Demo capital base">
+        <DemoNote title="Capital base">
           Capital accounts and non-loan RWA are calibrated from the demo loan book (GL connector not yet live). The CAR formula, Tier 2 cap, minimum CAR and classification bands
-          are business rules sourced from PRD §6.7.4 and §9.1.
+          are business rules sourced from and.
         </DemoNote>
 
         <Grid columns={{ base: 1, lg: 12 }} gap="large">
@@ -333,7 +334,7 @@ export function IcaapPage() {
                       label: "Tier 2 eligible",
                       value: money(current.tier2),
                       mono: true,
-                      hint: current.tier2Capped ? "Capped at one-third of Tier 1 (§9.1)" : "Within one-third of Tier 1 cap (§9.1)",
+                      hint: current.tier2Capped ? "Capped at one-third of Tier 1" : "Within one-third of Tier 1 cap",
                     },
                     { label: "Credit RWA", value: money(base.creditRwa), mono: true },
                     { label: "Market RWA", value: money(base.marketRwa), mono: true },
@@ -378,7 +379,7 @@ export function IcaapPage() {
             <CardHeader>
               <Stack gap="xsmall">
                 <CardTitle>Supervisory-action checklist</CardTitle>
-                <CardDescription>Surfaced for the current classification (§6.7.4). Checklist items are tenant-configured (demo).</CardDescription>
+                <CardDescription>Surfaced for the current classification. Checklist items are tenant-configured.</CardDescription>
               </Stack>
             </CardHeader>
             <CardContent>
@@ -398,7 +399,7 @@ export function IcaapPage() {
           <CardHeader>
             <Stack gap="xsmall">
               <CardTitle>Stress-testing workspace</CardTitle>
-              <CardDescription>Macro shock scenarios (external data feed, §5.5) applied to portfolio PD / LGD / EAD to project CAR impact. Severities are approved business rules.</CardDescription>
+              <CardDescription>Macro shock scenarios (external data feed) applied to portfolio PD / LGD / EAD to project CAR impact. Severities are approved business rules.</CardDescription>
             </Stack>
             {(canProposeScenarios || canRunStress) && (
               <Stack direction="horizontal" gap="small" wrap>
@@ -407,7 +408,7 @@ export function IcaapPage() {
                     {proposing ? "Cancel changes" : "Propose scenario changes"}
                   </Button>
                 )}
-                {canRunStress && <Button onClick={() => void runAll()}>Run stress test</Button>}
+                {canRunStress && <SubmitButton onClick={() => void runAll()}>Run stress test</SubmitButton>}
               </Stack>
             )}
           </CardHeader>
@@ -427,9 +428,9 @@ export function IcaapPage() {
                       <Textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
                     </Field>
                     <div>
-                      <Button onClick={() => void submitScenarios()} disabled={!changes.length || reason.trim().length < 5}>
+                      <SubmitButton onClick={() => void submitScenarios()} disabled={!changes.length || reason.trim().length < 5}>
                         Submit for approval
-                      </Button>
+                      </SubmitButton>
                     </div>
                   </Stack>
                 </Card>
@@ -477,7 +478,7 @@ export function IcaapPage() {
               <CardTitle>ICAAP report sign-off</CardTitle>
               <CardDescription>Head of Risk review → CRO endorsement → Board approval, routed through Operations.</CardDescription>
             </Stack>
-            {canSubmitIcaap && !pendingIcaap && <Button onClick={() => void submitIcaap()}>Submit ICAAP for sign-off</Button>}
+            {canSubmitIcaap && !pendingIcaap && <SubmitButton onClick={() => void submitIcaap()}>Submit ICAAP for sign-off</SubmitButton>}
           </CardHeader>
           <CardContent>
             <Stack gap="medium">
@@ -499,7 +500,7 @@ export function IcaapPage() {
 
         <Grid columns={{ base: 1, lg: 2 }} gap="large">
           <RulesPanel title="Capital adequacy rules" keys={IFRS9_RULE_GROUPS.capital} canRequest={canRequestRuleChange} />
-          <RulesPanel title="Capital base calibration (demo)" keys={IFRS9_RULE_GROUPS.capitalBase} canRequest={canRequestRuleChange} />
+          <RulesPanel title="Capital base calibration" keys={IFRS9_RULE_GROUPS.capitalBase} canRequest={canRequestRuleChange} />
         </Grid>
 
         <CalcRegister specs={specs} />

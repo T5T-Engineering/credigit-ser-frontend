@@ -80,7 +80,7 @@ pages/* + application/*  →  actions.ts (hooks · audit · publish · notify)  
 
 | Item (REQUIREMENTS §) | Code location |
 |---|---|
-| §5 credit types `.t1…t7`, `.fast-track` | `platform.ts` (`TIER_SLOTS.forEach` → `registerOperation`); type chosen by `creditOperationType` in `src/lib/workflow.ts`; submitted in `actions.ts` `submitForApproval` |
+| §5 credit types `.t1…t12`, `.fast-track` | `platform.ts` (`TIER_SLOTS.forEach` → `registerOperation`); type chosen by `creditOperationType` in `src/lib/workflow.ts`; submitted in `actions.ts` `submitForApproval` |
 | §5 `origination.limit-exception` | `platform.ts`; `actions.ts` `requestLimitException` / `applyLimitException` |
 | §5 `origination.recommendation-override` | `platform.ts`; `actions.ts` `adoptRecommendation` / `applyOverride` |
 | §6 templates | `platform.ts` `defineTemplates`; sent from `actions.ts` (`notify`) |
@@ -157,7 +157,7 @@ decision record [ADR-0011](../../../../credigit-ser-core-backend/docs/adr/0011-c
 
 | Topic | Frontend (this repo) | Backend | Reference |
 |---|---|---|---|
-| Credit approval type | Eight types `credit.facility-approval.t1…t7` / `.fast-track`; `defaultSteps` is a getter regenerated from chart-flow rules on every read. The engine now snapshots `instance.steps` at `submitOperation`, so new submissions keep their route; instances without a snapshot (older records) still fall back to the live definition | One type `credit.facility-approval` (`RouteFromSubmitter`), route planned by `ChartFlowRouter` and snapshotted per instance; route key `t1…t7` / `fast-track` + `legacyOperationType` keep `isCreditOp` matching | TD-113, ADR-0011 §1–3 |
+| Credit approval type | Thirteen types `credit.facility-approval.t1…t12` / `.fast-track`; `defaultSteps` is a getter regenerated from chart-flow rules on every read. The engine now snapshots `instance.steps` at `submitOperation`, so new submissions keep their route; instances without a snapshot (older records) still fall back to the live definition | One type `credit.facility-approval` (`RouteFromSubmitter`), route planned by `ChartFlowRouter` and snapshotted per instance; route key `t1…t12` / `fast-track` + `legacyOperationType` keep `isCreditOp` matching | TD-113, ADR-0011 §1–3 |
 | Limit breach | Submission allowed; `origination.credit-approval-controls` vetoes every *approve* decision until the exception is granted | Breach without a granted `origination.limit-exception` refuses submission for approval; refusal declines the request | BE-27 (`../../../../credigit-ser-core-backend/docs/decisions/open-questions.md`) |
 | Exception / override SLAs | Rules `origination.sla.limitExceptionHours` / `.overrideHours` | Workflow definitions (tenant-editable via `workflow.change`) | Backend TD-025 |
 | Lifecycle | Draft → Documents → Analysis → Recommendation → Approval → Offer … | Draft → Analysis → Approval → Approved / Declined; documents/OCR, due-diligence check and withdrawal not yet built | ADR-0011 §4, Consequences |

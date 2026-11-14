@@ -20,21 +20,21 @@ import { useErm } from "./store";
 export { ermKeys };
 export const ERM = "enterprise-risk";
 export const BRC_HREF = "/enterprise-risk/brc-pack";
-const DEMO = "Tenant parameter (demo value)";
-const BOARD_RAS = "Board RAS — tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
+const BOARD_RAS = "Board RAS — tenant parameter";
 
 /** Source of each RAS limit (regulatory floors cited from the PRD) and its unit. */
 const rasMeta: Record<string, { unit: string; limitSource: string }> = {
-  "RA-01": { unit: "%", limitSource: "PRD §6.6.2 — CBN 3.2(a) single-obligor limit 20% of shareholders' funds" },
-  "RA-02": { unit: "%", limitSource: "PRD §6.6.2 — tenant internal sector limits (utilisation)" },
-  "RA-03": { unit: "%", limitSource: "PRD §6.6.2 — CBN 3.2(c) all-tiers-of-government ceiling 10%" },
-  "RA-04": { unit: "×", limitSource: "PRD §6.6.2 — CBN 3.2(d)–(e) aggregate large exposures 8× shareholders' funds" },
+  "RA-01": { unit: "%", limitSource: "CBN 3.2(a) single-obligor limit 20% of shareholders' funds" },
+  "RA-02": { unit: "%", limitSource: "tenant internal sector limits (utilisation)" },
+  "RA-03": { unit: "%", limitSource: "CBN 3.2(c) all-tiers-of-government ceiling 10%" },
+  "RA-04": { unit: "×", limitSource: "CBN 3.2(d)–(e) aggregate large exposures 8× shareholders' funds" },
   "RA-05": { unit: "%", limitSource: BOARD_RAS },
-  "RA-06": { unit: "%", limitSource: "PRD §9.1 — CAR minimum 10% or 15% by licence" },
-  "RA-07": { unit: "%", limitSource: "Board RAS (CBN prescribes the floor) — demo value" },
-  "RA-08": { unit: "%", limitSource: "PRD §6.8.3 — LCR regulatory floor 100%" },
+  "RA-06": { unit: "%", limitSource: "CAR minimum 10% or 15% by licence" },
+  "RA-07": { unit: "%", limitSource: "Board RAS (CBN prescribes the floor)" },
+  "RA-08": { unit: "%", limitSource: "LCR regulatory floor 100%" },
   "RA-09": { unit: "%", limitSource: BOARD_RAS },
-  "RA-10": { unit: "%", limitSource: "PRD §6.9 Loss Limit Framework — utilisation ceiling (demo value)" },
+  "RA-10": { unit: "%", limitSource: "Loss Limit Framework — utilisation ceiling" },
   "RA-11": { unit: "%", limitSource: BOARD_RAS },
 };
 
@@ -47,18 +47,18 @@ const roleRule = (key: string, label: string, description: string, def: RoleId[]
 
 defineRules([
   ...rasRules,
-  { key: ermKeys.rasVersion, label: "RAS version in force", description: "Version label of the Board-approved Risk Appetite Statement.", module: ERM, category: "Risk Appetite Statement", type: "text", default: "RAS 2026.1", source: "PRD §6.10 / §4.3 — versioned configuration (demo value)" },
+  { key: ermKeys.rasVersion, label: "RAS version in force", description: "Version label of the Board-approved Risk Appetite Statement.", module: ERM, category: "Risk Appetite Statement", type: "text", default: "RAS 2026.1", source: "versioned configuration" },
   { key: ermKeys.rasApprovedBy, label: "RAS approved by", description: "Body that approved the RAS in force.", module: ERM, category: "Risk Appetite Statement", type: "text", default: "Board of Directors", source: DEMO },
   { key: ermKeys.rasApprovedAt, label: "RAS approval date", description: "ISO date the RAS in force was approved.", module: ERM, category: "Risk Appetite Statement", type: "text", default: "2026-01-28", source: DEMO },
   { key: ermKeys.rasNextReview, label: "RAS next review", description: "ISO date the RAS is next due for Board review.", module: ERM, category: "Risk Appetite Statement", type: "text", default: "2027-01-31", source: DEMO },
-  { key: ermKeys.largeExposurePct, label: "Large-exposure definition", description: "An obligor exposure at or above this share of shareholders' funds is a large exposure.", module: ERM, category: "Concentration", type: "percent", default: 10, min: 1, max: 100, unit: "%", source: "PRD §6.6.2 — CBN 3.2(d) (10% of shareholders' funds)" },
-  { key: ermKeys.policyCycleYears, label: "Policy review cycle", description: "Credit, project-finance, real-estate, SME, agriculture and retail-financing policies must be reviewed at least this often.", module: ERM, category: "Policy currency", type: "number", default: 3, min: 1, max: 10, unit: "years", source: "PRD §6.10" },
+  { key: ermKeys.largeExposurePct, label: "Large-exposure definition", description: "An obligor exposure at or above this share of shareholders' funds is a large exposure.", module: ERM, category: "Concentration", type: "percent", default: 10, min: 1, max: 100, unit: "%", source: "CBN 3.2(d) (10% of shareholders' funds)" },
+  { key: ermKeys.policyCycleYears, label: "Policy review cycle", description: "Credit, project-finance, real-estate, SME, agriculture and retail-financing policies must be reviewed at least this often.", module: ERM, category: "Policy currency", type: "number", default: 3, min: 1, max: 10, unit: "years", source: "Platform default" },
   { key: ermKeys.policyDueSoonDays, label: "Policy review — due-soon window", description: "Days before the cycle ends at which a policy shows as due soon.", module: ERM, category: "Policy currency", type: "duration", durationUnit: "days", default: 182, min: 0, max: 730, source: DEMO },
-  { key: ermKeys.significantShareholdingPct, label: "Significant shareholder threshold", description: "Holding at or above which a shareholder is an insider for related-party disclosure.", module: ERM, category: "Insider & related party", type: "percent", default: 5, min: 0.1, max: 100, unit: "%", source: "PRD §6.10" },
-  roleRule(ermKeys.amberEscalationRoles, "Appetite early warning — escalate to", "Roles an Amber appetite metric is escalated to.", ["cro"], "PRD §6.10 (automated breach escalation) — demo mapping"),
-  roleRule(ermKeys.redEscalationRoles, "Appetite breach — escalate to", "Roles a Red appetite breach is escalated to (CRO and Board Risk Committee).", ["cro", "board"], "PRD §6.10 / §6.11 — demo mapping"),
-  { key: ermKeys.brcRequiresAdoptedSummary, label: "BRC pack needs an adopted summary", description: "The Board Risk Committee pack can't be submitted until its AI-drafted executive summary is reviewed and adopted.", module: ERM, category: "Board reporting", type: "boolean", default: true, source: "PRD §6.12 — AI-drafted, human-approved (tenant choice, demo on)" },
-  roleRule(ermKeys.brcNotifyRoles, "BRC pack ready — notify", "Roles notified when the Board Risk Committee pack is approved for circulation.", ["board", "head-of-risk", "cro"], "PRD §6.11 — demo mapping"),
+  { key: ermKeys.significantShareholdingPct, label: "Significant shareholder threshold", description: "Holding at or above which a shareholder is an insider for related-party disclosure.", module: ERM, category: "Insider & related party", type: "percent", default: 5, min: 0.1, max: 100, unit: "%", source: "Platform default" },
+  roleRule(ermKeys.amberEscalationRoles, "Appetite early warning — escalate to", "Roles an Amber appetite metric is escalated to.", ["cro"], "(automated breach escalation)"),
+  roleRule(ermKeys.redEscalationRoles, "Appetite breach — escalate to", "Roles a Red appetite breach is escalated to (CRO and Board Risk Committee).", ["cro", "board"], "Tenant mapping"),
+  { key: ermKeys.brcRequiresAdoptedSummary, label: "BRC pack needs an adopted summary", description: "The Board Risk Committee pack can't be submitted until its AI-drafted executive summary is reviewed and adopted.", module: ERM, category: "Board reporting", type: "boolean", default: true, source: "AI-drafted, human-approved (tenant choice)" },
+  roleRule(ermKeys.brcNotifyRoles, "BRC pack ready — notify", "Roles notified when the Board Risk Committee pack is approved for circulation.", ["board", "head-of-risk", "cro"], "Tenant mapping"),
 ]);
 
 // ---------------------------------------------------------------- operations
@@ -69,7 +69,7 @@ registerOperation<RasChangePayload>({
   type: "enterprise-risk.ras.change",
   name: "Risk appetite limit change",
   module: ERM,
-  description: "Change a Risk Appetite Statement limit or early-warning tolerance. CRO review, then Board approval (PRD §6.10, §4.3).",
+  description: "Change a Risk Appetite Statement limit or early-warning tolerance. CRO review, then Board approval.",
   defaultSteps: [step("cro", "CRO review", ["cro"], 72), step("board", "Board approval", ["board"], 168)],
   apply: (p, { instance, actor }) => {
     applyRuleValue(ermKeys.rasLimit(p.metricId), p.limit, actor, { reason: p.reason, operationId: instance.id });
@@ -98,7 +98,7 @@ registerOperation<BrcPackPayload>({
   type: "enterprise-risk.brc-pack.approval",
   name: "Board Risk Committee pack approval",
   module: ERM,
-  description: "The Head of Risk compiles and submits the BRC pack; the CRO approves it for circulation (PRD §6.11, §4.3).",
+  description: "The Head of Risk compiles and submits the BRC pack; the CRO approves it for circulation.",
   defaultSteps: [step("approve", "CRO approval", ["cro"], 72)],
   apply: (p, { actor }) => {
     useErm.getState().updatePack(p.packId, { status: "Approved for BRC", approvedBy: actor.name });

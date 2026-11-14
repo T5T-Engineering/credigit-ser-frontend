@@ -47,11 +47,19 @@ Tenant administration of named users, roles and sign-on limits, per-role session
 | ADM-FR-15 | IT Support's viewing of the audit log is itself logged. | PRD §10.1 |
 | ADM-FR-16 | Add/remove/merge/split/re-sequence roles and approval tiers; remap co-signer/adjudicator matrix. | PRD §4.0 — **not implemented** (static RoleId set, TD-805) |
 | ADM-FR-17 | Second-person confirmation for regulatory-parameter changes. | PRD §10.4; scope of "regulatory" = W1 |
-| ADM-FR-18 | Roles × permissions matrix over the permission catalogue (library `PermissionMatrix`): search, per-module tri-state, protected administrator permissions locked; save sends one `role.permissions-change` request per changed role (`diffRoleGrants` → `{ grant[], revoke[], reason }`), approved in Operations (requester can't approve). | Invariant 12; API contract §4 |
-| ADM-FR-19 | Lock / unlock a user's sign-in with a required reason (`ConfirmDialog reason="required"`); audited, evented, notified. | Assumption AUTH-OQ2; backend has no lock/unlock endpoint yet (BE request) |
-| ADM-FR-20 | Export users (`GET /identity/users/export`) and roles & limits (`GET /identity/roles/export`) as CSV; each export permission-checked and audited. | API contract §4 |
-| ADM-FR-21 | MFA reset routed through Operations (`user.mfa-reset`) in demo mode; disabled in API mode until the backend endpoint exists (TD-036 / BE-31). | Invariant 9 (workflow-routed) |
-| ADM-FR-22 | Every admin screen, tab, button and export is guarded by a catalogue permission key; System Admin holds them all by default. | Invariant 12 |
+| ADM-FR-18 | Permissions screen: per-role permission matrix from the backend catalogue. Changes go through `role.permissions-change`, which by default has no approval steps, so the System Admin's change is saved at once ("Save"); if a tenant adds steps, the screen shows "Request" instead. | Backend ADR-0012; user decision 2026-11-13 |
+| ADM-FR-19 | Permission groups: additive permission bundles with members and optional end date. Saved at once by default (`permission-group.change` / `.membership` have no approval steps). | Backend ADR-0014; user decision 2026-11-13 |
+| ADM-FR-21 | Roles & limits shows each role's module access as members actually see it (backend, from the role's current permissions), linking to Permissions to change it. | User request 2026-11-13 |
+| ADM-FR-22 | The user panel shows the real second sign-in step (authenticator app or e-mailed code; Microsoft sign-in = Entra ID) and offers **Reset MFA** for app users (lost phone): backend `user.mfa-reset`, applied at once by default, audited, notified, sessions revoked; not for yourself. | Backend ADR-0017; user request 2026-11-13 |
+| ADM-FR-23 | Saving on Permissions and Permission groups opens a popup saying saved, sent for approval (with the request link) or why it failed. People affected see a saved change on their next page or when they return to the tab (access re-read on navigation and tab focus). | User request 2026-11-13 |
+| ADM-FR-24 | On Permissions, Save without a reason says "This field is required." under the reason and moves to it (no change is sent). Toggled but unsaved permissions are flagged as unsaved, and refreshing or closing the tab asks first, so they are not lost silently. | User request 2026-11-13 |
+| ADM-FR-25 | On Permission groups, Delete group, Add member and Remove member each open a confirmation dialog with its own required reason (minimum `operations.minCommentLength`); the page reason field is only for creating a group and changing its permissions. | User request 2026-11-13 |
+| ADM-FR-20 | Entra role mapping: map Entra groups (object id) and app roles (value) to platform roles; a Microsoft sign-in by an unknown person matching a mapping becomes an access request. Add / remove are requests approved in Operations (`entra-mapping.change`). Permissions `identity.entra-mappings.view` / `.change`. | Backend ADR-0016, IAM-FR-29 |
+| ADM-FR-26 | Roles × permissions matrix over the permission catalogue (library `PermissionMatrix`): search, per-module tri-state, protected administrator permissions locked; save sends one `role.permissions-change` request per changed role (`diffRoleGrants` → `{ grant[], revoke[], reason }`), approved in Operations (requester can't approve). | Invariant 12; API contract §4 |
+| ADM-FR-27 | Lock / unlock a user's sign-in with a required reason (`ConfirmDialog reason="required"`); audited, evented, notified. | Assumption AUTH-OQ2; backend has no lock/unlock endpoint yet (BE request) |
+| ADM-FR-28 | Export users (`GET /identity/users/export`) and roles & limits (`GET /identity/roles/export`) as CSV; each export permission-checked and audited. | API contract §4 |
+| ADM-FR-29 | MFA reset routed through Operations (`user.mfa-reset`) in demo mode; disabled in API mode until the backend endpoint exists (TD-036 / BE-31). | Invariant 9 (workflow-routed) |
+| ADM-FR-30 | Every admin screen, tab, button and export is guarded by a catalogue permission key; System Admin holds them all by default. | Invariant 12 |
 
 ## 4. Business rules and parameters
 | Rule key | Meaning | Default | Source |
@@ -135,3 +143,4 @@ Tenant administration of named users, roles and sign-on limits, per-role session
 | W3 | Role tier numbering vs 7-tier chart-flow | See OPEN-QUESTIONS |
 | W6 | Time-box for IT Support business-data access | Not time-boxed; viewing logged once per session |
 | 3 | Sign-on limits per tier | Illustrative NGN values |
+| ADM-Q1 | PRD §4 requires cloning roles (ADM-FR-10), but cloned roles can't be assigned to users yet (TD-805). Confirm hiding the action until they can. | "Request clone" hidden in Roles & limits; requirement kept |

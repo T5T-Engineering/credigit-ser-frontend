@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Badge, ModuleHeader, PermissionGate, Stack } from "@credigit/web-ui";
+import { ModuleHeader, PermissionGate, Stack, ValidationScope, useValidation } from "@credigit/web-ui";
 import { allNavItems, navItemPermissions, pagePermissionFor } from "@/lib/nav";
 import type { ModuleKey } from "@/lib/rbac/roles";
 import { useCan, usePermissionSet } from "@/lib/iam/permissions";
@@ -30,6 +30,7 @@ export function ModulePage({ module, title, description, actions, hideTabs, chil
   const allowed = useCan(pageKey ?? (item ? navItemPermissions(item) : []));
   const held = usePermissionSet();
   const Icon = item?.icon;
+  const validation = useValidation();
   const tabs = hideTabs ? undefined : item?.pages?.filter((p) => held.has(p.permission)).map((p) => ({ id: p.href, label: p.label, href: p.href, badge: p.phase && p.phase > (item.phase ?? 1) ? `P${p.phase}` : undefined }));
   const activeTab = tabs ? [...tabs].sort((a, b) => b.id.length - a.id.length).find((t) => pathname === t.id || pathname.startsWith(`${t.id}/`))?.id : undefined;
 
@@ -40,7 +41,7 @@ export function ModulePage({ module, title, description, actions, hideTabs, chil
         title={title ?? item?.label}
         description={description}
         phase={item?.phase}
-        badges={item?.prd ? <Badge variant="outline">PRD {item.prd}</Badge> : undefined}
+        badges={undefined}
         actions={actions}
         tabs={tabs}
         activeTab={activeTab}
@@ -48,7 +49,8 @@ export function ModulePage({ module, title, description, actions, hideTabs, chil
         titleAs="h1"
       />
       <PermissionGate allowed={allowed} description="Your permissions don't include this page. Ask your System Admin, or switch demo role from the user menu.">
-        {children}
+        {/* Page-level scope: a SubmitButton on the page checks its required fields; dialogs and Forms carry their own. */}
+        <ValidationScope value={validation}>{children}</ValidationScope>
       </PermissionGate>
     </Stack>
   );

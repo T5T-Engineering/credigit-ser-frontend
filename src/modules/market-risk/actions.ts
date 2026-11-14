@@ -71,7 +71,7 @@ export function escalateBreach(b: Breach) {
   const actor = currentActor();
   return guarded("breach.escalate", { breach: b, to: next }, ({ to }) => {
     useMarketRisk.getState().setBreach(b.id, { levelRole: to, status: "Escalated" });
-    audit("Escalated market-risk limit breach (§6.4.4)", "LimitBreach", b.id, `${b.status} · ${roleName(b.levelRole)}`, `Escalated · ${roleName(to)}`);
+    audit("Escalated market-risk limit breach", "LimitBreach", b.id, `${b.status} · ${roleName(b.levelRole)}`, `Escalated · ${roleName(to)}`);
     publish("market-risk.breach.escalated", { module: M, subject: { type: "LimitBreach", id: b.id, title: b.metric, href: "/market-risk" }, payload: { from: b.levelRole, to } });
     notify({ templateId: "market-risk.breach-escalated", toRoles: [to as RoleId], href: "/market-risk", data: { metric: b.metric, desk: b.desk, actual: b.actual, limit: b.limit, level: roleName(to), by: actor.name } });
   });

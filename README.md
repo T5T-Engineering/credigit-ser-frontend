@@ -26,7 +26,7 @@ Requires Node.js 22+.
 
 ```bash
 npm install
-npm run dev          # http://localhost:3100
+npm run dev          # http://localhost:8061
 ```
 
 Other scripts: `npm run build` (static export to `out/`), `npm run lint`, `npm run typecheck`, `npm test`.
@@ -54,16 +54,16 @@ You can also sign straight in for a role by adding `?demoRole=<role-id>` to any 
 links and screenshots:
 
 ```text
-http://localhost:3100/dashboard/?demoRole=cro
-http://localhost:3100/inbox/?demoRole=group-head
-http://localhost:3100/admin/parameters/?demoRole=system-admin
+http://localhost:8061/dashboard/?demoRole=cro
+http://localhost:8061/inbox/?demoRole=group-head
+http://localhost:8061/admin/parameters/?demoRole=system-admin
 ```
 
 The role ids are in `src/lib/rbac/roles.ts`. Some examples: `account-officer`, `bdm`, `credit-analyst`, `group-head`, `cco`,
 `directorate-head`, `cro`, `head-of-risk`, `md`, `system-admin` and `it-support`.
 
 Changes you make (applications, decisions, users, parameters, branding) are saved in **this browser only**. To restore
-the original data, use **Settings → Profile & security → Reset demo data** or the command palette (Ctrl/⌘ K → "Reset
+the original data, use the command palette (Ctrl/⌘ K → "Reset
 demo data"). To hide demo access in a deployment, set `NEXT_PUBLIC_DEMO_ACCESS=false`.
 
 ## Microsoft single sign-on (Entra ID)
@@ -77,7 +77,7 @@ Microsoft sign-in uses MSAL.js with a popup and the authorization-code flow with
    - Supported account types: *Single tenant* (one bank) or *Multitenant* (any work account).
    - Platform: **Single-page application (SPA)**. Don't use "Web": an SPA registration is what allows PKCE without a secret.
 2. **Redirect URIs** (SPA platform). Add one for every origin you use, with the trailing slash:
-   - `http://localhost:3100/login/` (local development)
+   - `http://localhost:8061/login/` (local development)
    - `https://<your-site>.netlify.app/login/` and any custom domain, e.g. `https://risk.examplebank.ng/login/`
 3. **API permissions:** Microsoft Graph `openid`, `profile` and `email` (delegated). These are granted by default.
 4. **Optional: app roles.** To map Entra users to Smart Enterprise Risk 360° roles, open *App roles → Create app role*,
@@ -93,6 +93,7 @@ Microsoft sign-in uses MSAL.js with a popup and the authorization-code flow with
    | `NEXT_PUBLIC_AZURE_AD_TENANT_ID` | Directory (tenant) ID, or `organizations` for any work account |
    | `NEXT_PUBLIC_AZURE_AD_REDIRECT_URI` | Optional. Defaults to `<origin>/login/` |
    | `NEXT_PUBLIC_DEMO_ACCESS` | `true` shows the demo role picker; `false` allows Microsoft sign-in only |
+   | `NEXT_PUBLIC_APP_ENVIRONMENT` | Environment label in the sidebar and header badge (e.g. `Development`, `UAT`). Leave empty in production to hide it. |
 
    These are public build-time values. They identify the app and contain no secrets. Rebuild after changing them.
 

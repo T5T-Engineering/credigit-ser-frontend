@@ -9,9 +9,10 @@
  * BACKEND SEAM: replace `publish` with a call to the backend event outbox (integration events, PRD §4.2 README).
  */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { currentActor } from "./scope";
 import { newId } from "../data/store";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type EventSubject = { type: string; id: string; title?: string; href?: string };
 
@@ -50,7 +51,7 @@ type EventsState = {
 const LOG_LIMIT = 500;
 
 export const useEventStore = create<EventsState>()(
-  persist((): EventsState => ({ log: [], enabled: {}, lastRun: {} }), { name: "credigit.ser.events", storage: createJSONStorage(() => localStorage) }),
+  persist((): EventsState => ({ log: [], enabled: {}, lastRun: {} }), { name: "credigit.ser.events", storage: dataStorage() }),
 );
 
 const catalogue = new Map<string, EventDefinition>();
@@ -112,3 +113,5 @@ export function publish<P>(name: string, input: { module: string; subject?: Even
   }
   return event;
 }
+
+registerDatabaseStore(useEventStore);

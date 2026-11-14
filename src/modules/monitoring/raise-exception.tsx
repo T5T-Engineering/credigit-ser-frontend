@@ -79,7 +79,7 @@ function RaiseExceptionInner({ target, onClose, onRaised }: { target: RaiseExcep
         <Field label="Details" htmlFor="exc-detail" description="What was detected and what cure is expected.">
           <Textarea id="exc-detail" rows={4} value={detail} onChange={(e) => setDetail(e.target.value)} />
         </Field>
-        <Alert tone="info" title="Escalation protocol (PRD §6.4.4)">
+        <Alert tone="info" title="Escalation protocol">
           <Stack gap="xsmall">
             <Text variant="small">
               Level 1 notifies: {level1.notified}. Dashboard and email fire together to the named officers. Cure window: {slaBusinessDays(1)} business days.

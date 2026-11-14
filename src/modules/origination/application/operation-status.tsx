@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
-import { Alert, Button, DecisionPanel, Stack, Text, useToast, type DecisionAction } from "@credigit/web-ui";
+import { Alert, Button, DecisionPanel, Stack, Text, type DecisionAction } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { roleById } from "@/lib/rbac/roles";
 import { actingRoles, canDecide, currentStep, stepDueAt, type OperationInstance } from "@/lib/platform/operations";
 import { useScope } from "@/lib/platform/scope";
@@ -17,7 +18,7 @@ const toEngine: Record<DecisionAction, "approve" | "reject" | "return"> = { appr
 /** Pending operation notice with a link to Operations; shows an inline decision panel when the signed-in user can act. */
 export function PendingOperation({ instance, title, actions = ["approve", "decline"], actionLabels }: { instance: OperationInstance; title: string; actions?: DecisionAction[]; actionLabels?: Partial<Record<DecisionAction, string>> }) {
   const { actor } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const minComment = useRule<number>("operations.minCommentLength");
   const allowed = canDecide(instance, actor);
   const step = currentStep(instance);

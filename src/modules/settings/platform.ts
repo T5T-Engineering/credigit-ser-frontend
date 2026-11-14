@@ -22,7 +22,7 @@ defineRules([
     category: "Branding",
     type: "roles",
     default: ["system-admin"],
-    source: "PRD §4.1 (System Admin configures the tenant) — demo value",
+    source: "(System Admin configures the tenant)",
   },
   {
     key: "settings.brand.personalPreview",
@@ -32,7 +32,7 @@ defineRules([
     category: "Branding",
     type: "boolean",
     default: true,
-    source: "Tenant parameter (demo value)",
+    source: "Tenant parameter",
   },
 ]);
 
@@ -40,6 +40,7 @@ export type BrandChangePayload = { brand: BrandConfig; summary: string; reason: 
 
 registerOperation<BrandChangePayload>({
   type: "brand.change",
+  finalApproverEligible: true,
   name: "Tenant brand change",
   module: "settings",
   description: "Change the tenant's colours, logos and font for every user. Requested by the System Admin, approved by one approver.",
@@ -74,7 +75,6 @@ defineTemplates([
 
 defineEvents([
   { name: "settings.brand.changed", module: "settings", description: "The tenant brand (colours, logos, font) changed after approval.", payloadExample: { summary: "Inter · custom logo", operationId: "OPS-…" } },
-  { name: "settings.demo-data.reset", module: "settings", description: "A user reset the demo data in this browser." },
 ]);
 
 defineHookPoints([

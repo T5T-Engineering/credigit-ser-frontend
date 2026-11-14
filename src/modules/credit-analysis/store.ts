@@ -9,8 +9,9 @@
  * job, advisory note, gating overrides) — page code reads through the hooks below.
  */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import type { ParamOverride } from "./logic";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type AdvisorySignOff = {
   text: string;
@@ -58,7 +59,7 @@ export const useCreditAnalysis = create<State>()(
     {
       name: "credigit.ser.credit-analysis",
       version: 2,
-      storage: createJSONStorage(() => localStorage),
+      storage: dataStorage(),
       partialize: ({ overrides, advisory, gatingOverrides }) => ({ overrides, advisory, gatingOverrides }),
       migrate: (persisted) => ({ gatingOverrides: {}, ...(persisted as object) }) as State,
     },
@@ -69,3 +70,5 @@ const empty: Record<string, ParamOverride> = {};
 export const useOverrides = (id: string) => useCreditAnalysis((s) => s.overrides[id] ?? empty);
 export const useAdvisorySignOff = (id: string) => useCreditAnalysis((s) => s.advisory[id]);
 export const useGatingOverrides = () => useCreditAnalysis((s) => s.gatingOverrides);
+
+registerDatabaseStore(useCreditAnalysis);

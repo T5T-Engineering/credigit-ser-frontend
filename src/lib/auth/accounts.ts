@@ -15,6 +15,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { PasswordRule } from "@credigit/web-ui";
+import { backendAuthEnabled, backendChangePassword, backendForgotPassword, backendRegister, backendResetPassword, backendSignIn } from "./backend-auth";
 import type { RoleId } from "../rbac/roles";
 import { roleById } from "../rbac/roles";
 import { useDb, newId } from "../data/store";
@@ -204,6 +205,7 @@ export type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string
 
 /** Step 1 of password sign-in. On success a one-time code is required (MFA). */
 export async function signInWithPassword(email: string, password: string): Promise<Result<{ challengeId: string }>> {
+  if (backendAuthEnabled) return backendSignIn(email, password);
   const generic = "Email or password is incorrect.";
   const hook = await runHooks("identity.login.before", { email: norm(email), method: "password" });
   if (!hook.ok) return { ok: false, error: `Sign-in blocked by ${hook.vetoedBy}: ${hook.reason}` };
@@ -239,6 +241,7 @@ export type RegistrationInput = { name: string; email: string; password: string;
 
 /** Request access. Email is verified by one-time code, then a System Admin approves (PRD §4: admin-controlled users). */
 export async function register(input: RegistrationInput): Promise<Result<{ challengeId: string }>> {
+  if (backendAuthEnabled) return backendRegister(input);
   const key = norm(input.email);
   const existing = useAccounts.getState().accounts[key] ?? (userByEmail(key) ? true : undefined);
   if (existing) return { ok: false, error: "An account with this email already exists. Sign in or set or reset your password." };
@@ -262,6 +265,7 @@ export async function register(input: RegistrationInput): Promise<Result<{ chall
 
 /** Always "succeeds" to avoid revealing which emails exist; a code is only created for real accounts. */
 export async function requestPasswordReset(email: string): Promise<{ challengeId: string | null }> {
+  if (backendAuthEnabled) return backendForgotPassword(email);
   const account = await getAccount(email);
   if (!account || account.status === "Pending verification" || account.status === "Rejected") return { challengeId: null };
   audit("Requested password reset", email);
@@ -325,6 +329,7 @@ export async function verifyCode(challengeId: string, code: string): Promise<Ver
 
 /** Complete a reset with the verified challenge token. Unlocks a locked account (also sets a first password). */
 export async function resetPassword(token: string, password: string): Promise<Result> {
+  if (backendAuthEnabled) return backendResetPassword(token, password);
   const c = getChallenge(token);
   if (!c || c.purpose !== "reset" || !c.verifiedAt || Date.now() > c.expiresAt) return { ok: false, error: "This reset link has expired. Request a new code." };
   const account = await getAccount(c.email);
@@ -342,6 +347,7 @@ export async function resetPassword(token: string, password: string): Promise<Re
 
 /** Change password while signed in (requires the current password). */
 export async function changePassword(email: string, current: string, next: string): Promise<Result> {
+  if (backendAuthEnabled) return backendChangePassword(current, next);
   const account = await getAccount(email);
   if (!account?.hash) return { ok: false, error: "No password is set for this account yet. Use Set or reset your password on the sign-in page." };
   if ((await hashPassword(current, account.salt)) !== account.hash) {

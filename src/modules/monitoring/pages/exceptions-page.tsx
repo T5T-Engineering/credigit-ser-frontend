@@ -26,6 +26,7 @@ import {
   StatCard,
   StatusBadge,
   Steps,
+  SubmitButton,
   Text,
   TextLink,
   Textarea,
@@ -33,6 +34,7 @@ import {
   type KanbanCard,
   type KanbanColumn,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useRole } from "@/lib/auth/session";
 import { useCan } from "@/lib/iam/permissions";
@@ -167,7 +169,7 @@ function ExceptionsInner() {
   return (
     <ModulePage
       module="monitoring"
-      description="Every exception enters one tenant-configurable escalation protocol that runs until the exception is cured and evidenced — not merely acknowledged (PRD §6.4.4). Resolutions and out-of-cycle escalations are signed off through Operations."
+      description="Every exception enters one tenant-configurable escalation protocol that runs until the exception is cured and evidenced — not merely acknowledged. Resolutions and out-of-cycle escalations are signed off through Operations."
       actions={
         canSweep ? (
           <Button variant="secondary" iconBefore={<RefreshCw aria-hidden className="size-4" />} onClick={sweep} loading={sweeping} disabled={!exceptions.some((e) => slaLapsed(e, now))}>
@@ -177,18 +179,7 @@ function ExceptionsInner() {
       }
     >
       <Stack gap="large">
-        {notice && (
-          <Alert
-            tone={notice.tone}
-            action={
-              <Button size="small" variant="text" onClick={() => setNotice(null)}>
-                Dismiss
-              </Button>
-            }
-          >
-            {notice.text}
-          </Alert>
-        )}
+        <OutcomePopup value={notice} map={outcomeCopy.toneText({ success: "Done", danger: "Not done", info: "Note" })} />
         <Grid columns={{ base: 2, lg: 4 }} gap="medium">
           <StatCard label="Open exceptions" value={number(open.length)} hint={`${open.filter((e) => e.source === "AI-flagged").length} AI-flagged`} />
           <StatCard label="At Level 3–4" value={number(open.filter((e) => e.level >= 3).length)} hint={ladder[2]!.notified} tone="danger" />
@@ -352,9 +343,9 @@ function ExceptionDrawer({
               </Button>
             ) : null}
             {canResolve ? (
-              <Button iconBefore={<CheckCircle2 aria-hidden className="size-4" />} onClick={onResolve}>
+              <SubmitButton iconBefore={<CheckCircle2 aria-hidden className="size-4" />} onClick={onResolve}>
                 Submit curing evidence
-              </Button>
+              </SubmitButton>
             ) : null}
           </>
         ) : canReview && resolved ? (
@@ -450,9 +441,9 @@ function ResolveModal({ e, onClose, onDone }: { e: MonitoringException; onClose:
           <Button variant="tertiary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save} loading={busy} disabled={!valid}>
+          <SubmitButton onClick={save} loading={busy} disabled={!valid}>
             Submit for sign-off
-          </Button>
+          </SubmitButton>
         </>
       }
     >
@@ -503,9 +494,9 @@ function EscalateModal({ e, onClose, onDone }: { e: MonitoringException; onClose
           <Button variant="tertiary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save} loading={busy} disabled={reason.trim().length < minReason}>
+          <SubmitButton onClick={save} loading={busy} disabled={reason.trim().length < minReason}>
             Submit for sign-off
-          </Button>
+          </SubmitButton>
         </>
       }
     >

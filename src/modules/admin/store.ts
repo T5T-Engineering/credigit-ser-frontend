@@ -15,7 +15,7 @@
  */
 import { useMemo } from "react";
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { roleById, roles, type Role, type RoleId } from "@/lib/rbac/roles";
 import { chartFlow } from "@/lib/workflow";
 import { intensityThresholds, type IntensityThresholds } from "@/lib/rar";
@@ -24,6 +24,7 @@ import { useOperationsStore, type OperationInstance } from "@/lib/platform/opera
 import { getRule, ruleDefinition, useRulesStore } from "@/lib/platform/rules";
 import type { CollateralType, ProductType } from "@/lib/data/types";
 import { allProducts, productSlug, roleName, roleSecurity, ruleKeys, type RoleSecurity } from "./rule-keys";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type { RoleSecurity } from "./rule-keys";
 
@@ -46,7 +47,7 @@ export const useAdminStore = create<AdminState>()(
   persist((): AdminState => ({ customRoles: [] }), {
     name: "credigit.ser.admin",
     version: 2,
-    storage: createJSONStorage(() => localStorage),
+    storage: dataStorage(),
     // v1 held parameters (now business rules) — keep only cloned roles that have the v2 shape.
     migrate: (persisted) => {
       const list = ((persisted as { customRoles?: CustomRole[] } | null)?.customRoles ?? []).filter((c) => c && c.security);
@@ -207,3 +208,5 @@ export function useOpenAdminOperations(): OperationInstance[] {
   const instances = useOperationsStore((s) => s.instances);
   return useMemo(() => instances.filter((i) => adminOperationTypes.includes(i.operationType) && open(i)), [instances]);
 }
+
+registerDatabaseStore(useAdminStore);

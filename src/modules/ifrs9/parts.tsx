@@ -70,7 +70,7 @@ export function EclDetailDrawer({ row, onClose }: { row: EclRow | null; onClose:
   useRulesVersion();
   const p = eclParams();
   return (
-    <Drawer open={!!row} onOpenChange={(o) => !o && onClose()} title={row ? `${row.id} · ${row.obligor?.name ?? ""}` : ""} description="ECL = PD × LGD × EAD (PRD §8)" size="large">
+    <Drawer open={!!row} onOpenChange={(o) => !o && onClose()} title={row ? `${row.id} · ${row.obligor?.name ?? ""}` : ""} description="ECL = PD × LGD × EAD" size="large">
       {row && f && (
         <Stack gap="large">
           <DescriptionList

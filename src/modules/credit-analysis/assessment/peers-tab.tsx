@@ -162,7 +162,7 @@ export function PeersTab({ a, benchmarks, peers }: Props) {
           <div>
             <CardTitle>Composite peer positioning — tenant book</CardTitle>
             <CardDescription>
-              Axis averages benchmarked against {peers.peers.length} other scored obligors · scope: {peers.scope.toLowerCase()} (§6.2.10)
+              Axis averages benchmarked against {peers.peers.length} other scored obligors · scope: {peers.scope.toLowerCase()}
             </CardDescription>
           </div>
         </CardHeader>

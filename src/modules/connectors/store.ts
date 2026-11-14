@@ -5,9 +5,10 @@
  * BACKEND SEAM: "Run now" becomes a POST to the connector job API; overrides become tenant configuration commands.
  */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { getRule } from "@/lib/platform/rules";
 import type { Run } from "./data";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 type Override = { lastRunAt?: string; status?: "Healthy" | "Degraded" | "Failed" | "Paused"; schedule?: string; enabled?: boolean };
 
@@ -30,6 +31,8 @@ export const useConnectors = create<State>()(
       setOverride: (id, o) => set((s) => ({ overrides: { ...s.overrides, [id]: { ...s.overrides[id], ...o } } })),
       setRunning: (id, v) => set((s) => ({ running: { ...s.running, [id]: v } })),
     }),
-    { name: "credigit.ser.connectors", version: 1, storage: createJSONStorage(() => localStorage), partialize: ({ runs, overrides }) => ({ runs, overrides }) },
+    { name: "credigit.ser.connectors", version: 1, storage: dataStorage(), partialize: ({ runs, overrides }) => ({ runs, overrides }) },
   ),
 );
+
+registerDatabaseStore(useConnectors);

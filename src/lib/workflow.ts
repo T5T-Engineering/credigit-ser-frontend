@@ -26,16 +26,19 @@ export type Tier = { pair: string; roles: RoleId[]; limit: number; adjudicator?:
 
 // ---------------------------------------------------------------- business rules
 
-/** Configurable tier slots of the Standard ladder (PRD §6.1.1 default configuration has seven). A slot with no roles is skipped. */
-export const TIER_SLOTS = ["T1", "T2", "T3", "T4", "T5", "T6", "T7"] as const;
+/** Configurable tier slots of the Standard ladder (PRD §6.1.1 default configuration uses seven; T8–T12 are empty by default). A slot with no roles is skipped. */
+export const TIER_SLOTS = ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12"] as const;
 export const FAST_TRACK_PAIR = "FT1";
 
 const roleOptions = roles.map((r) => ({ value: r.id, label: r.name }));
 const adjudicatorOptions = [{ value: "", label: "None" }, ...roleOptions];
+/** Extra slots may leave the limit role empty: the last signer's limit then applies. */
+const optionalLimitRoleOptions = [{ value: "", label: "Last signer" }, ...roleOptions];
 
-type SlotDefault = { roles: RoleId[]; adjudicator: RoleId | ""; limitRole: RoleId; slaHours: number; source: string };
-const SRC_FLOW = "PRD §6.1.1–6.1.2 (default configuration)";
-const SRC_SLA = "Tenant parameter (demo value)";
+type SlotDefault = { roles: RoleId[]; adjudicator: RoleId | ""; limitRole: RoleId | ""; slaHours: number; source: string };
+const SRC_FLOW = "6.1.2 (default configuration)";
+const SRC_SLA = "Tenant parameter";
+const extraSlot: SlotDefault = { roles: [], adjudicator: "", limitRole: "", slaHours: 168, source: "Optional extra tier (empty by default, skipped)" };
 const slotDefaults: Record<(typeof TIER_SLOTS)[number], SlotDefault> = {
   T1: { roles: ["bdm"], adjudicator: "", limitRole: "bdm", slaHours: 24, source: SRC_FLOW },
   T2: { roles: ["credit-analyst", "group-head"], adjudicator: "cco", limitRole: "group-head", slaHours: 24, source: SRC_FLOW },
@@ -44,6 +47,11 @@ const slotDefaults: Record<(typeof TIER_SLOTS)[number], SlotDefault> = {
   T5: { roles: ["mcc"], adjudicator: "", limitRole: "mcc", slaHours: 72, source: SRC_FLOW },
   T6: { roles: ["bcc"], adjudicator: "", limitRole: "bcc", slaHours: 120, source: SRC_FLOW },
   T7: { roles: ["board"], adjudicator: "", limitRole: "board", slaHours: 168, source: SRC_FLOW },
+  T8: extraSlot,
+  T9: extraSlot,
+  T10: extraSlot,
+  T11: extraSlot,
+  T12: extraSlot,
 };
 
 defineRules([
@@ -53,13 +61,13 @@ defineRules([
     return [
       { ...base, key: `origination.chartFlow.${slot}.roles`, label: `Tier ${i + 1} — signers`, description: `Roles that sign tier ${i + 1}. One role signs alone; two or more co-sign. Leave empty to skip the tier.`, type: "roles" as const, default: d.roles, source: d.source },
       { ...base, key: `origination.chartFlow.${slot}.adjudicator`, label: `Tier ${i + 1} — adjudicator`, description: `Role that resolves a dissent between the tier ${i + 1} co-signers.`, type: "enum" as const, options: adjudicatorOptions, default: d.adjudicator, source: d.source },
-      { ...base, key: `origination.chartFlow.${slot}.limitRole`, label: `Tier ${i + 1} — limit role`, description: `Whose sign-on limit closes the route at tier ${i + 1} (the amount must be within it).`, type: "enum" as const, options: roleOptions, default: d.limitRole, source: d.source },
+      { ...base, key: `origination.chartFlow.${slot}.limitRole`, label: `Tier ${i + 1} — limit role`, description: `Whose sign-on limit closes the route at tier ${i + 1} (the amount must be within it).`, type: "enum" as const, options: d.limitRole ? roleOptions : optionalLimitRoleOptions, default: d.limitRole, source: d.source },
       { ...base, key: `origination.chartFlow.${slot}.slaHours`, label: `Tier ${i + 1} — decision SLA`, description: `Hours the tier ${i + 1} signers have to decide.`, type: "duration" as const, durationUnit: "hours" as const, default: d.slaHours, min: 1, max: 720, source: SRC_SLA },
     ];
   }),
-  { key: "origination.fastTrack.roles", label: "Fast-Track — co-signers", description: "Roles that co-sign a Fast-Track request within the Fast-Track limit.", module: "origination", category: "Credit chart-flow (Fast-Track)", type: "roles", default: ["bdm", "credit-analyst"], source: "PRD §6.1.3" },
-  { key: "origination.fastTrack.adjudicator", label: "Fast-Track — adjudicator", description: "Role that resolves a dissent between the Fast-Track co-signers.", module: "origination", category: "Credit chart-flow (Fast-Track)", type: "enum", options: adjudicatorOptions, default: "cco", source: "PRD §6.1.3" },
-  { key: "origination.fastTrack.limitRole", label: "Fast-Track — ceiling role", description: "Fast-Track requests within this role's sign-on limit use the Fast-Track pair; above it the Standard ladder applies (open question O1).", module: "origination", category: "Credit chart-flow (Fast-Track)", type: "enum", options: roleOptions, default: "bdm", source: "PRD §6.1.3 — see docs/OPEN-QUESTIONS.md O1/W5" },
+  { key: "origination.fastTrack.roles", label: "Fast-Track — co-signers", description: "Roles that co-sign a Fast-Track request within the Fast-Track limit.", module: "origination", category: "Credit chart-flow (Fast-Track)", type: "roles", default: ["bdm", "credit-analyst"], source: "Platform default" },
+  { key: "origination.fastTrack.adjudicator", label: "Fast-Track — adjudicator", description: "Role that resolves a dissent between the Fast-Track co-signers.", module: "origination", category: "Credit chart-flow (Fast-Track)", type: "enum", options: adjudicatorOptions, default: "cco", source: "Platform default" },
+  { key: "origination.fastTrack.limitRole", label: "Fast-Track — ceiling role", description: "Fast-Track requests within this role's sign-on limit use the Fast-Track pair; above it the Standard ladder applies (open question O1).", module: "origination", category: "Credit chart-flow (Fast-Track)", type: "enum", options: roleOptions, default: "bdm", source: "see docs/OPEN-QUESTIONS.md O1/W5" },
   { key: "origination.fastTrack.slaHours", label: "Fast-Track — decision SLA", description: "Hours the Fast-Track co-signers have to decide.", module: "origination", category: "Credit chart-flow (Fast-Track)", type: "duration", durationUnit: "hours", default: 8, min: 1, max: 720, source: SRC_SLA },
 ]);
 

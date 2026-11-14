@@ -7,8 +7,9 @@
  * they are Operations workflow requests whose `apply` (../platform.ts) calls these actions after approval.
  */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { seedBcmPlans, seedExercises, seedLossEvents, seedRcsa, type BcmExercise, type BcmPlan, type LossEvent, type RcsaRisk } from "./data";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type KriEscalation = {
   kriId: string;
@@ -61,9 +62,11 @@ export const useOpRisk = create<OpRiskState>()(
       name: "credigit.ser.operational-risk",
       // v2: KRI threshold changes moved to business rules + the Operations workflow.
       version: 2,
-      storage: createJSONStorage(() => localStorage),
+      storage: dataStorage(),
       partialize: (s) => ({ lossEvents: s.lossEvents, rcsa: s.rcsa, bcmPlans: s.bcmPlans, exercises: s.exercises, escalations: s.escalations, commentarySignedOffBy: s.commentarySignedOffBy }),
       migrate: () => initial() as unknown as OpRiskState,
     },
   ),
 );
+
+registerDatabaseStore(useOpRisk);

@@ -6,11 +6,14 @@
  * (`src/lib/api/tokens.ts`). Demo mode: permissions derive from the role (`src/lib/iam/permissions.ts`).
  * The backend enforces authorisation; the UI mirrors it with permission keys (invariant 12).
  */
-import { useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { roleById, type RoleId } from "../rbac/roles";
 import { useDb } from "../data/store";
+import { onSignedIn } from "../data/workspace-storage";
+import type { BackendAccess } from "./backend-identity";
+import { signOutOfBackend } from "./backend-sso";
 import { signOutOfMicrosoft } from "./msal";
 
 export type SessionUser = {
@@ -35,6 +38,10 @@ type SessionState = {
   tenantId: string | null;
   authMode: AuthMode | null;
   signedInAt: string | null;
+  /** What the backend grants this user (GET /identity/me): drives menus and access checks when the backend is configured. */
+  access: BackendAccess | null;
+  /** Stores the backend's grants and mirrors them into `permissions` / `roles` (the permission guards read those). */
+  setAccess: (access: BackendAccess | null) => void;
   signIn: (user: SessionUser, roleId: RoleId, identity?: SessionIdentity) => void;
   /** Refresh identity facts (e.g. after `/identity/me` is re-read) without a new sign-in. */
   setIdentity: (identity: SessionIdentity) => void;
@@ -52,6 +59,9 @@ export const useSession = create<SessionState>()(
       tenantId: null,
       authMode: null,
       signedInAt: null,
+      access: null,
+      setAccess: (access) =>
+        set((s) => ({ access, permissions: access ? access.permissions : s.access ? null : s.permissions, roles: access ? access.roles : s.roles })),
       signIn: (user, roleId, identity) => {
         set({
           user,
@@ -61,15 +71,18 @@ export const useSession = create<SessionState>()(
           tenantId: identity?.tenantId ?? null,
           authMode: identity?.authMode ?? null,
           signedInAt: new Date().toISOString(),
+          access: null,
         });
         useDb.getState().log({
           actorId: user.id,
           actorName: user.name,
           roleId,
-          action: user.source === "microsoft" ? "Signed in (Microsoft SSO)" : user.source === "password" ? "Signed in (email + password + one-time code)" : "Signed in (demo access)",
+          action: user.source === "microsoft" ? "Signed in (Microsoft SSO)" : user.source === "password" ? "Signed in (email + password + one-time code)" : "Signed in",
           entityType: "Session",
           entityId: "-",
         });
+        // Database-backed stores that waited for an identity load now (ADR-0015).
+        onSignedIn();
       },
       setIdentity: (identity) =>
         set((s) => ({ permissions: identity.permissions ?? s.permissions, roles: identity.roles ?? s.roles, tenantId: identity.tenantId ?? s.tenantId, authMode: identity.authMode ?? s.authMode })),
@@ -83,7 +96,8 @@ export const useSession = create<SessionState>()(
       signOut: async () => {
         const { user, roleId } = get();
         if (user && roleId) useDb.getState().log({ actorId: user.id, actorName: user.name, roleId, action: "Signed out", entityType: "Session", entityId: "-" });
-        set({ user: null, roleId: null, permissions: null, roles: [], tenantId: null, authMode: null, signedInAt: null });
+        set({ user: null, roleId: null, permissions: null, roles: [], tenantId: null, authMode: null, signedInAt: null, access: null });
+        if (user && user.source !== "demo") await signOutOfBackend();
         if (user?.source === "microsoft") await signOutOfMicrosoft().catch(() => undefined);
       },
     }),
@@ -94,7 +108,13 @@ export const useSession = create<SessionState>()(
 /** The current role object (undefined when signed out). */
 export function useRole() {
   const roleId = useSession((s) => s.roleId);
-  return roleId ? roleById[roleId] : undefined;
+  const access = useSession((s) => s.access);
+  return useMemo(() => {
+    if (!roleId) return undefined;
+    const role = roleById[roleId];
+    // The backend decides module access (roles + permission groups) when it is configured.
+    return access ? { ...role, modules: access.moduleAccess as typeof role.modules } : role;
+  }, [roleId, access]);
 }
 
 /** True once persisted stores have loaded in the browser (avoids rendering seed data before stored data). */

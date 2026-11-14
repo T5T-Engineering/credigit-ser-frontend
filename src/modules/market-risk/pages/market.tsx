@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
   DataTable,
+  SubmitButton,
   type DataTableColumn,
   Field,
   Grid,
@@ -31,8 +32,8 @@ import {
   Text,
   SegmentedControl,
   Textarea,
-  useToast,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import Link from "next/link";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/iam/permissions";
@@ -76,7 +77,7 @@ export function MarketRiskPage() {
   const canRequestClose = useCan("market-risk.breaches.request-close");
   const canExport = useCan("market-risk.data.export");
   const { actor } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const breaches = useMarketRisk((s) => s.breaches);
   const instances = useOperationsStore((s) => s.instances);
   const stopLossWarn = useRule<number>("market-risk.stopLossEarlyWarningPct") / 100;
@@ -189,7 +190,7 @@ export function MarketRiskPage() {
     {
       metric: "VaR (99%, 1-day)",
       formula: "Historical simulation / parametric / Monte Carlo (tenant-configurable)",
-      sources: "Positions: Treasury/dealing system; price series: market-data feed (§5.5)",
+      sources: "Positions: Treasury/dealing system; price series: market-data feed",
       value: ms(totalVar),
       prd: "§6.8.1",
     },
@@ -586,7 +587,7 @@ export function MarketRiskPage() {
             <Stack gap="xsmall">
               <CardTitle>Limit breaches &amp; escalation</CardTitle>
               <CardDescription>
-                Escalated through the §6.4.4 protocol: {ladderRoles.map(roleName).join(" → ")}. Closure is approved in Operations. Visible on the CRO Dashboard (§6.11).
+                Escalated through the protocol: {ladderRoles.map(roleName).join(" → ")}. Closure is approved in Operations. Visible on the CRO Dashboard.
               </CardDescription>
             </Stack>
             <SegmentedControl
@@ -640,9 +641,9 @@ export function MarketRiskPage() {
             <Button variant="tertiary" onClick={() => setClosing(null)}>
               Cancel
             </Button>
-            <Button onClick={close} disabled={note.trim().length < 5}>
+            <SubmitButton onClick={close} disabled={note.trim().length < 5}>
               Submit for approval
-            </Button>
+            </SubmitButton>
           </Stack>
         }
       >

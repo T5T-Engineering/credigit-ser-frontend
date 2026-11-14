@@ -10,6 +10,7 @@ import { useMyApprovalQueue, useOperationsStore } from "@/lib/platform/operation
 import { useRule } from "@/lib/platform/rules";
 import { useScope } from "@/lib/platform/scope";
 import { allNavItems } from "@/lib/nav";
+import { BackendApprovalQueue } from "./backend-operations";
 import { currentStepName, MS_PER_HOUR, roleName, safeDefinition, safeDueAt, uiStatus, useDefinitions, useNow, useOpsHydrated } from "./logic";
 
 const moduleLabel = (m: string) => allNavItems.find((n) => n.module === m)?.label ?? (m === "platform" ? "Platform" : m);
@@ -92,6 +93,7 @@ export function ApprovalsPage() {
           }}
         />
 
+        <BackendApprovalQueue />
         {!hydrated ? (
           <Spinner label="Loading approvals" />
         ) : filtered.length === 0 ? (

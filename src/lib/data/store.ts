@@ -1,18 +1,20 @@
 "use client";
 
 /**
- * Prototype data store (no backend yet).
+ * Core data store.
  *
- * - Seeded with deterministic demo data; user actions persist in this browser (localStorage).
- * - "Reset demo data" restores the seed.
+ * - With NEXT_PUBLIC_API_BASE_URL set, it is loaded from and saved to MongoDB (backend ADR-0015, `dataStorage()`): each collection
+ *   below is a `workspace_<collection>` collection with one document per item. An empty database is seeded with `createSeed()`.
+ * - Without a backend it persists in this browser (localStorage). "Reset demo data" restores the seed.
  * - BACKEND SEAM: components read through the hooks in ./hooks.ts and change data through the actions
  *   below. When the API exists, replace these actions with API calls (e.g. React Query mutations)
  *   and keep component code unchanged.
  */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { createSeed, type SeedData } from "./seed";
 import type { AuditEvent, ID } from "./types";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type Collections = Omit<SeedData, "tenant">;
 export type CollectionKey = keyof Collections;
@@ -62,7 +64,7 @@ export const useDb = create<DbState>()(
     {
       name: "credigit.ser.demo-data",
       version: STORE_VERSION,
-      storage: createJSONStorage(() => localStorage),
+      storage: dataStorage(),
       // Data only; actions come from the initializer.
       partialize: (state) => Object.fromEntries(Object.entries(state).filter(([, value]) => typeof value !== "function")) as SeedData,
       migrate: () => createSeed() as unknown as DbState,
@@ -80,3 +82,5 @@ function summariseDevice(ua: string): string {
 export function newId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 36 ** 2).toString(36).toUpperCase()}`;
 }
+
+registerDatabaseStore(useDb);

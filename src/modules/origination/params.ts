@@ -9,7 +9,7 @@ import type { CollateralType, DocumentRecord, ProductType } from "@/lib/data/typ
 import type { RoleId } from "@/lib/rbac/roles";
 
 /** Shown next to any value that is a demo default rather than a PRD rule. */
-export const TENANT_PARAM_NOTE = "Business rule — set by tenant (demo default)";
+export const TENANT_PARAM_NOTE = "Business rule — set by tenant";
 
 /** Where these values are maintained (Operations → Business rules). */
 export const PARAMS_HREF = "/operations/rules";

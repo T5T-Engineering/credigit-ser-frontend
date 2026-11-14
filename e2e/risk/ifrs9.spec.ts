@@ -33,7 +33,7 @@ test("declassification proposal is approved and the facility stage/class is upda
   expect((await facility(page, facId))?.stage).toBe(Number(from));
 
   await approveAs(page, "head-of-risk", `Declassify ${facId}`);
-  await expect(page.getByText(/Decision recorded: Approved/)).toBeVisible();
+  await expect(page.getByText(/Decision recorded: Approved/).first()).toBeVisible();
 
   await switchRole(page, "predictive-analytics-officer", "/ifrs9/declassification/");
   const history = page.getByRole("table", { name: "Declassification history" });
@@ -68,13 +68,13 @@ test("model version approval runs Head of Risk validation then CRO approval @mob
   await expect(page.getByText(title)).toHaveCount(0);
 
   await approveAs(page, "head-of-risk", title);
-  await expect(page.getByText(/Decision recorded: In progress/)).toBeVisible();
+  await expect(page.getByText(/Decision recorded: In progress/).first()).toBeVisible();
   // Validation passed → the model waits for production approval.
   await expect
     .poll(() => page.evaluate((n) => (JSON.parse(localStorage.getItem("credigit.ser.ifrs9") ?? "{}").state?.models ?? []).find((x: { name: string }) => x.name === n)?.status, name))
     .toBe("Pending approval");
   await approveAs(page, "cro", title);
-  await expect(page.getByText(/Decision recorded: Approved/)).toBeVisible();
+  await expect(page.getByText(/Decision recorded: Approved/).first()).toBeVisible();
 
   const models = await page.evaluate(() => JSON.parse(localStorage.getItem("credigit.ser.ifrs9") ?? "{}").state);
   const m = (models.models as { name: string; version: string; status: string }[] | undefined)?.find((x) => x.name === name);
@@ -99,7 +99,7 @@ test("ICAAP scenario severity change applies after Head of Risk and CRO approval
 
   await approveAs(page, "head-of-risk", title);
   await approveAs(page, "cro", title);
-  await expect(page.getByText(/Decision recorded: Approved/)).toBeVisible();
+  await expect(page.getByText(/Decision recorded: Approved/).first()).toBeVisible();
 
   await switchRole(page, "predictive-analytics-officer", "/ifrs9/icaap/");
   const scenarios = page.getByRole("table", { name: "ICAAP scenarios" });

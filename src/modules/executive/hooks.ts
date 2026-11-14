@@ -6,7 +6,8 @@
  */
 import { useCallback } from "react";
 import { format, getQuarter } from "date-fns";
-import { useToast, type ChecklistItem } from "@credigit/web-ui";
+import { type ChecklistItem } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { DEMO_NOW } from "@/lib/data/seed";
 import { publish } from "@/lib/platform/events";
 import { runHooks } from "@/lib/platform/hooks";
@@ -25,7 +26,7 @@ export const boardPeriod = () => `Q${getQuarter(DEMO_NOW)} ${format(DEMO_NOW, "y
 export function useExecutiveGovernance() {
   const actor = useActor();
   const { actor: me } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const submit = useSubmitOperation();
   const period = boardPeriod();
   const summaryKey = `exec-summary:${period}`;
@@ -60,13 +61,13 @@ export function useExecutiveGovernance() {
   );
 
   const packItems: ChecklistItem[] = [
-    { id: "appetite", title: "Risk appetite scorecard", description: "Actual vs Board-approved thresholds (§6.10)", status: "met", owner: "Head of Risk" },
-    { id: "conc", title: "Concentration — Top 20 and sectoral limits", description: "§6.6.2–6.6.3", status: "met", owner: "Portfolio & MIS Officer" },
-    { id: "warr", title: "WARR with migration matrix and new vs existing split", description: "§6.6.9", status: "met", owner: "Portfolio & MIS Officer" },
-    { id: "ifrs9", title: "IFRS 9 stage migration and ECL movement", description: "§6.7", status: "pending", owner: "Predictive Analytics Officer" },
-    { id: "market", title: "Market & liquidity: LDR, NOP, liquidity ratio", description: "§6.8", status: "pending", owner: "Market Risk Analyst" },
-    { id: "op", title: "Operational risk KRI scorecard and loss trend", description: "§6.9.1", status: "pending", owner: "Operational Risk Analyst" },
-    { id: "summary", title: "Executive summary signed off", description: `AI-drafted, human-approved (§6.12) — ${signers || "no approval step"}`, status: signOff ? "met" : "pending", owner: "CRO / Head of Risk" },
+    { id: "appetite", title: "Risk appetite scorecard", description: "Actual vs Board-approved thresholds", status: "met", owner: "Head of Risk" },
+    { id: "conc", title: "Concentration — Top 20 and sectoral limits", description: "", status: "met", owner: "Portfolio & MIS Officer" },
+    { id: "warr", title: "WARR with migration matrix and new vs existing split", description: "", status: "met", owner: "Portfolio & MIS Officer" },
+    { id: "ifrs9", title: "IFRS 9 stage migration and ECL movement", description: "", status: "pending", owner: "Predictive Analytics Officer" },
+    { id: "market", title: "Market & liquidity: LDR, NOP, liquidity ratio", description: "", status: "pending", owner: "Market Risk Analyst" },
+    { id: "op", title: "Operational risk KRI scorecard and loss trend", description: "", status: "pending", owner: "Operational Risk Analyst" },
+    { id: "summary", title: "Executive summary signed off", description: `AI-drafted, human-approved — ${signers || "no approval step"}`, status: signOff ? "met" : "pending", owner: "CRO / Head of Risk" },
   ];
 
   return {

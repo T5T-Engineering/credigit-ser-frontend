@@ -32,6 +32,22 @@ item a `permission` list; `ModulePage` gates the page on the active tab's view k
 ## 2. Files and entry points
 | Path | Role |
 |---|---|
+| `src/modules/auth/login-page.tsx` | Microsoft / email + password / demo role sign-in |
+| `src/modules/auth/register-page.tsx` | Self-registration form |
+| `src/modules/auth/verify-page.tsx` | One-time code entry (sign-in, sign-up, reset) |
+| `src/modules/auth/password-pages.tsx` | `ForgotPasswordPage`, `ResetPasswordPage`, `ChangePasswordPage` |
+| `src/modules/auth/auth-shell.tsx` | Auth page layout wrapper |
+| `src/lib/auth/accounts.ts` | Accounts, challenges, policy, audit/notify/publish |
+| `src/lib/auth/msal.ts` | MSAL config and sign-in |
+| `src/lib/data/workspace-storage.ts` | Database-backed persisted stores (ADR-0015): load / save through `/workspace-data`, development identity for browser sign-ins (TD-953); `onSignedIn` reloads once |
+| `src/lib/auth/backend-auth.ts` | Backend email + password sign-in, registration, reset, change; tab-scoped challenges (AUTH-FR-22) |
+| `src/modules/auth/backend-verify-page.tsx` | Code screen for backend challenges (`/verify` picks it when the backend is configured) |
+| `src/lib/auth/backend-sso.ts` | Backend Microsoft sign-in (start → callback → token), backend tokens, `/identity/me`, backend logout |
+| `src/modules/auth/microsoft-callback-page.tsx` | `/callback/`: finishes the backend Microsoft sign-in |
+| `src/lib/auth/session.ts` | Session store, `useRole`, `useCan`, `useHydrated` |
+| `src/components/auth-guard.tsx` | Route guard, `demoSignIn`, `?demoRole=` |
+| `src/components/app-frame.tsx` | Idle-timeout warning and sign-out |
+| `src/lib/platform/core.ts` | `auth.*` / `session.*` rules, `access.request`, auth templates and events |
 | `scripts/sync-permissions.mjs` | Regenerates `src/lib/iam/permission-catalogue.json` and `permission-keys.ts` from the backend config (`node scripts/sync-permissions.mjs [backendConfigDir]`) |
 | `src/lib/iam/*` | Permission model (see §1) |
 | `src/lib/api/*` | API client and tokens |
@@ -52,9 +68,12 @@ item a `permission` list; `ModulePage` gates the page on the active tab's view k
 | `/login` | `LoginPage` | — (public) |
 | `/register` | `RegisterPage` | link from login (Local mode, registration enabled) |
 | `/verify?challenge=<id>` | `VerifyPage` | — |
-| `/forgot-password` | `ForgotPasswordPage` | "Set or reset your password" |
-| `/reset-password?token=` | `ResetPasswordPage` | — |
-| `/settings/password` | `ChangePasswordPage` | Settings → Password (`identity.password.change`, Local mode) |
+| `/callback?code=&state=` | `MicrosoftCallbackPage` (backend SSO; Entra redirect URI `<site>/callback/`) | — |
+| `/forgot-password` | `ForgotPasswordPage` | link from login |
+| `/reset-password` | `ResetPasswordPage` | — |
+| `/settings/password` | `ChangePasswordPage` | Administration → Settings → Password |
+| `/verify?challenge=` (backend) | `BackendVerifyPage` — e-mailed or authenticator-app code by `channel` (AUTH-FR-23) | — |
+| `/` | redirect to dashboard or login | — |
 
 Backend endpoints called (API mode): `GET /auth/config`, `POST /auth/login`, `/auth/otp/verify`, `/auth/otp/resend`,
 `/auth/token/refresh`, `/auth/password/forgot`, `/auth/password/reset`, `/auth/register`, `/auth/logout`,
@@ -127,6 +146,7 @@ Backend endpoints called (API mode): `GET /auth/config`, `POST /auth/login`, `/a
 | AUTH-FR-18 | `accounts.ts` | login-otp.spec | Done |
 | AUTH-FR-19 | `src/lib/api/config.ts` | — | Done |
 | AUTH-FR-20 | `tenant-brand-provider.tsx`, `layout.tsx` | branding.spec | Done |
+| AUTH-FR-21 | `backend-sso.ts`, `microsoft-callback-page.tsx`, `login-page.tsx` | — (needs a live tenant; manual) | Done (env-gated) |
 
 ## 10. Gaps against the invariants
 - API mode is built against the contract but not exercised by e2e (no backend in CI) — TD-970.
@@ -146,3 +166,5 @@ Backend endpoints called (API mode): `GET /auth/config`, `POST /auth/login`, `/a
 | TD-973 | Origination record tabs use a coarse "any origination action" flag |
 | TD-974 | Seeded demo tenant grants pending backend ExtraPermissions |
 | TD-975 | API step-up built but not wired to decisions |
+| TD-952 | Backend SSO tokens kept in `sessionStorage`; only the Microsoft sign-in uses the backend — the rest of the app still reads browser data |
+| — | No TD entry yet for `DEMO_PASSWORD`, browser-side accounts, or the unpublished `auth.session.started` event |

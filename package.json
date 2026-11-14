@@ -4,7 +4,7 @@
   "private": true,
   "description": "Smart Enterprise Risk 360° web application (prototype with mock data; backend-ready service layer).",
   "scripts": {
-    "dev": "next dev -p 3100",
+    "dev": "next dev -p 8061",
     "build": "next build && node scripts/flatten-segment-prefetch.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

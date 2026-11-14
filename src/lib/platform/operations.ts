@@ -16,7 +16,7 @@
  * BACKEND SEAM: submit/decide call the workflow API; instances/definitions come from the server.
  */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { roleById, type RoleId } from "../rbac/roles";
 import { actorHasPermission } from "../iam/permissions";
 import { useDb, newId } from "../data/store";
@@ -24,7 +24,8 @@ import { publish, type EventSubject } from "./events";
 import { runHooks } from "./hooks";
 import { notify } from "./notifications";
 import { getRule } from "./rules";
-import { currentActor, type Actor } from "./scope";
+import { actorHolds, currentActor, type Actor } from "./scope";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type StepMode = "any" | "all";
 
@@ -46,7 +47,22 @@ export type WorkflowDefinition = {
   enabled: boolean;
   version: number;
   steps: WorkflowStep[];
+  /** Tenant setting (ADR-0018): holders of `operations.requests.apply-directly` apply their own requests at once. Only on eligible types; unset = on. */
+  finalApproverAppliesDirectly?: boolean;
 };
+
+/** Final approver permission (backend ADR-0018): one's own configuration / administration requests apply without a second approval. */
+export const APPLY_DIRECTLY = "operations.requests.apply-directly";
+
+/** Whether this request by the signed-in user applies at once because they are a final approver on an eligible workflow (ADR-0018). */
+export function appliesDirectlyForMe(def: WorkflowDefinition): boolean {
+  return def.enabled && finalApproverEligible(def.operationType) && def.finalApproverAppliesDirectly !== false && actorHolds(APPLY_DIRECTLY);
+}
+
+/** Eligibility is a property of the operation type (configuration / administration only), never a tenant setting. */
+export function finalApproverEligible(type: string): boolean {
+  return handlers.get(type)?.finalApproverEligible === true;
+}
 
 /** "Failed": the final step approved but `apply` threw — the change was not made (OPS-FR-17). */
 export type OperationStatus = "Pending" | "In progress" | "Approved" | "Rejected" | "Returned" | "Cancelled" | "Failed";
@@ -94,6 +110,8 @@ export type OperationHandler<P> = {
   module: string;
   description: string;
   defaultSteps: WorkflowStep[];
+  /** Configuration / administration type whose final approvers (`operations.requests.apply-directly`) may apply directly (ADR-0018). */
+  finalApproverEligible?: boolean;
   /**
    * Allow the same person to decide more than one step (default false = four eyes across steps).
    * Credit chart-flows need this: the PRD makes the CCO adjudicator at tier 2 and co-signer at tier 3.
@@ -111,7 +129,7 @@ type OpsState = {
 };
 
 export const useOperationsStore = create<OpsState>()(
-  persist((): OpsState => ({ definitions: {}, instances: [] }), { name: "credigit.ser.operations", storage: createJSONStorage(() => localStorage) }),
+  persist((): OpsState => ({ definitions: {}, instances: [] }), { name: "credigit.ser.operations", storage: dataStorage() }),
 );
 
 const handlers = new Map<string, OperationHandler<unknown>>();
@@ -272,6 +290,10 @@ export async function submitOperation<P>(type: string, input: SubmitInput<P>): P
   if (!def.enabled || def.steps.length === 0) {
     const final = await finalise(instance.id, actor, "Approved", "Applied directly — workflow disabled or has no steps.");
     if (final === "Failed") return { ok: false, reason: get(instance.id)!.reason ?? "Applying the change failed." };
+    return { ok: true, instance: get(instance.id)!, applied: true };
+  }
+  if (appliesDirectlyForMe(def)) {
+    await finalise(instance.id, actor, "Approved", `Applied directly — ${actor.name} holds ${APPLY_DIRECTLY} (final approver).`);
     return { ok: true, instance: get(instance.id)!, applied: true };
   }
   notifyApprovers(instance);
@@ -440,3 +462,5 @@ export function useOperation(id: string | null | undefined) {
 export function usePendingFor(subjectType: string, subjectId: string) {
   return useOperationsStore((s) => s.instances.find((i) => i.subject.type === subjectType && i.subject.id === subjectId && ["Pending", "In progress"].includes(i.status)));
 }
+
+registerDatabaseStore(useOperationsStore);

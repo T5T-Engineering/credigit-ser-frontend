@@ -11,7 +11,7 @@ const lines: { title: string; description: string; roles: RoleId[]; note?: strin
     description: "Risk officer roles set policy, monitor and challenge the first line.",
     roles: ["credit-admin-officer", "loan-review-officer", "middle-office-officer", "collateral-officer", "predictive-analytics-officer", "operational-risk-analyst", "market-risk-analyst", "portfolio-mis-officer"],
   },
-  { title: "Third line — independent assurance", description: "Internal Audit, independent of both — where the tenant operates one.", roles: [], note: "No Internal Audit role is configured for this tenant. A read-only audit role can be added in Users & roles (§4.0)." },
+  { title: "Third line — independent assurance", description: "Internal Audit, independent of both — where the tenant operates one.", roles: [], note: "No Internal Audit role is configured for this tenant. A read-only audit role can be added in Users & roles." },
 ];
 
 export function LinesOfDefenceSection() {
@@ -43,7 +43,7 @@ export function LinesOfDefenceSection() {
         <Card>
           <CardHeader>
             <CardTitle>Risk-function reporting hierarchy</CardTitle>
-            <CardDescription>The CRO sits above the Head of Risk and is the final risk-side escalation point before the Board Risk Committee (§4.3)</CardDescription>
+            <CardDescription>The CRO sits above the Head of Risk and is the final risk-side escalation point before the Board Risk Committee</CardDescription>
           </CardHeader>
           <CardContent>
             <Steps
@@ -59,14 +59,14 @@ export function LinesOfDefenceSection() {
         <Card>
           <CardHeader>
             <CardTitle>Framework alignment</CardTitle>
-            <CardDescription>§9.2 global best-practice frameworks</CardDescription>
+            <CardDescription>Global best-practice frameworks</CardDescription>
           </CardHeader>
           <CardContent>
             <Stack gap="small">
               {[
                 ["COSO ERM", "Risk appetite scorecard, exception escalation, KRI framework and RCSA follow identify-assess-respond-monitor."],
                 ["ISO 31000", "Risk treatment is monitored to a defined closure, not merely flagged (four-level escalation)."],
-                ["Three Lines of Defence", "Role-to-line mapping above; which roles exist and how they map is tenant-configurable (§4.0)."],
+                ["Three Lines of Defence", "Role-to-line mapping above; which roles exist and how they map is tenant-configurable."],
                 ["BCBS 239", "Single Risk Data Spine; every figure drillable to source."],
                 ["ISO 22301", "BCM plan currency and crisis-readiness tracking."],
               ].map(([t, d]) => (

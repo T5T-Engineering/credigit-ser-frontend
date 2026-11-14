@@ -18,12 +18,13 @@ import {
   SectionHeader,
   Spinner,
   Stack,
+  SubmitButton,
   Text,
   Textarea,
-  useToast,
   type ActivityItem,
   type RuleValue as UiRuleValue,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/iam/permissions";
 import { dateTime } from "@/lib/format";
@@ -131,6 +132,7 @@ function RulesInner() {
                         .map((d) => (
                           <RuleRow
                             key={d.key}
+                            showKey={false}
                             rule={ruleSummary(d, valueOf(d), pending.get(d.key), lastChange(d.key))}
                             linkComponent={Link}
                             actions={
@@ -172,7 +174,7 @@ function RuleDrawer({ ruleKey, pending, canEdit, onClose }: { ruleKey: string; p
 }
 
 function RuleEditor({ def, pending, canEdit, onClose, history }: { def: RuleDefinition; pending?: OperationInstance; canEdit: boolean; onClose: () => void; history: ReturnType<typeof useRulesStore.getState>["history"] }) {
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const current = useRule<RuleValue>(def.key);
   const minComment = useRule<number>("operations.minCommentLength");
   const [draft, setDraft] = useState<UiRuleValue>(() => toInputValue(def, current));
@@ -216,9 +218,9 @@ function RuleEditor({ def, pending, canEdit, onClose, history }: { def: RuleDefi
             <Button variant="tertiary" onClick={onClose}>
               Close
             </Button>
-            <Button loading={busy} disabled={!!inputError || next === null || unchanged || reason.trim().length < minComment} onClick={submit}>
+            <SubmitButton loading={busy} disabled={!!inputError || next === null || unchanged || reason.trim().length < minComment} onClick={submit}>
               Submit for approval
-            </Button>
+            </SubmitButton>
           </Stack>
         ) : undefined
       }

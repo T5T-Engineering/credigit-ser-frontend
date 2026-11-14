@@ -40,7 +40,7 @@ test("revaluation is verified by Middle Office in Operations — the recorder ca
   await expect(page.getByRole("radiogroup", { name: "Decision" })).toHaveCount(0);
 
   await approveAs(page, "middle-office-officer", `Verify valuation: ${c.id}`);
-  await expect(page.getByText(/Decision recorded: Approved/)).toBeVisible();
+  await expect(page.getByText(/Decision recorded: Approved/).first()).toBeVisible();
 
   await switchRole(page, "middle-office-officer", `/collateral/item/?id=${c.id}`);
   await expect(page.getByText(/Verified through Operations \(OPS-/)).toBeVisible();
@@ -62,7 +62,7 @@ test("legal sufficiency sign-off is accepted by Credit Administration", async ({
   await expect(page.getByRole("button", { name: "Legal sign-off" })).toHaveCount(0);
 
   await approveAs(page, "credit-admin-officer", `Legal sufficiency: ${c.id}`);
-  await expect(page.getByText(/Decision recorded: Approved/)).toBeVisible();
+  await expect(page.getByText(/Decision recorded: Approved/).first()).toBeVisible();
 
   await switchRole(page, "legal-officer", `/collateral/item/?id=${c.id}&tab=perfection`);
   await expect(page.getByText(/accepted by /).first()).toBeVisible();
@@ -92,7 +92,7 @@ test("margin call on shares is raised, then released after cover verification in
   await openApprovalExpectAbsent(page, "collateral-officer", `Release margin call: ${colId}`);
 
   await approveAs(page, "middle-office-officer", `Release margin call: ${colId}`);
-  await expect(page.getByText(/Decision recorded: Approved/)).toBeVisible();
+  await expect(page.getByText(/Decision recorded: Approved/).first()).toBeVisible();
 
   await switchRole(page, "collateral-officer", "/collateral/shares/");
   await expect(page.getByRole("row").filter({ hasText: colId }).getByText("Call raised")).toHaveCount(0);

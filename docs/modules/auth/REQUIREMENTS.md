@@ -77,6 +77,9 @@ Permission model (mirrors backend ADR-0012):
 | AUTH-FR-18 | No demo credential literal in the client bundle: seeded demo users either use `NEXT_PUBLIC_DEMO_PASSWORD` (env, optional) or set their own password through "Set or reset your password". | Invariant 7 |
 | AUTH-FR-19 | API base URL from `NEXT_PUBLIC_API_URL`; never hard-coded. | Invariant 8 |
 | AUTH-FR-20 | Brand storage is tenant-scoped (`BrandProvider tenantId`, `brandStorageKey(tenantId)`). | Invariant 2; library TD-009 |
+| AUTH-FR-21 | When the backend is configured (`NEXT_PUBLIC_API_BASE_URL`), "Sign in with Microsoft" uses the backend server-side code flow: `POST /auth/microsoft/start` → Microsoft → `/callback/` → `POST /auth/microsoft/token`; the role comes from the backend directory (`GET /identity/me`), not from the browser. | User instruction 2026-11-12; backend ADR-0013 amendment 1 |
+| AUTH-FR-22 | With the backend configured, email + password sign-in, registration, password reset and change use the backend (`/auth/login`, `/otp/verify`, `/otp/resend`, `/register`, `/password/forgot`, `/password/reset`, `/password/change`); passwords are checked and hashed by the backend; the role comes from the directory. In Development the one-time code is shown on the code screen (`developmentCode`). | User instruction 2026-11-12; backend ADR-0013 am. 2 |
+| AUTH-FR-23 | When the backend asks for an authenticator-app code (`channel = authenticator`), the code screen says to open the app, shows no "sent to" address and no resend. | Backend ADR-0017 |
 
 ## 4. Business rules and parameters
 All registered in core (`src/lib/platform/core.ts`, module `platform`) or admin. In API mode the challenge / config values

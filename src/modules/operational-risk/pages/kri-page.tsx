@@ -29,10 +29,12 @@ import {
   StackedBarChart,
   StatCard,
   Steps,
+  SubmitButton,
   Text,
   Textarea,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/iam/permissions";
 import { DEMO_NOW } from "@/lib/data/seed";
@@ -178,11 +180,11 @@ export function KriPage() {
       description="Forward-looking Key Risk Indicator framework alongside the loss-event register — Green/Amber/Red banding against Board-approved tolerance, escalated on the same standard as credit exceptions."
     >
       <Stack gap="large">
-        {flash && <Alert tone={flash.tone}>{flash.text}</Alert>}
+        <OutcomePopup value={flash} map={outcomeCopy.toneText({ success: "Escalated", danger: "Not escalated" })} />
         <SubmitOutcome result={outcome} appliedText="Applied — the workflow for this operation has no approval steps." />
         {reds.length > 0 && (
           <Alert tone="danger" title={`${reds.length} KRIs in Red — outside Board-approved tolerance`}>
-            {reds.map((k) => k.name).join(", ")}. Red readings run through the §6.4.4 escalation protocol ({levels.map((l) => roleNames(l.roles)).join(" → ")}).
+            {reds.map((k) => k.name).join(", ")}. Red readings run through the escalation protocol ({levels.map((l) => roleNames(l.roles)).join(" → ")}).
           </Alert>
         )}
 
@@ -198,7 +200,7 @@ export function KriPage() {
           <Card>
             <CardHeader>
               <CardTitle>RAG mix by indicator category</CardTitle>
-              <CardDescription>Count of KRIs per band, current month (§6.9.2 categories)</CardDescription>
+              <CardDescription>Count of KRIs per band, current month (by category)</CardDescription>
             </CardHeader>
             <CardContent>
               <StackedBarChart
@@ -217,7 +219,7 @@ export function KriPage() {
           <Card>
             <CardHeader>
               <CardTitle>Escalation standard</CardTitle>
-              <CardDescription>Amber raises Level 1; Red runs the full §6.4.4 protocol until cured — never a weaker standard than credit exceptions.</CardDescription>
+              <CardDescription>Amber raises Level 1; Red runs the full protocol until cured — never a weaker standard than credit exceptions.</CardDescription>
             </CardHeader>
             <CardContent>
               <Steps
@@ -295,7 +297,7 @@ export function KriPage() {
           <Card>
             <CardHeader>
               <CardTitle>KRI threshold governance</CardTitle>
-              <CardDescription>Threshold changes are business-rule changes routed through the Operations workflow (Head of Risk / CRO approval), versioned and audited (§6.9.1, §10.1).</CardDescription>
+              <CardDescription>Threshold changes are business-rule changes routed through the Operations workflow (Head of Risk / CRO approval), versioned and audited.</CardDescription>
             </CardHeader>
             <CardContent>
               <Stack gap="small">
@@ -318,7 +320,7 @@ export function KriPage() {
             <div className="flex flex-wrap justify-end gap-2">
               {canRequestThresholdChange && <Button variant="tertiary" iconBefore={<SlidersHorizontal aria-hidden />} onClick={() => setProposeFor(selected)}>Propose threshold change</Button>}
               {canAcknowledge && selected.rag !== "green" && !selected.acknowledged?.acknowledgedBy && <Button variant="secondary" onClick={() => acknowledge(selected)}>Acknowledge</Button>}
-              {canEscalate && selected.rag === "red" && selected.level < 4 && <Button iconBefore={<ArrowUpRight aria-hidden />} onClick={() => void escalate(selected)}>Escalate to Level {selected.level + 1}</Button>}
+              {canEscalate && selected.rag === "red" && selected.level < 4 && <SubmitButton iconBefore={<ArrowUpRight aria-hidden />} onClick={() => void escalate(selected)}>Escalate to Level {selected.level + 1}</SubmitButton>}
             </div>
           )
         }
@@ -415,7 +417,7 @@ function ThresholdModal({ kri, onClose, onSubmit }: { kri: KriReading | null; on
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="tertiary" onClick={close}>Cancel</Button>
-          <Button
+          <SubmitButton
             onClick={() => {
               setTouched(true);
               if (error || reasonError) return;
@@ -427,7 +429,7 @@ function ThresholdModal({ kri, onClose, onSubmit }: { kri: KriReading | null; on
             }}
           >
             Submit for approval
-          </Button>
+          </SubmitButton>
         </div>
       }
     >

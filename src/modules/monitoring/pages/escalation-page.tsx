@@ -37,7 +37,7 @@ export function EscalationPage() {
         <Card>
           <CardHeader>
             <div>
-              <CardTitle>Escalation ladder (PRD §6.4.4)</CardTitle>
+              <CardTitle>Escalation ladder</CardTitle>
               <CardDescription>Notified roles and cure SLAs per level. Level 4 adds the Board above the materiality threshold ({show("monitoring.escalation.boardMaterialityNgn")}).</CardDescription>
             </div>
           </CardHeader>
@@ -69,7 +69,7 @@ export function EscalationPage() {
             <CardHeader>
               <div>
                 <CardTitle>Days-past-due ladder</CardTitle>
-                <CardDescription>PRD §6.4.1, §6.7.1 (CBN prudential guidelines).</CardDescription>
+                <CardDescription>(CBN prudential guidelines).</CardDescription>
               </div>
             </CardHeader>
             <Table>

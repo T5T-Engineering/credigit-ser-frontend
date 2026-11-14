@@ -24,6 +24,7 @@ import {
   RagIndicator,
   Sparkline,
   Stack,
+  SubmitButton,
   Text,
   Textarea,
   type DataTableColumn,
@@ -108,7 +109,7 @@ export function AppetiteSection() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Risk Appetite Statement in force</CardTitle>
-            <CardDescription>Owned by the CRO (§4.3); captured at onboarding as versioned configuration in the Rules & Parameters Engine</CardDescription>
+            <CardDescription>Owned by the CRO; captured at onboarding as versioned configuration in the Rules & Parameters Engine</CardDescription>
           </CardHeader>
           <CardContent>
             <KeyValueGrid
@@ -154,7 +155,7 @@ export function AppetiteSection() {
         exportFilename={canExport ? "risk-appetite-scorecard.csv" : undefined}
         paginate={false}
       />
-      <Text variant="caption" tone="subtle">Limits and early-warning bands are business rules (enterprise-risk.ras.*); regulatory floors are cited from the PRD (CBN 3.2, §6.8.3, §9.1), the rest are illustrative Board RAS values. Changes route through Operations (CRO → Board). CAR, liquidity and NOP actuals are simulated feeds until the Phase 2 engines publish to the spine.</Text>
+      <Text variant="caption" tone="subtle">Limits and early-warning bands are business rules (enterprise-risk.ras.*); regulatory floors follow CBN 3.2, the rest are illustrative Board RAS values. Changes route through Operations (CRO → Board). CAR, liquidity and NOP actuals are simulated feeds until the Phase 2 engines publish to the spine.</Text>
 
       <Drawer
         open={!!selected}
@@ -170,9 +171,9 @@ export function AppetiteSection() {
                 </Button>
               )}
               {canEscalate && selected.rag !== "green" && !escalations[selected.id] && (
-                <Button iconBefore={<ArrowUpRight aria-hidden />} onClick={() => void escalate(selected)}>
+                <SubmitButton iconBefore={<ArrowUpRight aria-hidden />} onClick={() => void escalate(selected)}>
                   Escalate to {roleNames(escalationRoles(selected))}
-                </Button>
+                </SubmitButton>
               )}
             </div>
           ) : undefined
@@ -246,7 +247,7 @@ function RasChangeModal({ metric, onClose, onSubmit }: { metric: Row | null; onC
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="tertiary" onClick={() => { reset(); onClose(); }}>Cancel</Button>
-          <Button onClick={() => { setTouched(true); if (error || reasonError) return; void onSubmit(l, t, reason.trim()); reset(); }}>Submit for approval</Button>
+          <SubmitButton onClick={() => { setTouched(true); if (error || reasonError) return; void onSubmit(l, t, reason.trim()); reset(); }}>Submit for approval</SubmitButton>
         </div>
       }
     >

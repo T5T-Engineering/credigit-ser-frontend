@@ -18,17 +18,18 @@ import {
   Modal,
   SectionHeader,
   Stack,
+  SubmitButton,
   Switch,
   Textarea,
   WorkflowDiagram,
   WorkflowStepEditor,
-  useToast,
   type WorkflowStep as UiWorkflowStep,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { allNavItems } from "@/lib/nav";
 import { useCan } from "@/lib/iam/permissions";
-import { definitionList, submitOperation, usePendingFor, type WorkflowDefinition } from "@/lib/platform/operations";
+import { definitionList, finalApproverEligible, submitOperation, usePendingFor, type WorkflowDefinition } from "@/lib/platform/operations";
 import { useRule } from "@/lib/platform/rules";
 import { fromUiSteps, roleOptions, stepApproverSummary, toUiSteps, useDefinitions } from "./logic";
 
@@ -104,6 +105,7 @@ function WorkflowCard({ def, canEdit, onEdit }: { def: WorkflowDefinition; canEd
             <Badge tone="neutral">v{def.version}</Badge>
             <Badge tone={def.enabled ? "success" : "warning"}>{def.enabled ? "Enabled" : "Disabled — applies without approval"}</Badge>
             <Badge tone="neutral">{def.steps.length} step(s)</Badge>
+            {finalApproverEligible(def.operationType) && def.finalApproverAppliesDirectly !== false ? <Badge tone="info">Final approvers apply directly</Badge> : null}
           </Stack>
         </div>
       </CardHeader>
@@ -136,18 +138,20 @@ function WorkflowCard({ def, canEdit, onEdit }: { def: WorkflowDefinition; canEd
 }
 
 function WorkflowEditor({ def, onClose }: { def: WorkflowDefinition; onClose: () => void }) {
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const defaultSla = useRule<number>("operations.defaultSlaHours");
   const minComment = useRule<number>("operations.minCommentLength");
   const [steps, setSteps] = useState<UiWorkflowStep[]>(() => toUiSteps(def.steps));
   const [enabled, setEnabled] = useState(def.enabled);
+  const eligible = finalApproverEligible(def.operationType);
+  const [direct, setDirect] = useState(def.finalApproverAppliesDirectly !== false);
   const [reason, setReason] = useState("");
   const [valid, setValid] = useState(true);
   const [busy, setBusy] = useState(false);
 
   async function submit() {
     setBusy(true);
-    const next: WorkflowDefinition = { ...def, enabled, steps: fromUiSteps(steps), version: def.version + 1 };
+    const next: WorkflowDefinition = { ...def, enabled, steps: fromUiSteps(steps), version: def.version + 1, ...(eligible ? { finalApproverAppliesDirectly: direct } : {}) };
     const res = await submitOperation<WorkflowDefinition>("workflow.change", {
       title: `${def.name} workflow: v${def.version} → v${next.version}`,
       subject: { type: "WorkflowDefinition", id: def.operationType, title: def.name, href: `/operations/workflows#${def.operationType}` },
@@ -156,12 +160,13 @@ function WorkflowEditor({ def, onClose }: { def: WorkflowDefinition; onClose: ()
         { label: "Operation type", value: def.name },
         { label: "Current", value: `v${def.version} · ${def.enabled ? "enabled" : "disabled"} · ${stepApproverSummary(def.steps)}` },
         { label: "Proposed", value: `v${next.version} · ${enabled ? "enabled" : "disabled"} · ${stepApproverSummary(next.steps)}` },
+        ...(eligible ? [{ label: "Final approvers apply directly", value: `${def.finalApproverAppliesDirectly !== false ? "Yes" : "No"} → ${direct ? "Yes" : "No"}` }] : []),
         { label: "Reason", value: reason.trim() },
       ],
     });
     setBusy(false);
     if (!res.ok) return toast({ title: "Change not submitted", description: res.reason, tone: "danger" });
-    toast({ title: res.applied ? "Workflow updated" : "Change submitted for approval", description: res.applied ? "The workflow-change workflow is disabled, so it applied directly." : `Reference ${res.instance.id}`, tone: "success" });
+    toast({ title: res.applied ? "Workflow updated" : "Change submitted for approval", description: res.applied ? (res.instance.reason ?? "Applied directly.") : `Reference ${res.instance.id}`, tone: "success" });
     onClose();
   }
 
@@ -179,14 +184,21 @@ function WorkflowEditor({ def, onClose }: { def: WorkflowDefinition; onClose: ()
           <Button variant="tertiary" onClick={onClose}>
             Cancel
           </Button>
-          <Button loading={busy} disabled={!valid || reason.trim().length < minComment} onClick={submit}>
+          <SubmitButton loading={busy} disabled={!valid || reason.trim().length < minComment} onClick={submit}>
             Submit for approval
-          </Button>
+          </SubmitButton>
         </Stack>
       }
     >
       <Stack gap="large">
         <Switch checked={enabled} onCheckedChange={setEnabled} label="Workflow enabled (when off, requests apply without approval)" />
+        {eligible ? (
+          <Switch
+            checked={direct}
+            onCheckedChange={setDirect}
+            label="Final approvers apply their own changes directly (holders of operations.requests.apply-directly skip the second approval; still recorded and audited)"
+          />
+        ) : null}
         <WorkflowStepEditor
           steps={steps}
           onChange={setSteps}

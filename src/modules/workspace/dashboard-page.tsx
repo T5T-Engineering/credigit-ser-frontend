@@ -427,7 +427,7 @@ function ConfigGlance() {
         <KeyValueGrid
           columns={3}
           items={[
-            { label: "Step-up threshold", value: moneyShort(stepUp), hint: "PRD §4.2" },
+            { label: "Step-up threshold", value: moneyShort(stepUp), hint: "Platform default" },
             { label: "RAR intensity bands", value: `${neutral} · ${marginal} · ${moderate}`, hint: "Neutral · Marginal · Moderate" },
             { label: "Products offered", value: offered.length, hint: "Product catalogue" },
             { label: "Chart-flow tiers", value: chartFlow.length, hint: "Approval chart-flow" },

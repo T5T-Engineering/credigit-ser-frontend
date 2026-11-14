@@ -19,7 +19,7 @@ export type ValuationEntry = {
   assumptions: string;
   fsvMethod: string;
   reference: string;
-  source: "Independent valuer" | "CSCS market data" | "Internal" | "Recorded in prototype";
+  source: "Independent valuer" | "CSCS market data" | "Internal" | "Recorded manually";
 };
 
 const bases = ["Market comparison approach", "Depreciated replacement cost", "Investment (income) approach"];
@@ -41,7 +41,7 @@ export function valuationHistory(c: Collateral): ValuationEntry[] {
       valuer: shares ? "CSCS market data" : i === 0 ? c.valuer : ["Ubosi Eleh & Co", "Knight Frank Nigeria", "Jide Taiwo & Co"][hash(c.id + i) % 3]!,
       basis: shares ? "Closing price × units (CSCS)" : bases[hash(c.id + "b" + i) % bases.length]!,
       assumptions: shares ? "Last traded price on NGX; no illiquidity discount" : "Vacant possession; good and marketable title; no adverse planning matters",
-      fsvMethod: shares ? "Haircut applied per PRD §6.7.3 instead of FSV" : "FSV at 70% of open market value (valuer's assumption of a 3–6 month disposal)",
+      fsvMethod: shares ? "Haircut applied per instead of FSV" : "FSV at 70% of open market value (valuer's assumption of a 3–6 month disposal)",
       reference: shares ? `CSCS/${c.ticker}/${String(hash(c.id + i) % 900000 + 100000)}` : `VR/${at.getFullYear()}/${String(hash(c.id + i) % 9000 + 1000)}`,
       source: shares ? "CSCS market data" : c.valuer === "Internal valuation" && i === 0 ? "Internal" : "Independent valuer",
     });
@@ -54,7 +54,7 @@ export type InsuranceCover = { insurer: string; policyNo: string; sumInsured: nu
 export function insuranceOf(c: Collateral): InsuranceCover | undefined {
   if (!c.insuranceExpiry) return undefined;
   return {
-    insurer: ["Harbour Mutual Assurance (demo)", "Lagoon General Insurance (demo)", "Crestline Insurance (demo)", "Northbridge Assurance (demo)"][hash(c.id + "i") % 4]!,
+    insurer: ["Harbour Mutual Assurance", "Lagoon General Insurance", "Crestline Insurance", "Northbridge Assurance"][hash(c.id + "i") % 4]!,
     policyNo: `POL/${String(hash(c.id + "p") % 900000 + 100000)}`,
     sumInsured: Math.round((c.marketValue * 0.9) / 1e5) * 1e5,
     expiry: c.insuranceExpiry,

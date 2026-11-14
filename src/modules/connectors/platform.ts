@@ -12,7 +12,7 @@ import { registerOperation } from "@/lib/platform/operations";
 import { defineRules, type RuleDefinition } from "@/lib/platform/rules";
 import { connectors, freshnessRuleKey } from "./data";
 
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 const M = "connectors";
 
 const defaultScheduleOptions = [
@@ -45,13 +45,13 @@ defineRules([
       default: c.defaultFreshnessSlaMin,
       min: 1,
       max: 10_080,
-      source: `PRD §5 / §4.6 — ${DEMO}`,
+      source: `${DEMO}`,
     }),
   ),
-  { key: "connectors.freshness.warnRatio", label: "Freshness warning ratio", description: "Share of the freshness SLA elapsed at which a connector shows a warning.", module: M, category: "Health thresholds", type: "number", step: 0.05, default: 0.75, min: 0.1, max: 1, source: `PRD §4.6 — ${DEMO}` },
+  { key: "connectors.freshness.warnRatio", label: "Freshness warning ratio", description: "Share of the freshness SLA elapsed at which a connector shows a warning.", module: M, category: "Health thresholds", type: "number", step: 0.05, default: 0.75, min: 0.1, max: 1, source: `${DEMO}` },
   { key: "connectors.errorRate.warnPct", label: "Error-rate warning", description: "Error rate (%) above which a connector's error trend shows a warning.", module: M, category: "Health thresholds", type: "percent", unit: "%", default: 1, min: 0, max: 100, step: 0.1, source: DEMO },
   { key: "connectors.errorRate.dangerPct", label: "Error-rate alert", description: "Error rate (%) above which a connector's error trend shows an alert.", module: M, category: "Health thresholds", type: "percent", unit: "%", default: 5, min: 0, max: 100, step: 0.1, source: DEMO },
-  { key: "connectors.runHistoryLimit", label: "Run history kept", description: "Manual runs kept in the run history (browser demo store).", module: M, category: "Runs", type: "number", default: 100, min: 10, max: 1000, source: DEMO },
+  { key: "connectors.runHistoryLimit", label: "Run history kept", description: "Manual runs kept in the run history.", module: M, category: "Runs", type: "number", default: 100, min: 10, max: 1000, source: DEMO },
   { key: "connectors.scheduleOptions", label: "Schedule options", description: "Schedules a connector can be configured with.", module: M, category: "Configuration", type: "list", default: defaultScheduleOptions, source: DEMO },
   { key: "connectors.retryPolicy", label: "Retry policy", description: "How failed connector calls are retried.", module: M, category: "Configuration", type: "text", default: "Automatic retry with back-off", source: DEMO },
 ]);
@@ -63,9 +63,10 @@ export type ConfigChangePayload = { connectorId: string; schedule: string; enabl
 
 registerOperation<ConfigChangePayload>({
   type: "connectors.config.change",
+  finalApproverEligible: true,
   name: "Connector configuration change",
   module: M,
-  description: "Change a connector's schedule or enable / pause it. Pausing stops scheduled runs and lets downstream data go stale (PRD §4.6).",
+  description: "Change a connector's schedule or enable / pause it. Pausing stops scheduled runs and lets downstream data go stale.",
   defaultSteps: [{ id: "approve", name: "Configuration approval", approverRoles: ["system-admin", "it-support"], mode: "any", slaHours: 8 }],
   apply: async (p, { actor, instance }) => (await service()).applyConfigChange(p, actor, instance.id),
 });

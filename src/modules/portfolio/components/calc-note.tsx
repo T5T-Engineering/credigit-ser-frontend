@@ -22,7 +22,7 @@ export type CalcNoteProps = {
 };
 
 /** "How this is calculated" popover — formula, sources and inputs for a computed figure (PRD §2.1, §8). */
-export function CalcNote({ metric, formula, source, inputs, prd, demo, display = "icon" }: CalcNoteProps) {
+export function CalcNote({ metric, formula, source, inputs, demo, display = "icon" }: CalcNoteProps) {
   return (
     <Popover
       label={`How ${metric} is calculated`}
@@ -41,8 +41,8 @@ export function CalcNote({ metric, formula, source, inputs, prd, demo, display =
         <Stack gap="small">
           <Stack direction="horizontal" gap="small" align="center" wrap>
             <Text variant="eyebrow">How this is calculated</Text>
-            {prd ? <Badge variant="outline">PRD {prd}</Badge> : null}
-            {demo ? <Badge tone="warning">Demo inputs</Badge> : null}
+
+            {demo ? <Badge tone="warning">Inputs</Badge> : null}
           </Stack>
           <Text variant="small" className="font-mono text-fg">
             {formula}

@@ -23,8 +23,8 @@ import {
   StatCard,
   Switch,
   Text,
-  useToast,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import Link from "next/link";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/iam/permissions";
@@ -58,7 +58,7 @@ export function StressTestingPage() {
   const canSubmitRun = useCan("market-risk.stress-runs.submit");
   const canExport = useCan("market-risk.data.export");
   const { actor } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const storedDraft = useMarketRisk((s) => s.draft);
   const setDraft = useMarketRisk((s) => s.setDraft);
   const allRuns = useMarketRisk((s) => s.runs);
@@ -197,7 +197,7 @@ export function StressTestingPage() {
     {
       metric: "Dynamic adjustment",
       formula: "Band run-off / haircut + macro-cycle add-on when the sector engine signals contraction",
-      sources: "Macro & sector-cycle engine (§6.6.7); editable by the Market Risk Analyst before sign-off",
+      sources: "Macro & sector-cycle engine; editable by the Market Risk Analyst before sign-off",
       prd: "§6.8.4",
     },
   ];
@@ -237,7 +237,7 @@ export function StressTestingPage() {
                 <Card variant="filled" padding="small">
                   <Stack gap="medium">
                     <Switch
-                      label="Dynamic, forward-looking adjustment (§6.8.4)"
+                      label="Dynamic, forward-looking adjustment"
                       description="Widen run-off and haircut assumptions automatically when the sector-cycle engine detects a contraction in a sector the bank is exposed to."
                       checked={draft.dynamic}
                       disabled={!canRun}
@@ -345,7 +345,7 @@ export function StressTestingPage() {
           <CardHeader>
             <Stack gap="xsmall">
               <CardTitle>Results comparison</CardTitle>
-              <CardDescription>Every run is retained with its full assumption set for audit; approved runs feed the ILAAP stress-testing chapter (§6.8.3).</CardDescription>
+              <CardDescription>Every run is retained with its full assumption set for audit; approved runs feed the ILAAP stress-testing chapter.</CardDescription>
             </Stack>
             <SegmentedControl
               label="Runs shown"

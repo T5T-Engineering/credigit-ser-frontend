@@ -122,8 +122,8 @@ export function ParametersTab({ a, editing, draft, setDraft }: Props) {
   return (
     <Stack gap="large">
       <Text tone="muted">
-        Every parameter states its scoring direction, the live system feed behind the number, and the analyst enrichment / survey source (PRD §6.2). Parameters are scored 1–10
-        against tenant-configurable bands (demo: linear bands shown in “Reading”) and averaged with tenant-configurable weighting (demo: equal).
+        Every parameter states its scoring direction, the live system feed behind the number, and the analyst enrichment / survey source. Parameters are scored 1–10
+        against tenant-configurable bands (demo: linear bands shown in “Reading”) and averaged with tenant-configurable weighting (default: equal).
       </Text>
       {cardinalPoints.map((cp) => {
         const res = a.points[cp.key];
@@ -136,7 +136,7 @@ export function ParametersTab({ a, editing, draft, setDraft }: Props) {
                   {cp.direction} — {cp.label}
                 </CardTitle>
                 <CardDescription>
-                  PRD {cp.prd} · {cp.nature} cardinal point · feeds the {cp.composite}-Composite · {res.readings.length} parameters
+                  {cp.nature} cardinal point · feeds the {cp.composite}-Composite · {res.readings.length} parameters
                   {adjusted ? ` · ${adjusted} analyst-adjusted` : ""}
                 </CardDescription>
               </div>
@@ -174,7 +174,7 @@ export function ParametersTab({ a, editing, draft, setDraft }: Props) {
               {cp.key === "internal" && (
                 <Text variant="small" tone="muted" className="mt-3">
                   Confidence Overlay (COP Ratio band) — scoring direction “Low confidence dampens the whole axis score”. System source: CBA statement of account + other-bank
-                  statements (§6.1.4), reconciled excluding inter-branch/suspense, in-and-out and reversal entries. Analyst source: documented customer explanation where the COP
+                  statements, reconciled excluding inter-branch/suspense, in-and-out and reversal entries. Analyst source: documented customer explanation where the COP
                   Ratio falls below the High-Confidence band. Current: COP {a.cop.toFixed(2)} · {a.copBand.band} · −{a.overlayPenalty.toFixed(1)}.
                 </Text>
               )}

@@ -22,7 +22,7 @@ import type { Actor } from "@/lib/platform/scope";
 import { usePortfolioStore } from "@/modules/portfolio/store";
 
 const MODULE = "executive";
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 
 /** Business-rule keys of the executive module. Market/liquidity/op-risk/collateral thresholds are temporary duplicates (TD-508). */
 export const EXEC_RULES = {
@@ -47,17 +47,17 @@ const R = EXEC_RULES;
 
 // ---------------------------------------------------------------- business rules
 defineRules([
-  pctRule(R.stage2RedPct, "Stage 2 share of book — appetite", "Stage 2 share at or above this is Red.", "KRI thresholds", 12, "PRD §6.7.1 / §6.10 — tenant parameter (demo value)"),
-  pctRule(R.stage2AmberPct, "Stage 2 share of book — early warning", "Stage 2 share at or above this (below appetite) is Amber.", "KRI thresholds", 10, "PRD §6.10 — tenant parameter (demo value)"),
+  pctRule(R.stage2RedPct, "Stage 2 share of book — appetite", "Stage 2 share at or above this is Red.", "KRI thresholds", 12, "tenant parameter"),
+  pctRule(R.stage2AmberPct, "Stage 2 share of book — early warning", "Stage 2 share at or above this (below appetite) is Amber.", "KRI thresholds", 10, "tenant parameter"),
   pctRule(R.appetiteAmberPct, "Early-warning share of appetite", "A KRI at or above this share of its appetite (NPL, op-loss) is Amber.", "KRI thresholds", 80, DEMO),
   { key: R.carAmberBufferPp, label: "CAR early-warning buffer", description: "CAR within this many percentage points above the minimum is Amber.", module: MODULE, category: "KRI thresholds", type: "number", unit: "pp", default: 2.5, min: 0, max: 10, step: 0.1, source: DEMO },
-  pctRule(R.ldrMinPct, "Minimum loan-to-deposit ratio", "LDR below this is Red.", "KRI thresholds", 65, "PRD §9.1 — CBN minimum LDR"),
+  pctRule(R.ldrMinPct, "Minimum loan-to-deposit ratio", "LDR below this is Red.", "KRI thresholds", 65, "CBN minimum LDR"),
   { key: R.ldrAmberBufferPp, label: "LDR early-warning buffer", description: "LDR within this many percentage points above the minimum is Amber.", module: MODULE, category: "KRI thresholds", type: "number", unit: "pp", default: 3, min: 0, max: 20, step: 0.5, source: DEMO },
-  pctRule(R.liquidityRatioMinPct, "Minimum liquidity ratio", "Liquidity ratio below this is Red.", "KRI thresholds", 30, "PRD §6.8 — tenant parameter (demo value)"),
-  pctRule(R.nopLimitPct, "Net open position limit (% of capital)", "NOP / capital above this is a breach.", "KRI thresholds", 20, "PRD §6.8 — tenant parameter (demo value)"),
-  { key: R.varLimitNgn, label: "Trading VaR limit (1-day, 99%)", description: "VaR above this is a breach.", module: MODULE, category: "KRI thresholds", type: "money", default: 600e6, min: 0, source: "PRD §6.8.1 — tenant parameter (demo value)" },
-  pctRule(R.opLossAppetitePct, "Operational loss appetite (% of gross income)", "Loss rate at or above this is Red.", "KRI thresholds", 0.5, "PRD §6.9 — tenant parameter (demo value)", { step: 0.01 }),
-  pctRule(R.quotedEquityHaircutPct, "Quoted-equity collateral haircut", "Haircut applied to CSCS mark-to-market for share-margin status.", "Collateral", 20, "PRD §6.7.3 / §5.7 — quoted equity haircut"),
+  pctRule(R.liquidityRatioMinPct, "Minimum liquidity ratio", "Liquidity ratio below this is Red.", "KRI thresholds", 30, "tenant parameter"),
+  pctRule(R.nopLimitPct, "Net open position limit (% of capital)", "NOP / capital above this is a breach.", "KRI thresholds", 20, "tenant parameter"),
+  { key: R.varLimitNgn, label: "Trading VaR limit (1-day, 99%)", description: "VaR above this is a breach.", module: MODULE, category: "KRI thresholds", type: "money", default: 600e6, min: 0, source: "tenant parameter" },
+  pctRule(R.opLossAppetitePct, "Operational loss appetite (% of gross income)", "Loss rate at or above this is Red.", "KRI thresholds", 0.5, "tenant parameter", { step: 0.01 }),
+  pctRule(R.quotedEquityHaircutPct, "Quoted-equity collateral haircut", "Haircut applied to CSCS mark-to-market for share-margin status.", "Collateral", 20, "quoted equity haircut"),
   { key: R.summaryNotifyRoles, label: "Executive summary sign-off — notify roles", description: "Roles notified when the executive summary is signed off.", module: MODULE, category: "Notifications", type: "roles", default: ["cro", "head-of-risk", "md"], source: DEMO },
 ]);
 
@@ -78,7 +78,7 @@ registerOperation<SummarySignOffPayload>({
   type: "executive.summary.signoff",
   name: "Executive summary sign-off",
   module: MODULE,
-  description: "Sign off the AI-drafted executive risk summary before it is used in a Board pack (PRD §6.11, §6.12).",
+  description: "Sign off the AI-drafted executive risk summary before it is used in a Board pack.",
   defaultSteps: [step("signoff", "CRO / Head of Risk sign-off", ["cro", "head-of-risk"], 24)],
   apply: (p, { instance, actor }) => {
     usePortfolioStore.getState().signOff(p.key, { by: actor.name, role: actor.roleId, at: new Date().toISOString(), operationId: instance.id });

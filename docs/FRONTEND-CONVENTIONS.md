@@ -48,9 +48,11 @@ src/components/                     app-level compositions only (shell, ModulePa
 
 Use the `ModulePage` wrapper (`@/components/module-page`): module header (icon, title, PRD reference, phase badge), tabs for sub-pages, content. Within pages favour: KPI row (StatCard), filters + DataTable, record pages with EntityHeader + Tabs + DescriptionList + side panels (approval chain, AI insight, documents, activity). Empty, loading and error states must exist. Phase 2/3 modules are fully designed, with a `PhaseBadge` showing when they ship.
 
+- **Save feedback (every form).** Required inputs are `Field required`. Library `Form` checks them on submit; button-saved areas use `SubmitButton` for Save / Submit / Request (it checks the scope first: `ModulePage` gives every page a scope, each `Modal` / `Drawer` has its own; wrap a separate section in `ValidationScope` + `useValidation()` when a page has several independent forms). The outcome of a save is a popup, never only an `Alert` at the top of the page: `showResult({ title, description?, tone?, action? })` from `@credigit/web-ui` (`ResultDialogHost` is mounted in `app-frame.tsx`) a page outcome state shown with `<OutcomePopup value={state} map={...} />` (`src/lib/ui/outcome-popup.tsx`, copy helpers `outcomeCopy`; Operations submissions use `SubmitOutcome`), or `useSaveFeedback()` (`src/lib/ui/feedback.ts`) instead of the library `useToast()` (success / warning outcomes open the popup, failures stay toasts). Pages that hold edits in state call `useUnsavedChangesWarning(dirty)` (`src/lib/ui/unsaved-changes.ts`).
+
 ## Checks before you report
 
-`npx tsc --noEmit`, `npm run lint`, and visual screenshots of your pages (`bash ../credigit-ser-web-component/scripts/screenshot.sh <url> <out.png> [w] [h]`, ≤1440x1800; 390 width for mobile). The dev server runs at http://localhost:3100. Sign in first: screenshots can't log in, so use `?demoRole=<role-id>` on any app URL (demo auto sign-in for screenshots; see `src/components/auth-guard.tsx`).
+`npx tsc --noEmit`, `npm run lint`, and visual screenshots of your pages (`bash ../credigit-ser-web-component/scripts/screenshot.sh <url> <out.png> [w] [h]`, ≤1440x1800; 390 width for mobile). The dev server runs at http://localhost:8061. Sign in first: screenshots can't log in, so use `?demoRole=<role-id>` on any app URL (demo auto sign-in for screenshots; see `src/components/auth-guard.tsx`).
 
 ## Platform services (invariants 8 & 9 — mandatory for every feature)
 

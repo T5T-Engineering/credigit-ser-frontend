@@ -5,8 +5,9 @@
  * (platform.ts); approvals live in the Operations workflow. BACKEND SEAM: replace with API mutations.
  */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { seedBreaches, type Breach, type StressAssumptions } from "./data";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 /** RAS metric catalogue. Early-warning / buffer values are rules `market-risk.ras.<id>.earlyWarning|buffer`. */
 export type RasMetric = { id: string; metric: string; unit: string; direction: "min" | "max"; floorRule?: string; floorText: string };
@@ -90,6 +91,8 @@ export const useMarketRisk = create<State>()(
       reset: () => set(initial()),
     }),
     // v2: thresholds moved to business rules, sign-off chain moved to Operations — older demo state is discarded.
-    { name: "credigit.ser.market-risk", version: 2, migrate: () => initial() as unknown as State, storage: createJSONStorage(() => localStorage) },
+    { name: "credigit.ser.market-risk", version: 2, migrate: () => initial() as unknown as State, storage: dataStorage() },
   ),
 );
+
+registerDatabaseStore(useMarketRisk);

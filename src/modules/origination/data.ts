@@ -9,11 +9,12 @@
  * connectors (§5.1, §5.3) and the bureau / CRMS connector (§5.2). Replace with API calls; keep the shapes.
  */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { subDays } from "date-fns";
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { Application, Facility, ID, Obligor, User } from "@/lib/data/types";
 import type { RoleId } from "@/lib/rbac/roles";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 // ---------------------------------------------------------------- deterministic random
 
@@ -176,7 +177,7 @@ export const useOriginationStore = create<OriginationState>()(
       extras: {},
       patch: (id, changes) => set((s) => ({ extras: { ...s.extras, [id]: { ...s.extras[id], ...changes } } })),
     }),
-    { name: "credigit.ser.origination", storage: createJSONStorage(() => localStorage), partialize: ({ extras }) => ({ extras }) },
+    { name: "credigit.ser.origination", storage: dataStorage(), partialize: ({ extras }) => ({ extras }) },
   ),
 );
 
@@ -198,3 +199,5 @@ export function seedComments(appId: ID, app?: Application, users?: User[]): Orig
     out.push({ id: `${appId}-c2`, authorId: ca.id, authorName: ca.name, roleId: ca.roleId, body: `@${ao?.name.split(" ")[0] ?? "AO"} please obtain the latest quarter's management accounts — the AFS is ten months old.`, at: at(44), internal: true });
   return out;
 }
+
+registerDatabaseStore(useOriginationStore);

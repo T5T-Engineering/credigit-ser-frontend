@@ -8,9 +8,11 @@ import {
   AppHeader,
   AppShell,
   CommandPalette,
+  environmentTone,
   Logo,
   NotificationCenter,
   PermissionProvider,
+  ResultDialogHost,
   SessionTimeoutDialog,
   SideNav,
   Toaster,
@@ -27,6 +29,7 @@ import { useRole, useSession } from "@/lib/auth/session";
 import { useApplications, useDbActions, useObligors, useTenant } from "@/lib/data/hooks";
 import { markNotificationsRead, useMyNotifications } from "@/lib/platform/notifications";
 import { ago } from "@/lib/format";
+import { appEnvironment } from "@/lib/platform/environment";
 import { useRule, useRulesStore } from "@/lib/platform/rules";
 import { roleIdleTimeoutMinutes } from "@/modules/admin/rule-keys";
 import { TenantBrandSync } from "@/modules/settings/brand-store";
@@ -105,14 +108,14 @@ export function AppFrame({ children }: { children: ReactNode }) {
     const actions: CommandItem[] = [
       ...(held.has("origination.applications.create") ? [{ id: "act:new-app", label: "New credit application", group: "actions", href: "/origination/new", icon: <FilePlus2 aria-hidden className="size-4" /> }] : []),
       ...(held.has("settings.branding.view") ? [{ id: "act:branding", label: "Change colours, logo or font", group: "actions", href: "/settings/branding", icon: <Palette aria-hidden className="size-4" /> }] : []),
-      ...(demoAccessEnabled && held.has("settings.demo-data.reset") ? [{ id: "act:reset", label: "Reset demo data", group: "actions", icon: <RotateCcw aria-hidden className="size-4" /> }] : []),
+      ...(demoAccessEnabled && held.has("settings.demo-data.reset") ? [{ id: "act:reset", label: "Reset to initial data", group: "actions", icon: <RotateCcw aria-hidden className="size-4" /> }] : []),
     ];
     return [...actions, ...pages, ...records];
   }, [held, obligors, applications]);
 
   const onCommand = (item: CommandItem) => {
     if (item.id === "act:reset" && held.has("settings.demo-data.reset")) {
-      if (window.confirm("Reset all demo data to its original state?")) resetAllDemoData(resetDemo);
+      if (window.confirm("Reset all data to its initial state?")) resetAllDemoData(resetDemo);
       return;
     }
     if (item.href) router.push(item.href);
@@ -160,7 +163,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
                 <Logo tone="reverse" size="small" />
               </Link>
             }
-            environment={`${tenant.shortName} · ${tenant.environment}`}
+            environment={appEnvironment ? `${tenant.shortName} · ${appEnvironment}` : tenant.shortName}
             user={{ name: user.name, role: role?.name ?? "" }}
             linkComponent={Link}
           />
@@ -171,7 +174,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
             onSearchClick={() => setPaletteOpen(true)}
             searchLabel="Search obligors, applications, pages…"
             showShortcut
-            environment={{ label: tenant.environment === "Demo" ? "Demo data" : tenant.environment, tone: tenant.environment === "Production" ? "success" : "warning" }}
+            environment={appEnvironment ? { label: appEnvironment, tone: environmentTone(appEnvironment) } : undefined}
             notifications={
               <NotificationCenter
                 notifications={myNotifications}
@@ -220,6 +223,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
         limit={12}
       />
       <Toaster />
+      <ResultDialogHost />
       <TenantBrandSync />
       <SessionTimeoutDialog
         open={warnAt !== null}

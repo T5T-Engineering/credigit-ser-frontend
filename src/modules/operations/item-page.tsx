@@ -29,14 +29,15 @@ import {
   Spinner,
   Stack,
   StepUpAuthDialog,
+  SubmitButton,
   Text,
   Textarea,
   WorkflowDiagram,
-  useToast,
   type ActivityItem,
   type DecisionAction,
   type DomainEventEntry,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { useAudit } from "@/lib/data/hooks";
 import { dateTime, money } from "@/lib/format";
@@ -132,7 +133,7 @@ function Guarded({ instance }: { instance: OperationInstance }) {
 
 function Detail({ instance: i }: { instance: OperationInstance }) {
   const { actor } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   useDefinitions();
   const def = safeDefinition(i.operationType);
   const now = useNow();
@@ -361,9 +362,9 @@ function Detail({ instance: i }: { instance: OperationInstance }) {
                     <Field label="Reason" description={`At least ${minComment} characters.`} required>
                       <Textarea value={withdrawReason} onChange={(e) => setWithdrawReason(e.target.value)} rows={3} />
                     </Field>
-                    <Button variant="danger" iconBefore={<Undo2 aria-hidden />} loading={busy} disabled={withdrawReason.trim().length < minComment} onClick={withdraw}>
+                    <SubmitButton variant="danger" iconBefore={<Undo2 aria-hidden />} loading={busy} disabled={withdrawReason.trim().length < minComment} onClick={withdraw}>
                       Withdraw request
-                    </Button>
+                    </SubmitButton>
                   </Stack>
                 </CardContent>
               </Card>

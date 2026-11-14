@@ -7,13 +7,14 @@
  */
 import { useMemo } from "react";
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { Application, Facility, Obligor, User } from "@/lib/data/types";
 import { getDefinition } from "@/lib/platform/operations";
 import { getRule } from "@/lib/platform/rules";
 import type { RoleId } from "@/lib/rbac/roles";
 import { addDaysIso, hash, pristineSeed, rand } from "../credit-admin/common";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type DisbursementStatus = "Awaiting authorisation" | "Authorised" | "Returned to maker" | "Rejected" | "Withdrawn";
 
@@ -117,7 +118,7 @@ export const useDisbursementStore = create<DisbursementStore>()(
       saveRequest: (d) => set((s) => ({ requests: { ...s.requests, [d.id]: d } })),
       reset: () => set({ requests: {} }),
     }),
-    { name: "credigit.ser.disbursement", version: 1, storage: createJSONStorage(() => localStorage), partialize: ({ requests }) => ({ requests }) },
+    { name: "credigit.ser.disbursement", version: 1, storage: dataStorage(), partialize: ({ requests }) => ({ requests }) },
   ),
 );
 
@@ -158,7 +159,7 @@ export function makerChecks(userId: string, roleId: RoleId, app: Application | u
       id: "initiator",
       label: "Not the initiator or recommender",
       ok: !conflicts.has(userId),
-      detail: conflicts.has(userId) ? `You ${conflicts.get(userId)} — PRD §4.2 bars you from disbursing it` : "You did not initiate or recommend this facility",
+      detail: conflicts.has(userId) ? `You ${conflicts.get(userId)}.2 bars you from disbursing it` : "You did not initiate or recommend this facility",
     },
   ];
 }
@@ -187,3 +188,5 @@ export function checkerChecks(userId: string, roleId: RoleId, app: Application |
     },
   ];
 }
+
+registerDatabaseStore(useDisbursementStore);

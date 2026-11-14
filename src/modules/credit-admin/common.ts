@@ -64,7 +64,7 @@ export type Actor = { actorId: string; actorName: string; roleId: RoleId };
 export function useActor(): Actor {
   const user = useSession((s) => s.user);
   const roleId = useSession((s) => s.roleId);
-  return { actorId: user?.id ?? "USR-DEMO", actorName: user?.name ?? "Demo user", roleId: roleId ?? "system-admin" };
+  return { actorId: user?.id ?? "USR-UNKNOWN", actorName: user?.name ?? "Unknown user", roleId: roleId ?? "system-admin" };
 }
 
 /** Audit logger bound to the current actor. */

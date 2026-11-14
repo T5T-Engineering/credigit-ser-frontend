@@ -15,7 +15,7 @@ import { useDb } from "@/lib/data/store";
 import type { RoleId } from "@/lib/rbac/roles";
 
 const M = "operations";
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 
 // ---------------------------------------------------------------- business rules
 defineRules([
@@ -89,7 +89,7 @@ defineRules([
     min: 0,
     max: 100,
     step: 0.5,
-    source: "PRD §6.6.2 / §8 — large exposure at 10% of shareholders' funds",
+    source: "large exposure at 10% of shareholders' funds",
   },
 ]);
 
@@ -109,6 +109,7 @@ const toggleSteps = (): WorkflowStep[] => [
 
 registerOperation<TogglePayload>({
   type: "extension.toggle",
+  finalApproverEligible: true,
   name: "Extension enable / disable",
   module: M,
   description: "Enable or disable an event subscriber or hook handler (configuration change, second-person approval).",

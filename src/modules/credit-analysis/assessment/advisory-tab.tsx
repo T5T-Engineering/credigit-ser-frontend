@@ -19,10 +19,12 @@ import {
   Matrix,
   SegmentedControl,
   Stack,
+  SubmitButton,
   Text,
   Textarea,
   type MatrixCell,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { usePendingFor } from "@/lib/platform/operations";
 import { useRule } from "@/lib/platform/rules";
 import type { Obligor, Posture } from "@/lib/data/types";
@@ -124,7 +126,7 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
           <CardHeader>
             <div>
               <CardTitle>Recommended outcome</CardTitle>
-              <CardDescription>Base posture stance with intensity and axis-dominance overlays (§6.2.6)</CardDescription>
+              <CardDescription>Base posture stance with intensity and axis-dominance overlays</CardDescription>
             </div>
             {p.neutral ? (
               <Badge>Neutral / Transitional</Badge>
@@ -192,7 +194,7 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
             <div>
               <CardTitle>36-cell interpretive layer</CardTitle>
               <CardDescription>
-                {cardinalByKey[t.rows].short} (rows) × {cardinalByKey[t.columns].short} (columns), banded Low {bandRange("Low")} · Medium {bandRange("Medium")} · High {bandRange("High")} · PRD {t.prd}
+                {cardinalByKey[t.rows].short} (rows) × {cardinalByKey[t.columns].short} (columns), banded Low {bandRange("Low")} · Medium {bandRange("Medium")} · High {bandRange("High")}
               </CardDescription>
             </div>
           </CardHeader>
@@ -243,7 +245,7 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
           <CardHeader>
             <div>
               <CardTitle>Industry Life-Cycle credit gating</CardTitle>
-              <CardDescription>Open requests cross-checked against the sector’s life-cycle stage (mandatory system control, §6.2.6)</CardDescription>
+              <CardDescription>Open requests cross-checked against the sector’s life-cycle stage (mandatory system control)</CardDescription>
             </div>
           </CardHeader>
           <CardContent>
@@ -252,11 +254,7 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
         </Card>
       )}
 
-      {message && (
-        <Alert tone={message.tone} title={message.tone === "success" ? "Done" : "Couldn’t submit"}>
-          {message.text}
-        </Alert>
-      )}
+      <OutcomePopup value={message} map={outcomeCopy.toneText({ success: "Done", danger: "Couldn’t submit" })} />
       {pendingSignOff && (
         <Alert
           tone="info"
@@ -302,11 +300,11 @@ export function AdvisoryTab({ a, cell, wallet, benchmarks, trends, gating, canEd
           },
           {
             label: "COP Ratio & Share of Business Wallet",
-            detail: "CBA + other-bank statements (§5.1, §5.3), bureau/CRMS (§5.2)",
+            detail: "CBA + other-bank statements, bureau/CRMS",
           },
           {
             label: "Posture & interpretive tables",
-            detail: "PRD §6.2.5, §6.2.6, §6.2.12",
+            detail: "Platform default",
           },
         ]}
       />
@@ -366,9 +364,9 @@ function GatingRow({ obligor, g, override, canEdit }: { obligor: Obligor; g: Gat
             <Textarea value={rationale} onChange={(e) => setRationale(e.target.value)} rows={2} />
           </Field>
           <span className="flex flex-wrap gap-2">
-            <Button size="small" onClick={submit} loading={busy}>
+            <SubmitButton size="small" onClick={submit} loading={busy}>
               Submit override request
-            </Button>
+            </SubmitButton>
             <Button size="small" variant="tertiary" onClick={() => setOpen(false)}>
               Cancel
             </Button>

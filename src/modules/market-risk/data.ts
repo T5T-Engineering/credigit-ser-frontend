@@ -254,7 +254,7 @@ export function topDepositors(bs: BalanceSheet): Depositor[] {
   const f = new Faker({ locale: [en_NG, en] });
   f.seed(6802);
   const raw = Array.from({ length: 200 }, (_, i) => (i + 1) ** -0.9);
-  const scale = (bs.deposits * 0.36) / sum(raw); // top 200 ≈ 36% of deposits (demo)
+  const scale = (bs.deposits * 0.36) / sum(raw); // top 200 ≈ 36% of deposits
   return raw.map((v, i) => ({
     rank: i + 1,
     name:
@@ -347,7 +347,7 @@ export function dynamicSignal() {
     sector: "Oil & gas — upstream",
     phase: "Contraction",
     justification:
-      "Sector-cycle engine (§6.6.7) shows a contraction phase in Oil & gas — upstream, where the bank's corporate depositor base is concentrated (21% of corporate deposits).",
+      "Sector-cycle engine shows a contraction phase in Oil & gas — upstream, where the bank's corporate depositor base is concentrated (21% of corporate deposits).",
     retailAdd: num("dyn.retailAddPp"),
     corporateAdd: num("dyn.corporateAddPp"),
     haircutAdd: num("dyn.haircutAddPp"),

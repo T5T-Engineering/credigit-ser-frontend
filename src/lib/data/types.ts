@@ -12,7 +12,6 @@ export type Tenant = {
   name: string;
   shortName: string;
   type: "Commercial bank" | "Microfinance bank" | "Merchant bank";
-  environment: "Demo" | "UAT" | "Production";
 };
 
 export type User = {
@@ -24,6 +23,10 @@ export type User = {
   status: "Active" | "Suspended" | "Pending";
   mfa: boolean;
   lastLogin?: ISODate;
+  /** How the last session was started (backend directory): "password" or "microsoft". */
+  signInMethod?: string;
+  /** Second sign-in step (backend directory, ADR-0017): "email" or "authenticator". */
+  mfaMethod?: string;
 };
 
 /** CBN-style sector taxonomy (tenant-configurable per PRD §6.6.1). */

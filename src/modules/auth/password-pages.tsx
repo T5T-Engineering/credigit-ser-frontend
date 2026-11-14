@@ -189,7 +189,7 @@ export function ChangePasswordPage() {
                     </Alert>
                   ) : null}
                   {user.source === "demo" ? (
-                    <Alert tone="info" title="Demo session">
+                    <Alert tone="info" title="Signed in by role">
                       Demo users without a password set one with &ldquo;Set or reset your password&rdquo; on the sign-in page.
                     </Alert>
                   ) : null}

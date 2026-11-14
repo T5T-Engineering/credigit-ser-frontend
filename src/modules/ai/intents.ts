@@ -76,8 +76,8 @@ export const suggestedQuestions: { q: string; scope: QueryScope }[] = [
 /** Data dictionary entries the console understands (§6.13: Section 8 metrics + every KRI). */
 export const dataDictionary = [
   { area: "Risk Data Spine", items: ["Exposure / outstanding by obligor, sector, branch, product", "NPL ratio (Substandard + Doubtful + Lost ÷ total)", "Days past due, CBN classification, watchlist", "IFRS 9 stage", "Collateral perfection status"] },
-  { area: "Operational risk (§6.9)", items: ["Every KRI series (48 months)", "Loss events by Basel event type, business line"] },
-  { area: "Enterprise risk (§6.10)", items: ["Risk appetite metrics vs Board RAS"] },
+  { area: "Operational risk", items: ["Every KRI series (48 months)", "Loss events by Basel event type, business line"] },
+  { area: "Enterprise risk", items: ["Risk appetite metrics vs Board RAS"] },
   { area: "Platform (admin scope)", items: ["Users, roles, MFA", "Audit-trail activity", "Connector health"] },
 ];
 
@@ -118,7 +118,7 @@ export function answerQuery(question: string, scope: QueryScope, d: QueryData): 
   const intent = detectIntent(q);
   if (!intent) return { status: "unknown", reason: "I couldn't map that question to the platform's data dictionary. Try one of the suggested questions, or name a metric such as exposure, NPL ratio, KRI, loss events or stage." };
   if (scope === "platform" && !platformIntents.has(intent))
-    return { status: "refused", intent, reason: "Your query scope is limited to platform-health and configuration data. Customer-identifiable and financial risk data needs a separate entitlement (PRD §6.13)." };
+    return { status: "refused", intent, reason: "Your query scope is limited to platform-health and configuration data. Customer-identifiable and financial risk data needs a separate entitlement." };
 
   const builders: Record<string, () => Answer> = {
     attrition: () => attritionVsComplaints(q, d),
@@ -281,7 +281,7 @@ function pastDue(d: QueryData): Answer {
     title: "Facilities past due or on the watchlist",
     narrative: [
       `${list.length} facilities totalling ${moneyShort(list.reduce((s, f) => s + f.outstanding, 0))} are past due or belong to watchlisted obligors; ${list.filter((f) => f.dpd >= 90).length} are 90+ days past due.`,
-      "Covenant test results are owned by Loan Review & Monitoring (§6.4) — open the Covenants page for covenant-level breaches.",
+      "Covenant test results are owned by Loan Review & Monitoring — open the Covenants page for covenant-level breaches.",
     ],
     chart: { kind: "bar", data: buckets.map((b) => ({ label: b.label, value: list.filter(b.test).reduce((s, f) => s + f.outstanding, 0) })), format: "money", label: "Exposure by days-past-due bucket" },
     table: { columns: ["Facility", "Obligor", "Product", "DPD", "CBN class", "Outstanding"], numeric: [false, false, false, true, false, true], rows: list.map((f) => [f.id, obl.get(f.obligorId)?.name ?? f.obligorId, f.product, f.dpd, f.cbnClass, moneyShort(f.outstanding)]) },
@@ -315,7 +315,7 @@ function concentration(d: QueryData): Answer {
     ],
     chart: { kind: "stacked", mode: "grouped", categories: rows.map((r) => r.s.name), series: [{ name: "Share of book %", values: rows.map((r) => round(r.share, 1)), tone: "accent" }, { name: "Internal limit %", values: rows.map((r) => r.s.limitPct), tone: "info" }], format: "pct", label: "Sector share vs limit" },
     table: { columns: ["Sector", "Exposure", "Share of book", "Limit", "Utilisation"], numeric: [false, true, true, true, true], rows: rows.map((r) => [r.s.name, moneyShort(r.e), pct(r.share), `${r.s.limitPct}%`, pct((r.share / r.s.limitPct) * 100, 0)]) },
-    sources: [{ label: "Risk Data Spine · Facility.outstanding by Obligor.sectorId" }, { label: "Rules & Parameters · sector limits", detail: "Tenant taxonomy (§6.6.1)" }],
+    sources: [{ label: "Risk Data Spine · Facility.outstanding by Obligor.sectorId" }, { label: "Rules & Parameters · sector limits", detail: "Tenant taxonomy" }],
     structuredQuery: "SELECT s.name, SUM(f.outstanding) / total_book AS share, s.limit_pct\nFROM facility f JOIN obligor o ON o.id = f.obligor_id JOIN sector s ON s.id = o.sector_id\nGROUP BY s.name, s.limit_pct ORDER BY share / s.limit_pct DESC",
     confidence: 0.92,
     touched: `Facility, Obligor, Sector — ${rows.length} sectors`,
@@ -334,7 +334,7 @@ function kriStatus(d: QueryData): Answer {
     ],
     chart: { kind: "donut", segments: [{ label: "Green", value: d.kris.filter((k) => k.rag === "green").length, tone: "success" }, { label: "Amber", value: d.kris.filter((k) => k.rag === "amber").length, tone: "warning" }, { label: "Red", value: d.kris.filter((k) => k.rag === "red").length, tone: "danger" }], centerLabel: "KRIs", centerValue: String(d.kris.length) },
     table: { columns: ["KRI", "Category", "Current", "Amber / Red", "Status", "Escalation"], rows: list.map((k) => [k.name, k.category, fmtKri(k, k.current), `${fmtKri(k, k.amber)} / ${fmtKri(k, k.red)}`, k.rag === "red" ? "Red" : "Amber", `Level ${k.level}`]) },
-    sources: [{ label: "Operational Risk KRI framework (§6.9.1)", detail: `${d.kris.length} KRIs, thresholds in force` }],
+    sources: [{ label: "Operational Risk KRI framework", detail: `${d.kris.length} KRIs, thresholds in force` }],
     structuredQuery: "SELECT kri_id, name, category, current_value, amber_from, red_from, rag, escalation_level\nFROM kri_reading WHERE period = '2026-10' AND rag <> 'Green'\nORDER BY rag DESC",
     confidence: 0.95,
     touched: `KRI readings — ${d.kris.length} rows`,
@@ -355,7 +355,7 @@ function losses(d: QueryData): Answer {
     narrative: [`${ytd.length} events (${ytd.filter((e) => e.nearMiss).length} near misses) with net loss of ${moneyShort(net)} year to date.`, rows[0] ? `${rows[0].t} accounts for ${pct((rows[0].net / (net || 1)) * 100)} of net loss.` : ""],
     chart: { kind: "bar", data: rows.filter((r) => r.net > 0).map((r) => ({ label: r.t, value: r.net })), format: "money", label: "Net loss by event type" },
     table: { columns: ["Event type", "Events", "Gross loss", "Net loss"], numeric: [false, true, true, true], rows: rows.map((r) => [r.t, r.n, moneyShort(r.gross), moneyShort(r.net)]) },
-    sources: [{ label: "Loss-event register (§6.9.2)", detail: `${d.lossEvents.length} events` }],
+    sources: [{ label: "Loss-event register", detail: `${d.lossEvents.length} events` }],
     structuredQuery: "SELECT event_type, COUNT(*), SUM(gross_loss), SUM(gross_loss - recovery) AS net_loss\nFROM loss_event WHERE discovered_at >= '2026-01-01'\nGROUP BY event_type ORDER BY net_loss DESC",
     confidence: 0.93,
     touched: `Loss events — ${ytd.length} rows`,
@@ -370,7 +370,7 @@ function stages(d: QueryData): Answer {
     status: "answered",
     intent: "stage",
     title: "IFRS 9 stage distribution by exposure",
-    narrative: [`Stage 1 holds ${pct((by[0]!.e / tot) * 100)} of exposure; Stage 2 ${pct((by[1]!.e / tot) * 100)} (${by[1]!.n} facilities) and Stage 3 ${pct((by[2]!.e / tot) * 100)} (${by[2]!.n} facilities).`, "Stage is assigned from DPD and watchlist status in the prototype; the IFRS 9 module (§6.7) owns the staging rules."],
+    narrative: [`Stage 1 holds ${pct((by[0]!.e / tot) * 100)} of exposure; Stage 2 ${pct((by[1]!.e / tot) * 100)} (${by[1]!.n} facilities) and Stage 3 ${pct((by[2]!.e / tot) * 100)} (${by[2]!.n} facilities).`, "Stage is assigned from DPD and watchlist status in the prototype; the IFRS 9 module owns the staging rules."],
     chart: { kind: "donut", segments: by.map((b) => ({ label: `Stage ${b.s}`, value: b.e, tone: b.s === 1 ? "success" : b.s === 2 ? "warning" : "danger" })), centerLabel: "Exposure", centerValue: moneyShort(tot) },
     table: { columns: ["Stage", "Facilities", "Exposure", "Share"], numeric: [false, true, true, true], rows: by.map((b) => [`Stage ${b.s}`, b.n, moneyShort(b.e), pct((b.e / tot) * 100)]) },
     sources: [{ label: "Risk Data Spine · Facility.stage" }],
@@ -390,7 +390,7 @@ function appetite(d: QueryData): Answer {
     narrative: [reds.length ? `${reds.length} metric${reds.length > 1 ? "s are" : " is"} in breach: ${reds.map((m) => `${m.name} (${fmtMetric(m, m.actual)} vs ${m.direction === "max" ? "≤" : "≥"} ${fmtMetric(m, m.limit)})`).join("; ")}.` : "No appetite breaches.", `${list.filter((m) => m.rag === "amber").length} metrics are in early warning.`],
     chart: { kind: "donut", segments: [{ label: "Green", value: list.filter((m) => m.rag === "green").length, tone: "success" }, { label: "Amber", value: list.filter((m) => m.rag === "amber").length, tone: "warning" }, { label: "Red", value: reds.length, tone: "danger" }], centerLabel: "Metrics", centerValue: String(list.length) },
     table: { columns: ["Metric", "Type", "Appetite", "Actual", "Status"], rows: list.map((m) => [m.name, m.type, `${m.direction === "max" ? "≤" : "≥"} ${fmtMetric(m, m.limit)}`, fmtMetric(m, m.actual), m.rag[0]!.toUpperCase() + m.rag.slice(1)]) },
-    sources: [{ label: "ERM risk appetite scorecard (§6.10)", detail: rasVersion().version }],
+    sources: [{ label: "ERM risk appetite scorecard", detail: rasVersion().version }],
     structuredQuery: `SELECT metric, type, appetite_limit, actual, rag FROM risk_appetite_scorecard\nWHERE ras_version = '${rasVersion().version}' ORDER BY rag DESC`,
     confidence: 0.91,
     touched: `Risk appetite scorecard — ${list.length} rows`,
@@ -431,7 +431,7 @@ function users(d: QueryData): Answer {
     status: "answered",
     intent: "users",
     title: "Users by role and MFA status",
-    narrative: [`${d.users.length} user accounts across ${rows.length} roles; ${d.users.filter((u) => u.status === "Active").length} active.`, noMfa ? `${noMfa} account${noMfa > 1 ? "s have" : " has"} no MFA enrolled — MFA is mandatory on all logins (§10.1).` : "All accounts have MFA enrolled."],
+    narrative: [`${d.users.length} user accounts across ${rows.length} roles; ${d.users.filter((u) => u.status === "Active").length} active.`, noMfa ? `${noMfa} account${noMfa > 1 ? "s have" : " has"} no MFA enrolled — MFA is mandatory on all logins.` : "All accounts have MFA enrolled."],
     chart: { kind: "bar", data: rows.slice(0, 12).map(([k, g]) => ({ label: k, value: g.n })), format: "num", label: "Users by role" },
     table: { columns: ["Role", "Users", "MFA enrolled", "Pending"], numeric: [false, true, true, true], rows: rows.map(([k, g]) => [k, g.n, g.mfa, g.pending]) },
     sources: [{ label: "Identity & access · User, Role", detail: "Configuration data — no customer data" }],
@@ -454,7 +454,7 @@ function auditActivity(d: QueryData): Answer {
     narrative: [`${recent.length} audit events recorded in the last 7 days across ${rows.length} action types.`, rows[0] ? `Most frequent: “${rows[0][0]}” (${rows[0][1]}).` : ""],
     chart: { kind: "bar", data: rows.slice(0, 10).map(([k, v]) => ({ label: k, value: v })), format: "num", label: "Audit events by action" },
     table: { columns: ["Action", "Events"], numeric: [false, true], rows: rows.map(([k, v]) => [k, v]) },
-    sources: [{ label: "Immutable audit log (§10.1)", detail: "Actions only — entity payloads not returned" }],
+    sources: [{ label: "Immutable audit log", detail: "Actions only — entity payloads not returned" }],
     structuredQuery: "SELECT action, COUNT(*) FROM audit_event\nWHERE at >= now() - interval '7 days' GROUP BY action ORDER BY 2 DESC",
     confidence: 0.95,
     touched: `Audit events — ${recent.length} rows (metadata only)`,
@@ -476,10 +476,10 @@ function connectors(): Answer {
     status: "answered",
     intent: "connectors",
     title: "Connector health (simulated)",
-    narrative: [`${list.filter((c) => c[1] === "Healthy").length} of ${list.length} connectors are healthy; ${list.filter((c) => c[1] !== "Healthy").map((c) => c[0]).join(", ")} is degraded.`, "Connector telemetry is simulated in this prototype."],
+    narrative: [`${list.filter((c) => c[1] === "Healthy").length} of ${list.length} connectors are healthy; ${list.filter((c) => c[1] !== "Healthy").map((c) => c[0]).join(", ")} is degraded.`, "Connector telemetry is simulated (connectors not connected yet)."],
     chart: { kind: "bar", data: list.map((c) => ({ label: c[0], value: c[2] })), format: "pct", label: "30-day availability by connector" },
     table: { columns: ["Connector", "Status", "30-day availability", "Last sync"], numeric: [false, false, true, false], rows: list.map((c) => [c[0], c[1], `${c[2]}%`, c[3]]) },
-    sources: [{ label: "Staging / reconciliation layer telemetry (§5)", detail: "Platform-health data" }],
+    sources: [{ label: "Staging / reconciliation layer telemetry", detail: "Platform-health data" }],
     structuredQuery: "SELECT connector, status, availability_30d, last_sync_at FROM connector_health",
     confidence: 0.97,
     touched: "Connector health — 8 rows",

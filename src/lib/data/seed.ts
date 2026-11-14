@@ -34,7 +34,6 @@ export const tenant: Tenant = {
   name: "Harbourline Bank Plc (demo tenant)",
   shortName: "Harbourline Bank",
   type: "Commercial bank",
-  environment: "Demo",
 };
 
 export const sectors: Sector[] = [
