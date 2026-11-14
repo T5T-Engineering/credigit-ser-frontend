@@ -54,7 +54,16 @@ never copy a build from one environment to another.
 ## PM2 (`pm2.config.json`)
 
 One fork-mode process `credigit-ser-frontend`, `HOST` / `PORT` per environment block (`env_dev`, `env_test`, `env_uat`, each with
-`APP_ENVIRONMENT`; default `0.0.0.0:8061`). Change the port there, not in the workflow. Useful commands on the host:
+`APP_ENVIRONMENT`): `dev` listens on `0.0.0.0:8061`, `test` and `uat` on `0.0.0.0:9061`. Change the port there, not in the
+workflow. Ports per environment across the platform (backend README):
+
+| Environment | Backend API | Frontend | Notification service |
+|---|---|---|---|
+| Development (local) / `dev` | 8060 | 8061 | 8062 |
+| `test` / `uat` | 9060 | 9061 | 9062 |
+
+`NEXT_PUBLIC_API_BASE_URL` in `.env.<env>.public` is the backend origin as the browser sees it (the host's public name or
+reverse proxy with the API port of that environment, e.g. `http://<uat-host>:9060`). Useful commands on the host:
 
 ```bash
 pm2 status
@@ -69,7 +78,7 @@ cat /opt/credigit/frontend/current/out/release.json     # what is live
 npm install -g pm2@<pinned version>
 pm2 startup            # run the command it prints (systemd), so PM2 starts on boot
 mkdir -p /opt/credigit/frontend && chown <deploy-user> /opt/credigit/frontend
-# open the PORT (8061) or put a reverse proxy (TLS) in front of it
+# open the PORT (dev 8061, test / uat 9061) or put a reverse proxy (TLS) in front of it
 ```
 
 ## Run the production build locally
