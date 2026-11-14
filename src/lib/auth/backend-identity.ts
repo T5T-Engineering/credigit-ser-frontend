@@ -5,7 +5,7 @@
  * only — the backend's development identity headers (NEXT_PUBLIC_BACKEND_DEV_IDENTITY; TD-953). Reads the session from sessionStorage
  * directly so data stores can use it without importing the session store.
  */
-import { apiCall, backendSsoEnabled, validAccessToken } from "./backend-sso";
+import { apiCall, apiFile, backendSsoEnabled, validAccessToken } from "./backend-sso";
 
 const devIdentity = process.env.NEXT_PUBLIC_BACKEND_DEV_IDENTITY === "true";
 const devTenant = process.env.NEXT_PUBLIC_BACKEND_DEV_TENANT ?? "";
@@ -38,6 +38,19 @@ export async function identityCall<T>(path: string, init: RequestInit = {}): Pro
   const headers = await backendIdentityHeaders();
   if (!headers) throw new Error("Sign in first.");
   return apiCall<T>(path, { ...init, headers: { ...headers, ...init.headers } });
+}
+
+/** Downloads a file from the backend as the signed-in user and saves it in the browser (download, CSV export). */
+export async function identityDownload(path: string, fallbackName: string): Promise<void> {
+  const headers = await backendIdentityHeaders();
+  if (!headers) throw new Error("Sign in first.");
+  const { blob, filename } = await apiFile(path, { headers }, fallbackName);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 /** The signed-in user's backend access, or null without a backend / identity. */

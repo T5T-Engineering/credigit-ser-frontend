@@ -41,7 +41,8 @@ export async function apiCall<T>(path: string, init: RequestInit = {}, accessTok
     ...init,
     headers: {
       Accept: "application/json",
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
+      // A FormData body (multipart upload) gets its Content-Type and boundary from the browser.
+      ...(init.body && !(init.body instanceof FormData) ? { "Content-Type": "application/json" } : {}),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       ...init.headers,
     },
@@ -50,6 +51,18 @@ export async function apiCall<T>(path: string, init: RequestInit = {}, accessTok
   const body = (await response.json().catch(() => ({}))) as T & Problem;
   if (!response.ok) throw new ApiError(body.detail || body.title || `The server answered ${response.status}.`, response.status, body.code);
   return body;
+}
+
+/** A file response (download, CSV export): the bytes and the server's file name. */
+export async function apiFile(path: string, init: RequestInit = {}, fallbackName = "download"): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(`${apiBase}/api/v1${path}`, { ...init, headers: { Accept: "*/*", ...init.headers } });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as Problem;
+    throw new ApiError(body.detail || body.title || `The server answered ${response.status}.`, response.status, body.code);
+  }
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(disposition);
+  return { blob: await response.blob(), filename: decodeURIComponent(match?.[1] ?? match?.[2] ?? fallbackName) };
 }
 
 export function backendTokens(): BackendTokens | null {
