@@ -8,42 +8,53 @@ The app is a static export (`next.config.ts` → `output: "export"`, `trailingSl
 
 | When | What |
 |---|---|
-| Every push / PR | `npm ci` → lint → typecheck → static build → deploy-file checks → production dependency audit |
-| Push to `develop` · `test` · `uat` · `staging` · `production` | The same, then `deploy.yml` for dev · test · uat · staging · production |
+| Every push / PR | `npm ci` → settings-split check → lint → typecheck → static build → deploy-file checks → production dependency audit |
+| Push to `develop` · `test` · `uat` | The same, then `deploy.yml` for dev · test · uat (`staging` / `production` run the checks only) |
 
 Each deploy job runs only when the repository variable `DEPLOY_ENABLED_<ENV>` (`DEPLOY_ENABLED_DEV`, …) is `true`.
 
-`NEXT_PUBLIC_*` settings are compiled into the files at build time, so every environment is built separately by `deploy.yml` with
-its own GitHub Environment variables — never copy a build from one environment to another.
+`NEXT_PUBLIC_*` settings are compiled into the files at build time, so every environment is built separately by `deploy.yml` —
+never copy a build from one environment to another.
+
+## Environments and settings files (backend ADR-0020)
+
+- The environment is `APP_ENVIRONMENT` = `dev` \| `test` \| `uat`: CI/CD takes it from the GitHub Environment **secret** (or
+  variable) `APP_ENVIRONMENT` and refuses a value that doesn't match the job; locally from
+  [`launchSettings.json`](../launchSettings.json) (`LAUNCH_PROFILE`, else the first profile). `npm run env:resolve` prints it.
+- **Non-secret** settings (every `NEXT_PUBLIC_*`, public by nature in a static site) live in the committed `.env.<env>.public`.
+  **Secrets** (keys matching `deploy/env/environments.json` → `secrets`; none today — never make a secret `NEXT_PUBLIC_*`)
+  live in the git-ignored `.env.<env>`, written by CI/CD from GitHub secrets.
+- `npm run build:dev` / `build:test` / `build:uat` build with those files (`scripts/env/app-env.mjs run`); variables already set
+  win, empty ones count as unset. `npm run env:sync` keeps the files in step; CI runs `sync --check`.
+- Transitional: GitHub Environment variables named `NEXT_PUBLIC_*` still override the public file (TD-977).
 
 ## What `deploy.yml` does
 
-1. Builds with the environment's `NEXT_PUBLIC_*` variables and stamps `out/release.json` (`release`, `commit`, `environment`).
+1. Checks `APP_ENVIRONMENT`, writes `.env.<env>` from the environment's secrets, builds with `.env.<env>.public` (GitHub
+   variables override; `NEXT_PUBLIC_API_BASE_URL` must end up non-empty) and stamps `out/release.json` (`release`, `commit`, `environment`).
 2. Packages `out/`, `runtime/` (only `serve`, the version pinned in `package.json`), `serve.mjs`, `serve.json`, `pm2.config.json`.
 3. Copies it over SSH (host key pinned) and runs `scripts/deploy/activate.sh` on the host:
    `releases/<release>/` → switch the `current` symlink → `pm2 startOrReload pm2.config.json --env <env> --update-env` →
    wait until `/release.json` reports the new release → `pm2 save`; on failure switch back to the previous release.
    The newest `KEEP_RELEASES` releases are kept.
 
-## GitHub Environment settings (Settings → Environments → dev | test | uat | staging | production)
+## GitHub Environment settings (Settings → Environments → dev \| test \| uat)
 
 | Kind | Name | Notes |
 |---|---|---|
 | Secret | `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` | SSH target and private key of the deploy user |
 | Secret | `DEPLOY_KNOWN_HOSTS` | Output of `ssh-keyscan <host>` (host key pinning) |
+| Secret | `APP_ENVIRONMENT` | `dev` \| `test` \| `uat` — must match the environment (a variable works too) |
 | Variable | `DEPLOY_PATH` | e.g. `/opt/credigit/frontend` (or a secret) |
-| Variable | `NEXT_PUBLIC_API_BASE_URL` | Backend origin, e.g. `https://api-dev.example.com` (required) |
-| Variable | `NEXT_PUBLIC_APP_ENVIRONMENT` | Badge text (`Development`, `UAT`; empty in production) |
-| Variable | `NEXT_PUBLIC_DEMO_ACCESS`, `NEXT_PUBLIC_BACKEND_DEV_IDENTITY`, `NEXT_PUBLIC_BACKEND_DEV_TENANT` | Defaults `false` / `false` / empty |
-| Variable | `NEXT_PUBLIC_AZURE_AD_CLIENT_ID`, `NEXT_PUBLIC_AZURE_AD_TENANT_ID`, `NEXT_PUBLIC_AZURE_AD_REDIRECT_URI` | Entra SPA sign-in (optional) |
-| Variable | `NEXT_PUBLIC_WORKSPACE_*`, `NEXT_PUBLIC_AUDIT_MAX_ROWS` | Optional limits (see `.env.example`) |
+| `.env.<env>.public` | `NEXT_PUBLIC_API_BASE_URL` | Backend origin (required) — or the GitHub variable (transitional, TD-977) |
+| `.env.<env>.public` | `NEXT_PUBLIC_APP_ENVIRONMENT`, `NEXT_PUBLIC_DEMO_ACCESS`, `NEXT_PUBLIC_BACKEND_DEV_*`, `NEXT_PUBLIC_AZURE_AD_*`, `NEXT_PUBLIC_WORKSPACE_*`, `NEXT_PUBLIC_AUDIT_MAX_ROWS` | Committed per environment (see `.env.example`) |
 | Variable | `DEPLOY_SSH_PORT`, `KEEP_RELEASES`, `HEALTH_RETRIES`, `HEALTH_INTERVAL_SECONDS` | Optional (22 / 5 / 30 / 2) |
-| Repo variable | `DEPLOY_ENABLED_DEV` … `DEPLOY_ENABLED_PRODUCTION` | `true` to switch an environment's deploy on |
+| Repo variable | `DEPLOY_ENABLED_DEV`, `DEPLOY_ENABLED_TEST`, `DEPLOY_ENABLED_UAT` | `true` to switch an environment's deploy on |
 
 ## PM2 (`pm2.config.json`)
 
-One fork-mode process `credigit-ser-frontend`, `HOST` / `PORT` per environment block (`env_dev` … `env_production`; default
-`0.0.0.0:8061`). Change the port there, not in the workflow. Useful commands on the host:
+One fork-mode process `credigit-ser-frontend`, `HOST` / `PORT` per environment block (`env_dev`, `env_test`, `env_uat`, each with
+`APP_ENVIRONMENT`; default `0.0.0.0:8061`). Change the port there, not in the workflow. Useful commands on the host:
 
 ```bash
 pm2 status

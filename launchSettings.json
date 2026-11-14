@@ -1,0 +1,8 @@
+{
+  "$comment": "APP_ENVIRONMENT (dev | test | uat) when it isn't set in the environment: picks .env.<env>.public (NEXT_PUBLIC_* settings) and .env.<env> for `npm run build:<env>` / `dev:<env>`. LAUNCH_PROFILE selects a profile; otherwise the first one applies (backend ADR-0020).",
+  "profiles": {
+    "dev": { "environmentVariables": { "APP_ENVIRONMENT": "dev" } },
+    "test": { "environmentVariables": { "APP_ENVIRONMENT": "test" } },
+    "uat": { "environmentVariables": { "APP_ENVIRONMENT": "uat" } }
+  }
+}

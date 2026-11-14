@@ -1,5 +1,6 @@
-# Reusable deployment of the static site to one GitHub Environment (dev | test | uat | staging | production). The
-# environment supplies its own secrets / vars and protection rules (production: required reviewers). Steps:
+# Reusable deployment to one GitHub Environment (dev | test | uat). The environment supplies its secrets and protection
+# rules; its NEXT_PUBLIC_* settings come from the committed .env.<env>.public (backend ADR-0020). GitHub variables of the
+# same name still override (transitional). The environment comes from the secret / variable APP_ENVIRONMENT. Steps:
 #   1. build the static export with this environment's NEXT_PUBLIC_* variables (compiled in at build time)
 #   2. package out/ + a minimal `serve` runtime + pm2.config.json + serve.json, stamped with out/release.json
 #   3. copy the package to the host over SSH (host key pinned via DEPLOY_KNOWN_HOSTS)
@@ -43,10 +44,9 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH || secrets.DEPLOY_PATH }}
-          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
         run: |
           missing=()
-          for v in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS DEPLOY_PATH NEXT_PUBLIC_API_BASE_URL; do
+          for v in DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS DEPLOY_PATH; do
             [ -n "${!v}" ] || missing+=("$v")
           done
           if [ ${#missing[@]} -gt 0 ]; then
@@ -58,13 +58,29 @@ jobs:
 
       - run: npm ci
 
-      - name: Build static export for ${{ inputs.environment }}
-        run: npm run build
+      - name: Current environment (secret / variable APP_ENVIRONMENT)
+        env:
+          APP_ENVIRONMENT: ${{ secrets.APP_ENVIRONMENT || vars.APP_ENVIRONMENT || inputs.environment }}
+        run: |
+          env_name="$(node scripts/env/app-env.mjs resolve)"
+          [ "$env_name" = "${{ inputs.environment }}" ] || { echo "::error::APP_ENVIRONMENT is '$env_name' but this job deploys '${{ inputs.environment }}' — fix the secret/variable of that GitHub environment."; exit 1; }
+
+      - name: Write .env.<env> from environment secrets (build-time secrets only; none today)
+        env:
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+        run: |
+          umask 077
+          node scripts/env/app-env.mjs from-secrets --env "${{ inputs.environment }}"
+
+      - name: Build static export for ${{ inputs.environment }} (.env.<env>.public; GitHub variables override)
+        run: |
+          node scripts/env/app-env.mjs run --env "${{ inputs.environment }}" -- node -e 'if (!process.env.NEXT_PUBLIC_API_BASE_URL) { console.error("::error::NEXT_PUBLIC_API_BASE_URL is empty: set it in .env.${{ inputs.environment }}.public (or the GitHub variable)."); process.exit(1) }'
+          node scripts/env/app-env.mjs run --env "${{ inputs.environment }}" -- npm run build
         env:
           NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
           NEXT_PUBLIC_APP_ENVIRONMENT: ${{ vars.NEXT_PUBLIC_APP_ENVIRONMENT }}
-          NEXT_PUBLIC_DEMO_ACCESS: ${{ vars.NEXT_PUBLIC_DEMO_ACCESS || 'false' }}
-          NEXT_PUBLIC_BACKEND_DEV_IDENTITY: ${{ vars.NEXT_PUBLIC_BACKEND_DEV_IDENTITY || 'false' }}
+          NEXT_PUBLIC_DEMO_ACCESS: ${{ vars.NEXT_PUBLIC_DEMO_ACCESS }}
+          NEXT_PUBLIC_BACKEND_DEV_IDENTITY: ${{ vars.NEXT_PUBLIC_BACKEND_DEV_IDENTITY }}
           NEXT_PUBLIC_BACKEND_DEV_TENANT: ${{ vars.NEXT_PUBLIC_BACKEND_DEV_TENANT }}
           NEXT_PUBLIC_AZURE_AD_CLIENT_ID: ${{ vars.NEXT_PUBLIC_AZURE_AD_CLIENT_ID }}
           NEXT_PUBLIC_AZURE_AD_TENANT_ID: ${{ vars.NEXT_PUBLIC_AZURE_AD_TENANT_ID }}
@@ -121,4 +137,4 @@ jobs:
 
       - name: Remove credentials from the runner
         if: always()
-        run: rm -f ~/.ssh/deploy_key "$RUNNER_TEMP"/frontend-*.tar.gz
+        run: rm -f ~/.ssh/deploy_key "$RUNNER_TEMP"/frontend-*.tar.gz .env.${{ inputs.environment }}
