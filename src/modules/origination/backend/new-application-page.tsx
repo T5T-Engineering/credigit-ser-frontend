@@ -12,6 +12,7 @@ import { Alert, Button, Card, CardContent, CardDescription, CardHeader, CardTitl
 import { ModulePage } from "@/components/module-page";
 import { money } from "@/lib/format";
 import { useCan } from "@/lib/iam/permissions";
+import { useRule } from "@/lib/platform/rules";
 import { useMasterDataValues } from "@/modules/master-data/api";
 import { fastTrackVariants, num, productOptions } from "../params";
 import { useRulesVersion } from "../use-params";
@@ -31,6 +32,7 @@ type Form = {
   tenor: string;
   purpose: string;
   requestType: RequestType;
+  existingFacilityRef: string;
 };
 
 const toNumber = (s: string) => (s.trim() === "" ? null : Number(s.replace(/,/g, "")));
@@ -72,6 +74,7 @@ const emptyForm = (): Form => ({
   tenor: String(num("defaultTenorMonths")),
   purpose: "",
   requestType: "New",
+  existingFacilityRef: "",
 });
 
 const draftForm = ({ customer: c, facility: f }: CreditApplication): Form => ({
@@ -88,6 +91,7 @@ const draftForm = ({ customer: c, facility: f }: CreditApplication): Form => ({
   tenor: String(f.tenorMonths),
   purpose: f.purpose,
   requestType: f.requestType,
+  existingFacilityRef: f.existingFacilityRef ?? "",
 });
 
 function Editor({ draft }: { draft: CreditApplication | null }) {
@@ -96,6 +100,10 @@ function Editor({ draft }: { draft: CreditApplication | null }) {
   const rulesVersion = useRulesVersion();
   const sectors = useMasterDataValues("sector").values;
   const branches = useMasterDataValues("branch").values;
+  // Request types and which act on an existing facility are business rules (backend ORG-FR-21).
+  const enabledTypes = useRule<string[]>("origination.requestTypes.enabled");
+  const facilityTypes = useRule<string[]>("origination.requestTypes.requireExistingFacility");
+  const requestTypes = REQUEST_TYPES.filter((t) => enabledTypes.includes(t));
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- rules are read at call time; re-derive when they change
   const products = useMemo(() => productOptions() as string[], [rulesVersion]);
@@ -103,6 +111,7 @@ function Editor({ draft }: { draft: CreditApplication | null }) {
   const variants = useMemo(() => fastTrackVariants(), [rulesVersion]);
 
   const [form, setForm] = useState<Form>(() => (draft ? draftForm(draft) : emptyForm()));
+  const needsFacility = facilityTypes.includes(form.requestType);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ key: string; route: ApprovalRoute | null }>({ key: "", route: null });
@@ -147,7 +156,7 @@ function Editor({ draft }: { draft: CreditApplication | null }) {
       state: form.state.trim() || null,
       declaredTurnoverNgn: toNumber(form.turnover),
     },
-    facility: { product: form.product, amountNgn: amount ?? 0, tenorMonths: Number(form.tenor), purpose: form.purpose.trim(), requestType: form.requestType, variant: form.variant || null },
+    facility: { product: form.product, amountNgn: amount ?? 0, tenorMonths: Number(form.tenor), purpose: form.purpose.trim(), requestType: form.requestType, variant: form.variant || null, existingFacilityRef: form.existingFacilityRef.trim() || null },
   });
 
   const save = async (andSubmit: boolean) => {
@@ -233,8 +242,13 @@ function Editor({ draft }: { draft: CreditApplication | null }) {
                     <Input id="f-tenor" type="number" min={1} value={form.tenor} onChange={(e) => set("tenor", e.target.value)} />
                   </Field>
                   <Field label="Request type" htmlFor="f-type" required>
-                    <Select id="f-type" value={form.requestType} onChange={(e) => set("requestType", e.target.value as RequestType)} options={REQUEST_TYPES.map((t) => ({ value: t, label: t }))} />
+                    <Select id="f-type" value={form.requestType} onChange={(e) => set("requestType", e.target.value as RequestType)} options={requestTypes.map((t) => ({ value: t, label: t }))} />
                   </Field>
+                  {needsFacility ? (
+                    <Field label="Existing facility reference" htmlFor="f-facility" required description="The facility in the exposure book this request renews, enhances or restructures.">
+                      <Input id="f-facility" value={form.existingFacilityRef} onChange={(e) => set("existingFacilityRef", e.target.value)} />
+                    </Field>
+                  ) : null}
                   <div className="md:col-span-2">
                     <Field label="Purpose" htmlFor="f-purpose" required>
                       <Textarea id="f-purpose" rows={3} value={form.purpose} onChange={(e) => set("purpose", e.target.value)} />

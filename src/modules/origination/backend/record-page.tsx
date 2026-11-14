@@ -2,10 +2,11 @@
 
 /**
  * Credit application record on the backend API: header, next step and actions (submit, analysis, limit exception, override, submit for
- * approval, withdraw), overview, documents (platform DMS, subject `Application`), approvals (backend Operations), comments.
+ * approval, withdraw), overview, credit checks (bureau / CRMS, statements and COP Ratio), analysis (engine and limit gate), covenants,
+ * documents (platform DMS, subject `Application`) with collateral due diligence, approvals (backend Operations), comments.
  * Every action is permission-gated here and re-checked by the backend (endpoint key, rule role group, Operations eligibility).
  */
-import { Suspense, useMemo, useState, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { BriefcaseBusiness, FileSearch } from "lucide-react";
@@ -23,7 +24,6 @@ import {
   EntityHeader,
   Field,
   Grid,
-  Input,
   PermissionGate,
   Select,
   Spinner,
@@ -39,22 +39,11 @@ import { useCan } from "@/lib/iam/permissions";
 import { useRule } from "@/lib/platform/rules";
 import { OutcomePopup } from "@/lib/ui/outcome-popup";
 import { backendItemHref } from "@/modules/operations/backend-operations";
-import { SubjectDocuments, useDocumentVocabulary } from "@/modules/documents/subject-documents";
+import { SubjectDocuments } from "@/modules/documents/subject-documents";
 import { useMasterDataValues, type MasterDataValue } from "@/modules/master-data/api";
-import { requiredKinds } from "../params";
 import { recommendationLabel } from "../logic";
-import {
-  LIMIT_GATE_RESULTS,
-  RECOMMENDATIONS,
-  errorText,
-  isBreach,
-  originationApi,
-  useBackend,
-  type ApplicationAck,
-  type CreditApplication,
-  type LimitGateResult,
-  type Recommendation,
-} from "./api";
+import { RECOMMENDATIONS, errorText, isBreach, originationApi, useBackend, type ApplicationAck, type CreditApplication, type Recommendation } from "./api";
+import { AnalysisDetail, AnalysisForm, Covenants, CreditChecks, DueDiligence } from "./credit-checks";
 import { backendNextAction, backendSlaState, backendStageTones, isOpenStage } from "./view";
 
 /** DMS subject type of credit applications (backend `OriginationSubjects.Application`). */
@@ -62,11 +51,9 @@ const SUBJECT_TYPE = "Application";
 
 /** Record sections that exist only in demo mode until their backend services are built (TD-980). */
 const DEMO_ONLY_SECTIONS = [
-  { title: "Financials & COP Ratio", detail: "Statement reconciliation and COP banding (PRD §6.1.4, §8). The analyst records the COP ratio with the analysis outcome." },
-  { title: "Credit bureau / CRMS", detail: "Bureau and CRMS connectors (PRD §5.2)." },
-  { title: "360 RAR", detail: "Obligor posture from Credit Analysis (PRD §6.2)." },
-  { title: "Collateral", detail: "Pledged collateral and due diligence before BDM concurrence (PRD §6.1.1 step 3)." },
-  { title: "Recommendation engine & covenants", detail: "Engine rationale and covenant tagging (PRD §6.1.5). The analyst records the system recommendation." },
+  { title: "360 RAR scoring", detail: "Obligor posture computed by Credit Analysis (PRD §6.2). The analyst enters the four cardinal-point scores with the analysis." },
+  { title: "Collateral register", detail: "Pledged collateral, valuation and perfection (PRD §6.5). Legal records the collateral search on the Documents tab." },
+  { title: "OCR extraction", detail: "Financial-statement fields parsed from the audited accounts (PRD §5.4). The declared turnover is entered for the COP Ratio." },
   { title: "Credit memo", detail: "AI-drafted memo with sign-off (PRD §2.3)." },
   { title: "Release to offer", detail: "Hand-over to Offer Letters after final approval (PRD §6.1.1 step 13)." },
 ];
@@ -160,7 +147,19 @@ function Record() {
         onValueChange={setTab}
         items={[
           { id: "overview", label: "Overview", content: <Overview app={app} /> },
-          { id: "documents", label: "Documents", content: <Documents app={app} /> },
+          { id: "checks", label: "Credit checks", content: <CreditChecks app={app} run={run} /> },
+          { id: "analysis", label: "Analysis", content: <AnalysisDetail app={app} /> },
+          { id: "covenants", label: "Covenants", badge: app.covenants ? String(app.covenants.effective.length) : undefined, content: <Covenants app={app} run={run} /> },
+          {
+            id: "documents",
+            label: "Documents",
+            content: (
+              <Stack gap="large">
+                <Documents app={app} />
+                <DueDiligence app={app} run={run} />
+              </Stack>
+            ),
+          },
           { id: "approvals", label: "Approvals", badge: operations.length ? String(operations.length) : undefined, content: <Approvals app={app} operations={operations} /> },
           { id: "comments", label: "Comments", content: <Comments app={app} /> },
           { id: "more", label: "Not on the backend yet", content: <DemoOnly /> },
@@ -267,7 +266,7 @@ function NextStep({ app, run }: { app: CreditApplication; run: Run }) {
             </Alert>
           ) : null}
           {actions.length ? <Stack direction="horizontal" gap="small" wrap>{actions}</Stack> : isOpenStage(app) ? <Text variant="small" tone="muted">No action for you at this stage.</Text> : null}
-          {panel === "analysis" ? <AnalysisForm app={app} busy={busy} onCancel={() => setPanel(null)} onSave={(body) => act("Analysis recorded", () => originationApi.recordAnalysis(app.id, body), () => "The analysis outcome is recorded; the initiator is notified.")} /> : null}
+          {panel === "analysis" ? <AnalysisForm app={app} busy={busy} onCancel={() => setPanel(null)} onSave={(body) => act("Analysis recorded", () => originationApi.recordAnalysis(app.id, body), () => "The limit gate and system recommendation are computed and recorded; the initiator is notified.")} /> : null}
           {panel === "exception" ? (
             <ReasonForm
               label="Justification"
@@ -295,39 +294,6 @@ function NextStep({ app, run }: { app: CreditApplication; run: Run }) {
         </Stack>
       </CardContent>
     </Card>
-  );
-}
-
-function AnalysisForm({ app, busy, onCancel, onSave }: { app: CreditApplication; busy: boolean; onCancel: () => void; onSave: (body: { limitGate: LimitGateResult; systemRecommendation: Recommendation; copRatio: number | null; notes: string | null }) => void }) {
-  const [limitGate, setLimitGate] = useState<LimitGateResult>(app.analysis?.limitGate ?? "Within limit");
-  const [rec, setRec] = useState<Recommendation>(app.analysis?.systemRecommendation ?? "Approve");
-  const [cop, setCop] = useState(app.analysis?.copRatio == null ? "" : String(app.analysis.copRatio));
-  const [notes, setNotes] = useState(app.analysis?.notes ?? "");
-  return (
-    <Stack gap="medium">
-      <Grid columns={{ base: 1, md: 3 }} gap="medium">
-        <Field label="Limit gate" htmlFor="an-gate" required description="Single-obligor and sectoral check (PRD §5.6).">
-          <Select id="an-gate" value={limitGate} onChange={(e) => setLimitGate(e.target.value as LimitGateResult)} options={LIMIT_GATE_RESULTS.map((r) => ({ value: r, label: r }))} />
-        </Field>
-        <Field label="System recommendation" htmlFor="an-rec" required>
-          <Select id="an-rec" value={rec} onChange={(e) => setRec(e.target.value as Recommendation)} options={RECOMMENDATIONS.map((r) => ({ value: r, label: recommendationLabel[r] }))} />
-        </Field>
-        <Field label="COP ratio" htmlFor="an-cop" optional>
-          <Input id="an-cop" inputMode="decimal" value={cop} onChange={(e) => setCop(e.target.value)} />
-        </Field>
-      </Grid>
-      <Field label="Notes" htmlFor="an-notes" optional>
-        <Textarea id="an-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
-      </Field>
-      <Stack direction="horizontal" gap="small" wrap>
-        <Button loading={busy} disabled={busy} onClick={() => onSave({ limitGate, systemRecommendation: rec, copRatio: cop.trim() ? Number(cop) : null, notes: notes.trim() || null })}>
-          Save analysis
-        </Button>
-        <Button variant="tertiary" onClick={onCancel}>
-          Cancel
-        </Button>
-      </Stack>
-    </Stack>
   );
 }
 
@@ -404,7 +370,7 @@ function Overview({ app }: { app: CreditApplication }) {
               { label: "Fast-Track variant", value: app.facility.variant ?? "—" },
               { label: "Amount", value: money(app.facility.amountNgn) },
               { label: "Tenor", value: `${app.facility.tenorMonths} months` },
-              { label: "Request type", value: app.facility.requestType },
+              { label: "Request type", value: app.facility.existingFacilityRef ? `${app.facility.requestType} of ${app.facility.existingFacilityRef}` : app.facility.requestType },
               { label: "Created", value: `${dateTime(app.createdAt)} by ${app.createdBy.name}` },
               { label: "Submitted", value: app.submittedAt ? dateTime(app.submittedAt) : "—" },
             ]}
@@ -416,7 +382,7 @@ function Overview({ app }: { app: CreditApplication }) {
           <CardHeader>
             <div>
               <CardTitle>Analysis</CardTitle>
-              <CardDescription>Recorded by the Credit Analyst.</CardDescription>
+              <CardDescription>Gate and recommendation computed by the server; details on the Analysis tab.</CardDescription>
             </div>
           </CardHeader>
           <CardContent>
@@ -427,6 +393,7 @@ function Overview({ app }: { app: CreditApplication }) {
                   { label: "System recommendation", value: recommendationLabel[a.systemRecommendation] },
                   { label: "Adopted recommendation", value: app.recommendation ? recommendationLabel[app.recommendation] : "—" },
                   { label: "COP ratio", value: a.copRatio == null ? "—" : a.copRatio.toFixed(2) },
+                  { label: "Bureau / CRMS", value: app.bureauCheck?.completedAt ? (app.bureauCheck.adverse ? "Adverse finding" : "No adverse finding") : "—" },
                   { label: "Notes", value: a.notes ?? "—" },
                   { label: "Recorded", value: `${dateTime(a.completedAt)} by ${a.completedBy.name}` },
                 ]}
@@ -478,22 +445,23 @@ function Overview({ app }: { app: CreditApplication }) {
   );
 }
 
-/** Platform DMS documents; required types come from rules `origination.docs.required` / `.requiredNonRetail` matched to master-data codes. */
+/** Platform DMS documents; required types and their state come from the backend checklist (rules `origination.docs.*`, ADR-0023). */
 function Documents({ app }: { app: CreditApplication }) {
-  const vocab = useDocumentVocabulary();
-  const rulesKey = (requiredKinds(app.customer.type) as string[]).join("\n");
-  const required = useMemo(() => {
-    const byKey = new Map<string, string>();
-    for (const t of vocab.types) {
-      byKey.set(t.code.toLowerCase(), t.code);
-      byKey.set(t.label.toLowerCase(), t.code);
-    }
-    return rulesKey
-      .split("\n")
-      .map((k) => byKey.get(k.toLowerCase()))
-      .filter((c): c is string => Boolean(c));
-  }, [vocab.types, rulesKey]);
-  return <SubjectDocuments subjectType={SUBJECT_TYPE} subjectId={app.id} required={required} title="Application documents" />;
+  const checklist = useBackend(() => originationApi.checklist(app.id), [app.id, app.version]);
+  const items = checklist.data?.items ?? [];
+  return (
+    <Stack gap="medium">
+      {checklist.error ? <Alert tone="danger">{checklist.error}</Alert> : null}
+      {checklist.data ? (
+        <Alert tone={checklist.data.complete ? "success" : "warning"}>
+          {checklist.data.complete
+            ? "Every required document is present and verified."
+            : `Required before the analysis: ${items.filter((i) => !i.verified).map((i) => (i.present ? `${i.typeLabel} (not verified)` : i.typeLabel)).join(", ")}.`}
+        </Alert>
+      ) : null}
+      <SubjectDocuments subjectType={SUBJECT_TYPE} subjectId={app.id} required={items.map((i) => i.typeCode)} title="Application documents" />
+    </Stack>
+  );
 }
 
 function Approvals({ app, operations }: { app: CreditApplication; operations: Array<{ id: string; title: string; operationType: string; status: string; requestedAt: string; requestedBy: { name: string } }> }) {

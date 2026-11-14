@@ -26,12 +26,14 @@ ladder in Operations. A fully approved request is released to the Offer Letter m
 (`NEXT_PUBLIC_API_BASE_URL` set, `backendSsoEnabled`) the pipeline, new-application form and application record read and write the
 backend CreditOrigination API (`/api/v1/origination`, backend ADR-0011); documents use the platform DMS (`SubjectDocuments`, subject
 type `Application`, backend ADR-0021); sector and branch pickers read master data; approvals, limit exceptions and overrides are backend
-Operations instances decided on `/operations/item`. Backend mode covers what the backend has built: create / update / submit
-(ORG-FR-01), documents (ORG-FR-03, without OCR), recording the analysis outcome with limit gate and system recommendation (ORG-FR-07,
-08 — values entered by the analyst, backend TD-024), limit exception and override requests, chart-flow approval (ORG-FR-10, 11, 13,
-15, 22), withdrawal (ORG-FR-17), pipeline / queue / mine / export (ORG-FR-18) and comments (ORG-FR-21). The demo-only sections
-(financials & COP, bureau / CRMS, 360 RAR, collateral, covenants, memo, release to offer) are listed on the record as "not on the
-backend yet" until their backend services exist (TD-980).
+Operations instances decided on `/operations/item`. Backend mode covers what the backend has built: create / update / submit with
+request type and existing facility (ORG-FR-01; backend ORG-FR-21), documents with the backend required-documents checklist (ORG-FR-03,
+without OCR), COP Ratio from statement runs with the customer explanation (ORG-FR-04), bureau / CRMS checks (ORG-FR-05), engine inputs
+with the server-computed limit gate and recommendation (ORG-FR-07, 08), covenant tagging and amendments (ORG-FR-09), Legal's collateral
+search before BDM concurrence (ORG-FR-12), limit exception and override requests, chart-flow approval (ORG-FR-10, 11, 13, 15, 22),
+withdrawal (ORG-FR-17), pipeline / queue / mine / export with a request-type filter (ORG-FR-18) and comments (ORG-FR-21). Bureau and
+statement results are keyed in from print-outs / consented statements until connector jobs deliver them (backend ADR-0024). Still
+demo-only (TD-980): 360 RAR scoring, collateral register, OCR, credit memo, release to offer.
 
 ## 2. Users and permissions
 
