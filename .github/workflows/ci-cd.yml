@@ -1,8 +1,9 @@
 # CI on every PR and push: install → lint → typecheck → static build (proves the export compiles). Pushes to an
 # environment branch also build that environment's release and deploy it to its GitHub Environment:
-#   develop → dev · test → test · uat → uat · staging → staging · production → production
+#   develop → dev · test → test · uat → uat   (staging / production run the checks only)
 # The site is a static export (next.config.ts `output: "export"`): NEXT_PUBLIC_* settings are compiled in at build time,
-# so each environment is built by deploy.yml with its own Environment variables (no shared artefact across environments).
+# so each environment is built by deploy.yml from its committed .env.<env>.public (backend ADR-0020), with GitHub variables
+# of the same name as transitional overrides (no shared artefact across environments).
 # Each deploy job is skipped until the repository variable DEPLOY_ENABLED_<ENV> is 'true' (see docs/DEPLOYMENT.md), so
 # pushes stay green before an environment's secrets exist. Actions are pinned to commit SHAs.
 name: ci-cd
@@ -36,6 +37,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci
+      - name: Settings split (no secrets in .env.<env>.public)
+        run: node scripts/env/app-env.mjs sync --check
       - name: Lint
         run: npm run lint
       - name: Typecheck
@@ -84,20 +87,3 @@ jobs:
       environment: uat
     secrets: inherit
 
-  deploy-staging:
-    name: Deploy staging
-    needs: verify
-    if: github.event_name == 'push' && github.ref_name == 'staging' && vars.DEPLOY_ENABLED_STAGING == 'true'
-    uses: ./.github/workflows/deploy.yml
-    with:
-      environment: staging
-    secrets: inherit
-
-  deploy-production:
-    name: Deploy production
-    needs: verify
-    if: github.event_name == 'push' && github.ref_name == 'production' && vars.DEPLOY_ENABLED_PRODUCTION == 'true'
-    uses: ./.github/workflows/deploy.yml
-    with:
-      environment: production
-    secrets: inherit

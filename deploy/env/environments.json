@@ -1,0 +1,16 @@
+{
+  "$comment": "Deployment environments and the secret / non-secret split (backend ADR-0020), read by scripts/env/app-env.mjs and CI. The site is a static export: every NEXT_PUBLIC_* value is compiled into the bundle and is public by nature, so it lives in the committed .env.<env>.public. Secrets (patterns below) must never be NEXT_PUBLIC_*; any build-time secret goes in the git-ignored .env.<env> (CI/CD writes it from GitHub environment secrets).",
+  "default": "dev",
+  "launchSettings": "launchSettings.json",
+  "settingsFormat": "dotenv",
+  "settingsFile": ".env.{env}.public",
+  "publicTemplate": ".env.example",
+  "secretFile": ".env.{env}",
+  "environments": {
+    "dev": { "branch": "develop" },
+    "test": { "branch": "test" },
+    "uat": { "branch": "uat" }
+  },
+  "secrets": ["*_SECRET", "*_PASSWORD", "*_TOKEN", "*_API_KEY"],
+  "processKeys": ["APP_ENVIRONMENT"]
+}

@@ -14,29 +14,27 @@
       "kill_timeout": 5000,
       "merge_logs": true,
       "time": true,
-      "env": { "NODE_ENV": "production", "HOST": "0.0.0.0", "PORT": "8061" },
+      "env": {
+        "NODE_ENV": "production",
+        "APP_ENVIRONMENT": "dev",
+        "HOST": "0.0.0.0",
+        "PORT": "8061"
+      },
       "env_dev": {
         "NODE_ENV": "production",
+        "APP_ENVIRONMENT": "dev",
         "HOST": "0.0.0.0",
         "PORT": "8061"
       },
       "env_test": {
         "NODE_ENV": "production",
+        "APP_ENVIRONMENT": "test",
         "HOST": "0.0.0.0",
         "PORT": "8061"
       },
       "env_uat": {
         "NODE_ENV": "production",
-        "HOST": "0.0.0.0",
-        "PORT": "8061"
-      },
-      "env_staging": {
-        "NODE_ENV": "production",
-        "HOST": "0.0.0.0",
-        "PORT": "8061"
-      },
-      "env_production": {
-        "NODE_ENV": "production",
+        "APP_ENVIRONMENT": "uat",
         "HOST": "0.0.0.0",
         "PORT": "8061"
       }

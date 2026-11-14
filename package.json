@@ -10,7 +10,12 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "sync:permissions": "node scripts/sync-permissions.mjs"
+    "sync:permissions": "node scripts/sync-permissions.mjs",
+    "env:resolve": "node scripts/env/app-env.mjs resolve",
+    "env:sync": "node scripts/env/app-env.mjs sync",
+    "build:dev": "node scripts/env/app-env.mjs run --env dev -- npm run build",
+    "build:test": "node scripts/env/app-env.mjs run --env test -- npm run build",
+    "build:uat": "node scripts/env/app-env.mjs run --env uat -- npm run build"
   },
   "dependencies": {
     "@azure/msal-browser": "5.29.0",
