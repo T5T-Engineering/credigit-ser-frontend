@@ -17,7 +17,7 @@ import { ccfRuleKey, OBLIGOR_TYPES, PARAM_RULES, PORTFOLIO_RULES, PRODUCT_TYPES,
 // Values are read with getRule at call time, so an approved rule change applies everywhere immediately.
 // ---------------------------------------------------------------------------------------------------------------
 
-export type ParamSource = "PRD" | "Tenant parameter (demo value)";
+export type ParamSource = "Platform default" | "Tenant parameter";
 export type Param = { key: string; value: number; label: string; source: ParamSource; ref: string };
 
 /** Current value of a portfolio parameter (business rule). */
@@ -32,7 +32,7 @@ export function getPortfolioParams(): Record<PortfolioParamName, Param> {
     const key = PARAM_RULES[name];
     const def = ruleDefinition(key);
     const src = def?.source ?? "";
-    out[name] = { key, value: getRule<number>(key), label: def?.label ?? key, source: src.startsWith("PRD") && !/demo/i.test(src) ? "PRD" : "Tenant parameter (demo value)", ref: src };
+    out[name] = { key, value: getRule<number>(key), label: def?.label ?? key, source: !/demo/i.test(src) ? "Platform default" : "Tenant parameter", ref: src };
   }
   return out;
 }

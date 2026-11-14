@@ -301,6 +301,7 @@ export const navigation: NavGroup[] = [
           { label: "Users", href: "/admin", permission: "identity.users.view" },
           { label: "Roles & limits", href: "/admin/roles", permission: "identity.roles.view" },
           { label: "Permissions", href: "/admin/permissions", permission: "identity.permissions.view" },
+          { label: "Permission groups", href: "/admin/groups", permission: "identity.groups.view" },
           { label: "Rules & parameters", href: "/admin/parameters", permission: "platform.parameters.view" },
         ],
       },
@@ -313,6 +314,7 @@ export const navigation: NavGroup[] = [
         pages: [
           { label: "Profile & security", href: "/settings", permission: "settings.profile.view" },
           { label: "Password", href: "/settings/password", permission: "identity.password.change" },
+          { label: "Security", href: "/settings/security", permission: "identity.me.mfa" },
           { label: "Branding", href: "/settings/branding", permission: "settings.branding.view" },
         ],
       },

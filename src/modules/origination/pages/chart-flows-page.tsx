@@ -138,7 +138,7 @@ export function ChartFlowsPage() {
             { label: "Approval tiers", value: String(getChartFlow().length), hint: "Standard credit ladder" },
             { label: "SLA — Standard", value: `${slaDays("Standard")} days`, hint: TENANT_PARAM_NOTE },
             { label: "SLA — Fast-Track", value: `${slaDays("Fast-Track")} days`, hint: TENANT_PARAM_NOTE },
-            { label: "Step-up authentication", value: `Above ${moneyShort(threshold)}`, hint: "Every approval step re-authenticates (PRD §4.2)" },
+            { label: "Step-up authentication", value: `Above ${moneyShort(threshold)}`, hint: "Every approval step re-authenticates" },
           ]}
         />
 
@@ -147,7 +147,7 @@ export function ChartFlowsPage() {
             <CardHeader>
               <div>
                 <CardTitle>Standard Credit — co-signer / adjudicator matrix</CardTitle>
-                <CardDescription>PRD §6.1.2. BDM recommends, then co-signer pairs until the amount is within the pair&apos;s limit.</CardDescription>
+                <CardDescription>BDM recommends, then co-signer pairs until the amount is within the pair&apos;s limit.</CardDescription>
               </div>
             </CardHeader>
             <CardContent>
@@ -158,7 +158,7 @@ export function ChartFlowsPage() {
             <CardHeader>
               <div>
                 <CardTitle>Fast-Track Credit — co-signer / adjudicator matrix</CardTitle>
-                <CardDescription>PRD §6.1.3. Within the BDM&apos;s limit the BDM and the Fast-Track Analyst co-sign; GH, CCO and CRO are added beyond each limit.</CardDescription>
+                <CardDescription>Within the BDM&apos;s limit the BDM and the Fast-Track Analyst co-sign; GH, CCO and CRO are added beyond each limit.</CardDescription>
               </div>
             </CardHeader>
             <CardContent>
@@ -216,7 +216,7 @@ export function ChartFlowsPage() {
             <CardHeader>
               <div>
                 <CardTitle>Standard Credit chart-flow — end to end</CardTitle>
-                <CardDescription>PRD §6.1.1 default configuration (16 steps). Tenants with fewer tiers run a shorter flow.</CardDescription>
+                <CardDescription>default configuration (16 steps). Tenants with fewer tiers run a shorter flow.</CardDescription>
               </div>
             </CardHeader>
             <CardContent>
@@ -227,7 +227,7 @@ export function ChartFlowsPage() {
             <CardHeader>
               <div>
                 <CardTitle>Approval roles and lending limits</CardTitle>
-                <CardDescription>PRD §4.1 — sign-on limits from business rules ({TENANT_PARAM_NOTE.toLowerCase()}).</CardDescription>
+                <CardDescription>sign-on limits from business rules ({TENANT_PARAM_NOTE.toLowerCase()}).</CardDescription>
               </div>
             </CardHeader>
             <CardContent>

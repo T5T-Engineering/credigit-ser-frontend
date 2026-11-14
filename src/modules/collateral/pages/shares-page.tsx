@@ -21,6 +21,7 @@ import {
   Stack,
   StatCard,
   StatusBadge,
+  SubmitButton,
   Table,
   TableBody,
   TableCell,
@@ -32,6 +33,7 @@ import {
   Textarea,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useRole } from "@/lib/auth/session";
 import { useLookups } from "@/lib/data/hooks";
@@ -169,7 +171,7 @@ export function SharesPage() {
   return (
     <ModulePage
       module="collateral"
-      description="Share-backed exposure valued on a live, independently sourced mark-to-market — not a value frozen at the pledge date (PRD §5.7)."
+      description="Share-backed exposure valued on a live, independently sourced mark-to-market — not a value frozen at the pledge date."
       actions={
         canAct ? (
           <Stack direction="horizontal" gap="small">
@@ -184,22 +186,18 @@ export function SharesPage() {
       }
     >
       <Stack gap="large">
-        {message && (
-          <Alert tone={message.tone} title={message.tone === "danger" ? "Not completed" : "Done"}>
-            {message.text}
-          </Alert>
-        )}
+        <OutcomePopup value={message} map={outcomeCopy.toneText({ success: "Done", danger: "Not completed" })} />
         <Alert tone="info" title={
             <>
               SEC / CSCS connector <PhaseBadge phase={2} className="ml-2 align-middle" />
             </>
           }>
           Phase 1: manual / periodic upload of CSCS share-statement and valuation evidence on the collateral record. Phase 2: automated CSCS/SEC feed with scheduled mark-to-market refresh. Prices
-          below are <strong>simulated demo values, not market data</strong> — last close {dateTime(asOf)}.
+          below are <strong>simulated values, not market data</strong> — last close {dateTime(asOf)}.
         </Alert>
         <Grid columns={{ base: 2, lg: 4 }} gap="medium">
           <StatCard label="Share-backed collateral" value={number(rows.length)} hint={`${tickers.length} counters`} />
-          <StatCard label="Mark-to-market" value={moneyShort(mtm)} hint={`${moneyShort(adjusted)} after ${haircutPct}% haircut (PRD §6.7.3)`} />
+          <StatCard label="Mark-to-market" value={moneyShort(mtm)} hint={`${moneyShort(adjusted)} after ${haircutPct}% haircut`} />
           <StatCard label="Exposure secured" value={moneyShort(exposure)} hint={`Cover ${pct((adjusted / Math.max(1, exposure)) * 100, 0)}`} tone={adjusted >= requiredCover(exposure) ? "success" : "warning"} />
           <StatCard label="Margin shortfalls" value={number(short.length)} hint={`${moneyShort(short.reduce((a, r) => a + r.topUp, 0))} top-up required`} tone="danger" />
         </Grid>
@@ -290,7 +288,7 @@ export function SharesPage() {
 
         <DataTable
           label="Share-backed positions"
-          caption={`Margin call when haircut-adjusted MTM covers less than ${minCoverPct}% of the exposure it secures (business rule); raised through the PRD §6.4.4 escalation protocol. Releases need cover verification in Operations.`}
+          caption={`Margin call when haircut-adjusted MTM covers less than ${minCoverPct}% of the exposure it secures (business rule); raised through the escalation protocol. Releases need cover verification in Operations.`}
           data={rows}
           columns={columns}
           getRowId={(r) => r.id}
@@ -317,9 +315,9 @@ export function SharesPage() {
               <Button variant="tertiary" onClick={() => (setReleaseFor(null), setEvidence(""))}>
                 Cancel
               </Button>
-              <Button onClick={release} disabled={evidence.trim().length < minText}>
+              <SubmitButton onClick={release} disabled={evidence.trim().length < minText}>
                 Submit for verification
-              </Button>
+              </SubmitButton>
             </>
           }
         >

@@ -24,11 +24,13 @@ import {
   Stack,
   StatCard,
   StatusBadge,
+  SubmitButton,
   Text,
   Textarea,
   TextLink,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/iam/permissions";
 import { DEMO_NOW } from "@/lib/data/seed";
@@ -192,7 +194,7 @@ function Waivers() {
   return (
     <ModulePage
       module="credit-admin"
-      description="Waivers and deferrals of approved conditions, and sanctions for credit-policy breaches (PRD §6.3.2). Every decision runs through the Operations workflow."
+      description="Waivers and deferrals of approved conditions, and sanctions for credit-policy breaches. Every decision runs through the Operations workflow."
       actions={
         isRequester || canRemind ? (
           <Stack direction="horizontal" gap="small" wrap>
@@ -218,14 +220,10 @@ function Waivers() {
           <StatCard label="Sanctions for breach" value={String(kpi.sanctions)} icon={<ShieldAlert aria-hidden />} tone="danger" hint="Feed the Operational Risk loss-event register" />
         </Grid>
 
-        {notice ? (
-          <Alert tone={notice.ok ? "success" : "danger"} title={notice.ok ? "Done" : "Not done"} action={<Button size="small" variant="text" onClick={() => setNotice(null)}>Dismiss</Button>}>
-            {notice.ok ? notice.message : notice.reason}
-          </Alert>
-        ) : null}
+        <OutcomePopup value={notice} map={outcomeCopy.okMessage()} />
 
         <Alert tone="info" title="Routing (Operations workflow)">
-          A waiver or deferral is approved at the same tier that approved the original facility, or higher (PRD §6.3.2). Requests within Credit Administration&apos;s delegated tolerance — {toleranceNote()} — can be approved by Credit Administration. Sanctions for breach route to the escalation
+          A waiver or deferral is approved at the same tier that approved the original facility, or higher. Requests within Credit Administration&apos;s delegated tolerance — {toleranceNote()} — can be approved by Credit Administration. Sanctions for breach route to the escalation
           workflow ({roleNames(sanctionRoles())}) and feed the{" "}
           <TextLink as={Link} href="/operational-risk/loss-events/">
             loss-event register
@@ -342,11 +340,7 @@ function RequestDrawer({ row, isRequester, canCloseWaivers, onClose }: { row: Ro
       }
     >
       <Stack gap="large">
-        {result ? (
-          <Alert tone={result.ok ? "success" : "danger"} title={result.ok ? "Done" : "Not done"}>
-            {result.ok ? result.message : result.reason}
-          </Alert>
-        ) : null}
+        <OutcomePopup value={result} map={outcomeCopy.okMessage()} />
         <DescriptionList
           columns={2}
           items={[
@@ -361,7 +355,7 @@ function RequestDrawer({ row, isRequester, canCloseWaivers, onClose }: { row: Ro
             ...(row.breachDetail ? [{ label: "Breach detail", value: row.breachDetail, span: 2 as const }] : []),
             ...(row.decidedByName ? [{ label: "Decision by", value: `${row.decidedByName}${row.decidedAt ? ` · ${dateTime(row.decidedAt)}` : ""}` }] : []),
             ...(row.decisionComment ? [{ label: "Decision comment", value: row.decisionComment }] : []),
-            ...(row.lossEventRef ? [{ label: "Loss event", value: row.lossEventRef, mono: true, hint: "Operational Risk loss-event register (§6.9)" }] : []),
+            ...(row.lossEventRef ? [{ label: "Loss event", value: row.lossEventRef, mono: true, hint: "Operational Risk loss-event register" }] : []),
             ...(row.operationId ? [{ label: "Operations request", value: <TextLink as={Link} href={`/operations/item?id=${row.operationId}`}>{row.operationId}</TextLink> }] : []),
           ]}
         />
@@ -460,15 +454,15 @@ function NewRequestModal({ open, onOpenChange, defaultFacility, onCreated }: { o
       onOpenChange={onOpenChange}
       size="large"
       title="New waiver, deferral or sanction"
-      description="Raised by Credit Administration against a specific approved condition and routed through the Operations workflow (PRD §6.3.2)."
+      description="Raised by Credit Administration against a specific approved condition and routed through the Operations workflow."
       footer={
         <>
           <Button variant="tertiary" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button loading={busy} onClick={() => void submit()}>
+          <SubmitButton loading={busy} onClick={() => void submit()}>
             Submit for approval
-          </Button>
+          </SubmitButton>
         </>
       }
     >

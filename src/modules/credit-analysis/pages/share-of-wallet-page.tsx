@@ -150,13 +150,13 @@ function ShareOfWalletView() {
   return (
     <ModulePage
       module="credit-analysis"
-      description="Share of Business Wallet (§6.2.9): how much of each customer's transaction turnover and borrowing sits with the bank versus its other banking relationships."
+      description="Share of Business Wallet: how much of each customer's transaction turnover and borrowing sits with the bank versus its other banking relationships."
     >
       <Stack gap="large">
         <div className="flex flex-wrap items-center gap-3">
           <PhaseBadge phase={2} label="Phase 2 — Share of Business Wallet" />
           <Text variant="small" tone="muted">
-            Needs automated other-bank statement aggregation (§5.3); runs on demo data in this prototype.
+            Needs automated other-bank statement aggregation; runs on demo data in this prototype.
           </Text>
         </div>
         <Grid columns={{ base: 1, sm: 2, lg: 4 }} gap="medium">
@@ -228,7 +228,7 @@ function ShareOfWalletView() {
             <CardHeader>
               <div>
                 <CardTitle>Positions, credit read and front-office action</CardTitle>
-                <CardDescription>The AI co-pilot turns each position into a credit read and a conversation (§6.2.9)</CardDescription>
+                <CardDescription>The AI co-pilot turns each position into a credit read and a conversation</CardDescription>
               </div>
             </CardHeader>
             <CardContent>
@@ -285,7 +285,7 @@ function WalletDetail({ row }: { row: Row }) {
   if (!w.available)
     return (
       <Text tone="muted">
-        No other-bank statements or bureau per-bank breakdown on file. Request statements through the other-bank connector (§5.3) to compute this customer’s Share of Business
+        No other-bank statements or bureau per-bank breakdown on file. Request statements through the other-bank connector to compute this customer’s Share of Business
         Wallet.
       </Text>
     );

@@ -26,6 +26,7 @@ import {
   Stack,
   StatCard,
   StatusBadge,
+  SubmitButton,
   Tabs,
   Text,
   Textarea,
@@ -279,9 +280,9 @@ function CovenantTestModal({ covenant, onClose, onBreach }: { covenant: CovRow; 
           <Button variant="tertiary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={evidence.trim().length < minEvidence}>
+          <SubmitButton onClick={save} disabled={evidence.trim().length < minEvidence}>
             Save result
-          </Button>
+          </SubmitButton>
         </>
       }
     >
@@ -374,9 +375,9 @@ function InflowsTab({ obligors, canSignOff, canRaise, canExport, onRaise }: { ob
           ]}
           bullets={flagged.map((f) => `${obligor.get(f.obligorId)?.name}: ${pct(f.ratio3m * 100, 0)} of expected (${f.nature}) — ${moneyShort(f.net3m)} vs ${moneyShort(f.expected3m)}`)}
           sources={[
-            { label: "CBA connector — credit turnover, net of inter-branch, suspense, in-and-out and reversal entries (PRD §5.1)" },
-            { label: "Nature-of-Business profile captured at origination (PRD §6.4.3)" },
-            { label: "NGX Sector Corpus seasonality (PRD §6.2.8)" },
+            { label: "CBA connector — credit turnover, net of inter-branch, suspense, in-and-out and reversal entries" },
+            { label: "Nature-of-Business profile captured at origination" },
+            { label: "NGX Sector Corpus seasonality" },
           ]}
           onAccept={canSignOff && !signoff ? accept : undefined}
           onDismiss={canSignOff && !signoff ? dismiss : undefined}
@@ -558,7 +559,7 @@ function PeriodicTab({ canMarkReceived, canRaise, canExport, onRaise }: { canMar
   ];
   return (
     <Stack gap="large">
-      <Alert tone="info" title="Post-disbursement continuous periodic analysis (PRD §6.4.5)">
+      <Alert tone="info" title="Post-disbursement continuous periodic analysis">
         Borrowers upload periodic financial reports for the life of the loan, so Loan Review monitors the overall health of the customer — not only loan performance.
       </Alert>
       <Grid columns={{ base: 1, sm: 3 }} gap="medium">

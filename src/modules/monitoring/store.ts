@@ -6,7 +6,7 @@
  * Persisted in this browser as `credigit.ser.monitoring`.
  */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { subDays, subHours } from "date-fns";
 import { createSeed, DEMO_NOW } from "@/lib/data/seed";
 import type { Facility } from "@/lib/data/types";
@@ -15,6 +15,7 @@ import "./platform";
 import { getRule } from "@/lib/platform/rules";
 import { addBusinessDays, dpdThresholds, exposureOf, slaBusinessDays, type EscalationLevel, type ExceptionType } from "./logic";
 import { buildCovenants, buildInflowProfiles, buildTods } from "./data";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type ExceptionStatus = "Raised" | "Under review" | "Escalated" | "Resolved";
 
@@ -224,7 +225,7 @@ export const useMonitoring = create<State>()(
     {
       name: "credigit.ser.monitoring",
       version: 1,
-      storage: createJSONStorage(() => localStorage),
+      storage: dataStorage(),
       partialize: ({ exceptions, notes, assignments, covenantTests, apgActions, todActions, aiSignoffs }) => ({ exceptions, notes, assignments, covenantTests, apgActions, todActions, aiSignoffs }),
     },
   ),
@@ -236,3 +237,5 @@ export function openExceptionFor(list: MonitoringException[], key: { facilityId?
     (x) => x.status !== "Resolved" && (!key.type || x.type === key.type) && (key.facilityId ? x.facilityId === key.facilityId : true) && (key.collateralId ? x.collateralId === key.collateralId : true),
   );
 }
+
+registerDatabaseStore(useMonitoring);

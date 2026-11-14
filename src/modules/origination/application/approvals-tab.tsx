@@ -21,9 +21,9 @@ import {
   Text,
   TextLink,
   WorkflowInstanceCard,
-  useToast,
   type DecisionAction,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { dateTime, money, moneyShort } from "@/lib/format";
 import { roleById } from "@/lib/rbac/roles";
 import { canDecide, currentStep, getDefinition, instanceSteps, useOperationsStore } from "@/lib/platform/operations";
@@ -42,7 +42,7 @@ const toEngine: Record<DecisionAction, "approve" | "reject" | "return"> = { appr
 export function ApprovalsTab({ c }: { c: AppCtx }) {
   const { app, users } = c;
   const { actor } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const [stepUpOpen, setStepUpOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const resolver = useRef<((ok: boolean) => void) | null>(null);
@@ -87,7 +87,7 @@ export function ApprovalsTab({ c }: { c: AppCtx }) {
 
   let notice: React.ReactNode = null;
   if (blocked) notice = "Blocked by the portfolio-limit gate until the CRO / Board grant an exception.";
-  else if (bdmBlocked) notice = "Collateral due diligence is not complete — Legal must finish the search before the BDM can concur (PRD §6.1.1, step 3). You can still return or decline.";
+  else if (bdmBlocked) notice = "Collateral due diligence is not complete — Legal must finish the search before the BDM can concur. You can still return or decline.";
   else if (highValue) notice = `Above the ${moneyShort(threshold)} high-value threshold — step-up authentication is required.`;
 
   return (
@@ -115,7 +115,7 @@ export function ApprovalsTab({ c }: { c: AppCtx }) {
               <div>
                 <CardTitle>Approval route — {app.flow} chart-flow (preview)</CardTitle>
                 <CardDescription>
-                  {money(app.amount)} routes up to {finalAuthority(preview)}. Once submitted, the route runs in Operations: co-signers sign together and dissent goes to the named adjudicator (PRD §4.2, §6.1.2).
+                  {money(app.amount)} routes up to {finalAuthority(preview)}. Once submitted, the route runs in Operations: co-signers sign together and dissent goes to the named adjudicator.
                 </CardDescription>
               </div>
             </CardHeader>

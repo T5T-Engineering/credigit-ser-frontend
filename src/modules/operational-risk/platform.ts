@@ -17,7 +17,7 @@ import { useOpRisk } from "./store";
 import { isoDaysAhead, logAudit } from "./shared";
 
 export const OPRISK = "operational-risk";
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 
 /** Business-rule keys for the module. */
 export const orKeys = {
@@ -54,36 +54,36 @@ export const orKeys = {
 
 // ---------------------------------------------------------------- business rules
 const kriRules: RuleDefinition[] = kris.flatMap((k) => [
-  { key: orKeys.kriAmber(k.id), label: `${k.id} amber threshold`, description: `${k.name}: reading at which the KRI turns Amber (early warning). Unit: ${k.unit}.`, module: OPRISK, category: "KRI thresholds", type: "number", default: k.amber, min: 0, step: k.decimals ? 1 / 10 ** k.decimals : 1, unit: k.unit, source: "PRD §6.9.1 — tenant-configurable G/A/R banding (demo value)" },
-  { key: orKeys.kriRed(k.id), label: `${k.id} red threshold`, description: `${k.name}: reading at which the KRI is Red (outside Board-approved tolerance). Unit: ${k.unit}.`, module: OPRISK, category: "KRI thresholds", type: "number", default: k.red, min: 0, step: k.decimals ? 1 / 10 ** k.decimals : 1, unit: k.unit, source: "PRD §6.9.1 — tenant-configurable G/A/R banding (demo value)" },
+  { key: orKeys.kriAmber(k.id), label: `${k.id} amber threshold`, description: `${k.name}: reading at which the KRI turns Amber (early warning). Unit: ${k.unit}.`, module: OPRISK, category: "KRI thresholds", type: "number", default: k.amber, min: 0, step: k.decimals ? 1 / 10 ** k.decimals : 1, unit: k.unit, source: "tenant-configurable G/A/R banding" },
+  { key: orKeys.kriRed(k.id), label: `${k.id} red threshold`, description: `${k.name}: reading at which the KRI is Red (outside Board-approved tolerance). Unit: ${k.unit}.`, module: OPRISK, category: "KRI thresholds", type: "number", default: k.red, min: 0, step: k.decimals ? 1 / 10 ** k.decimals : 1, unit: k.unit, source: "tenant-configurable G/A/R banding" },
 ]);
 
 const bcmRules: RuleDefinition[] = seedBcmPlans.flatMap((p) => [
-  { key: orKeys.bcmRto(p.id), label: `${p.id} RTO target`, description: `Recovery Time Objective for “${p.process}” (Tier ${p.tier}).`, module: OPRISK, category: "BCM targets", type: "duration", durationUnit: "hours", default: p.rtoTargetHrs, min: 0.5, max: 720, step: 0.5, source: "PRD §6.9 BCM Framework — tenant target (demo value)" },
-  { key: orKeys.bcmRpo(p.id), label: `${p.id} RPO target`, description: `Recovery Point Objective for “${p.process}” (Tier ${p.tier}).`, module: OPRISK, category: "BCM targets", type: "duration", durationUnit: "minutes", default: p.rpoTargetMins, min: 1, max: 10_080, source: "PRD §6.9 BCM Framework — tenant target (demo value)" },
+  { key: orKeys.bcmRto(p.id), label: `${p.id} RTO target`, description: `Recovery Time Objective for “${p.process}” (Tier ${p.tier}).`, module: OPRISK, category: "BCM targets", type: "duration", durationUnit: "hours", default: p.rtoTargetHrs, min: 0.5, max: 720, step: 0.5, source: "BCM Framework — tenant target" },
+  { key: orKeys.bcmRpo(p.id), label: `${p.id} RPO target`, description: `Recovery Point Objective for “${p.process}” (Tier ${p.tier}).`, module: OPRISK, category: "BCM targets", type: "duration", durationUnit: "minutes", default: p.rpoTargetMins, min: 1, max: 10_080, source: "BCM Framework — tenant target" },
 ]);
 
 const roleRule = (key: string, label: string, description: string, def: RoleId[], source: string): RuleDefinition => ({ key, label, description, module: OPRISK, category: "Escalation", type: "roles", default: def, source });
 
 defineRules([
   ...kriRules,
-  roleRule(orKeys.escalationRoles(1), "KRI escalation — Level 1", "Notified on the first Amber/Red reading (with the control owner).", ["operational-risk-analyst"], "PRD §6.9.1 / §6.4.4"),
-  roleRule(orKeys.escalationRoles(2), "KRI escalation — Level 2", "Red uncured after the Level 1 SLA.", ["head-of-risk"], "PRD §6.9.1 / §6.4.4"),
-  roleRule(orKeys.escalationRoles(3), "KRI escalation — Level 3", "Red uncured after the Level 2 SLA.", ["cro"], "PRD §6.9.1 / §6.4.4"),
-  roleRule(orKeys.escalationRoles(4), "KRI escalation — Level 4", "Board Risk Committee notification for material breaches.", ["board"], "PRD §6.9.1 / §6.4.4"),
-  { key: orKeys.annualNetLimit, label: "Annual net operational loss limit", description: "Loss Limit Framework: net loss allowed per financial year.", module: OPRISK, category: "Loss Limit Framework", type: "money", default: 1_200_000_000, min: 0, source: `PRD §6.9 Loss Limit Framework — ${DEMO}` },
-  { key: orKeys.monthlyNetLimit, label: "Monthly net operational loss limit", description: "Loss Limit Framework: net loss allowed per month (drives KRI-LE-01).", module: OPRISK, category: "Loss Limit Framework", type: "money", default: 100_000_000, min: 1, source: `PRD §6.9 Loss Limit Framework — ${DEMO}` },
-  { key: orKeys.singleEvent, label: "Single-event escalation threshold", description: "A loss event with net loss at or above this is escalated to the loss escalation roles on logging.", module: OPRISK, category: "Loss Limit Framework", type: "money", default: 25_000_000, min: 0, source: `PRD §6.9 Loss Limit Framework — ${DEMO}` },
-  { key: orKeys.boardMateriality, label: "Board materiality threshold", description: "Loss events at or above this are notified to the Board Risk Committee roles.", module: OPRISK, category: "Loss Limit Framework", type: "money", default: 100_000_000, min: 0, source: `PRD §6.9.1 (BRC notification for material breaches) — ${DEMO}` },
+  roleRule(orKeys.escalationRoles(1), "KRI escalation — Level 1", "Notified on the first Amber/Red reading (with the control owner).", ["operational-risk-analyst"], "Platform default"),
+  roleRule(orKeys.escalationRoles(2), "KRI escalation — Level 2", "Red uncured after the Level 1 SLA.", ["head-of-risk"], "Platform default"),
+  roleRule(orKeys.escalationRoles(3), "KRI escalation — Level 3", "Red uncured after the Level 2 SLA.", ["cro"], "Platform default"),
+  roleRule(orKeys.escalationRoles(4), "KRI escalation — Level 4", "Board Risk Committee notification for material breaches.", ["board"], "Platform default"),
+  { key: orKeys.annualNetLimit, label: "Annual net operational loss limit", description: "Loss Limit Framework: net loss allowed per financial year.", module: OPRISK, category: "Loss Limit Framework", type: "money", default: 1_200_000_000, min: 0, source: `Loss Limit Framework — ${DEMO}` },
+  { key: orKeys.monthlyNetLimit, label: "Monthly net operational loss limit", description: "Loss Limit Framework: net loss allowed per month (drives KRI-LE-01).", module: OPRISK, category: "Loss Limit Framework", type: "money", default: 100_000_000, min: 1, source: `Loss Limit Framework — ${DEMO}` },
+  { key: orKeys.singleEvent, label: "Single-event escalation threshold", description: "A loss event with net loss at or above this is escalated to the loss escalation roles on logging.", module: OPRISK, category: "Loss Limit Framework", type: "money", default: 25_000_000, min: 0, source: `Loss Limit Framework — ${DEMO}` },
+  { key: orKeys.boardMateriality, label: "Board materiality threshold", description: "Loss events at or above this are notified to the Board Risk Committee roles.", module: OPRISK, category: "Loss Limit Framework", type: "money", default: 100_000_000, min: 0, source: `(BRC notification for material breaches) — ${DEMO}` },
   { key: orKeys.limitWarningPct, label: "Loss-limit early warning", description: "Share of the annual loss limit at which utilisation shows as a warning.", module: OPRISK, category: "Loss Limit Framework", type: "percent", default: 75, min: 1, max: 100, unit: "%", source: DEMO },
-  roleRule(orKeys.lossEscalationRoles, "Loss above threshold — notify", "Roles notified when a loss event is at or above the single-event threshold.", ["head-of-risk", "operational-risk-analyst"], "PRD §6.9 / §6.4.4 — tenant mapping (demo value)"),
-  roleRule(orKeys.lossBoardRoles, "Material loss — notify", "Roles notified when a loss event is at or above the Board materiality threshold.", ["cro", "board"], "PRD §6.9.1 — tenant mapping (demo value)"),
+  roleRule(orKeys.lossEscalationRoles, "Loss above threshold — notify", "Roles notified when a loss event is at or above the single-event threshold.", ["head-of-risk", "operational-risk-analyst"], "tenant mapping"),
+  roleRule(orKeys.lossBoardRoles, "Material loss — notify", "Roles notified when a loss event is at or above the Board materiality threshold.", ["cro", "board"], "tenant mapping"),
   { key: orKeys.rcsaLikelihoodLabels, label: "RCSA likelihood scale", description: "Likelihood scale labels, lowest first. The number of labels sets the scale size.", module: OPRISK, category: "RCSA", type: "list", default: ["Rare", "Unlikely", "Possible", "Likely", "Almost certain"], source: DEMO },
   { key: orKeys.rcsaImpactLabels, label: "RCSA impact scale", description: "Impact scale labels, lowest first. The number of labels sets the scale size.", module: OPRISK, category: "RCSA", type: "list", default: ["Insignificant", "Minor", "Moderate", "Major", "Severe"], source: DEMO },
   { key: orKeys.rcsaMediumFrom, label: "Risk score — Medium from", description: "Likelihood × impact score at which a risk is Medium.", module: OPRISK, category: "RCSA", type: "number", default: 5, min: 1, max: 100, source: DEMO },
   { key: orKeys.rcsaHighFrom, label: "Risk score — High from", description: "Likelihood × impact score at which a risk is High.", module: OPRISK, category: "RCSA", type: "number", default: 10, min: 1, max: 100, source: DEMO },
   { key: orKeys.rcsaCriticalFrom, label: "Risk score — Critical from", description: "Likelihood × impact score at which a risk is Critical.", module: OPRISK, category: "RCSA", type: "number", default: 15, min: 1, max: 100, source: DEMO },
-  { key: orKeys.rcsaCycleMonths, label: "RCSA cycle", description: "Months between Risk & Control Self-Assessment cycles.", module: OPRISK, category: "RCSA", type: "number", default: 6, min: 1, max: 36, unit: "months", source: "PRD §6.9 (configurable cycle) — demo value" },
+  { key: orKeys.rcsaCycleMonths, label: "RCSA cycle", description: "Months between Risk & Control Self-Assessment cycles.", module: OPRISK, category: "RCSA", type: "number", default: 6, min: 1, max: 36, unit: "months", source: "(configurable cycle)" },
   ...bcmRules,
   { key: orKeys.bcmReviewCycleDays, label: "BCM plan review cycle", description: "Days between approved BCM plan reviews.", module: OPRISK, category: "BCM", type: "duration", durationUnit: "days", default: 365, min: 30, max: 1095, source: DEMO },
   { key: orKeys.bcmReviewDueWindowDays, label: "BCM review due window", description: "Days before the next review at which a plan shows as due.", module: OPRISK, category: "BCM", type: "duration", durationUnit: "days", default: 60, min: 0, max: 365, source: DEMO },
@@ -95,7 +95,7 @@ defineRules([
   { key: orKeys.bcmWeightRto, label: "Readiness weight — RTO met", description: "Weight of RTO achievement in the readiness index.", module: OPRISK, category: "BCM readiness weights", type: "percent", default: 25, min: 0, max: 100, unit: "%", source: DEMO },
   { key: orKeys.bcmWeightDrills, label: "Readiness weight — drill compliance", description: "Weight of fire-drill compliance in the readiness index.", module: OPRISK, category: "BCM readiness weights", type: "percent", default: 25, min: 0, max: 100, unit: "%", source: DEMO },
   { key: orKeys.bcmWeightCrisis, label: "Readiness weight — crisis checklist", description: "Weight of the crisis-management checklist in the readiness index.", module: OPRISK, category: "BCM readiness weights", type: "percent", default: 25, min: 0, max: 100, unit: "%", source: DEMO },
-  roleRule(orKeys.bcmEscalationRoles, "Tier 1 test failure — notify", "Roles notified when a Tier 1 BCM/DR test fails.", ["head-of-risk", "cro"], "PRD §6.9 BCM — tenant mapping (demo value)"),
+  roleRule(orKeys.bcmEscalationRoles, "Tier 1 test failure — notify", "Roles notified when a Tier 1 BCM/DR test fails.", ["head-of-risk", "cro"], "BCM — tenant mapping"),
 ]);
 
 // ---------------------------------------------------------------- operations (approvals)
@@ -106,7 +106,7 @@ registerOperation<KriThresholdPayload>({
   type: "operational-risk.kri.threshold-change",
   name: "KRI threshold change",
   module: OPRISK,
-  description: "Change a KRI's Amber/Red thresholds (Board-approved tolerance). Head of Risk / CRO approval (PRD §6.9.1, §10.1).",
+  description: "Change a KRI's Amber/Red thresholds (Board-approved tolerance). Head of Risk / CRO approval.",
   defaultSteps: [step("approve", "Head of Risk / CRO approval", ["head-of-risk", "cro"], 48)],
   apply: (p, { instance, actor }) => {
     applyRuleValue(orKeys.kriAmber(p.kriId), p.amber, actor, { reason: p.reason, operationId: instance.id });
@@ -191,7 +191,7 @@ defineTemplates([
     trigger: "operational-risk.kri.escalated",
     subject: "KRI {{rag}} — {{kri}} escalated to Level {{level}}",
     inApp: "{{kri}} is {{rag}} at {{value}} (Amber {{amber}} · Red {{red}}) — escalated to Level {{level}} by {{by}}.",
-    body: "<p><strong>{{kri}}</strong> ({{kriId}}) is <strong>{{rag}}</strong> at {{value}}.</p><ul><li>Thresholds: Amber {{amber}} · Red {{red}}</li><li>Outside green for {{persistence}} month(s)</li><li>Control owner: {{owner}}</li><li>Escalation: Level {{level}} ({{levelRoles}})</li></ul><p>Review the KRI and record the remediation under the §6.4.4 escalation protocol.</p>",
+    body: "<p><strong>{{kri}}</strong> ({{kriId}}) is <strong>{{rag}}</strong> at {{value}}.</p><ul><li>Thresholds: Amber {{amber}} · Red {{red}}</li><li>Outside green for {{persistence}} month(s)</li><li>Control owner: {{owner}}</li><li>Escalation: Level {{level}} ({{levelRoles}})</li></ul><p>Review the KRI and record the remediation under the escalation protocol.</p>",
     tone: "danger",
     variables: [
       { name: "kri", description: "KRI name", example: "Core banking downtime (% of scheduled uptime)" },
@@ -214,7 +214,7 @@ defineTemplates([
     trigger: "operational-risk.loss-event.logged (net loss ≥ single-event or Board materiality threshold)",
     subject: "Loss event {{eventId}} above {{thresholdName}}: {{netLoss}}",
     inApp: "{{title}} — net loss {{netLoss}} is at or above the {{thresholdName}} ({{threshold}}).",
-    body: "<p>A loss event has been logged with a net loss of <strong>{{netLoss}}</strong>, at or above the {{thresholdName}} of {{threshold}}.</p><ul><li>Event: {{eventId}} — {{title}}</li><li>Event type: {{eventType}}</li><li>Business line: {{businessLine}}</li><li>Reported by: {{reportedBy}}</li></ul><p>The event is escalated under the §6.4.4 protocol.</p>",
+    body: "<p>A loss event has been logged with a net loss of <strong>{{netLoss}}</strong>, at or above the {{thresholdName}} of {{threshold}}.</p><ul><li>Event: {{eventId}} — {{title}}</li><li>Event type: {{eventType}}</li><li>Business line: {{businessLine}}</li><li>Reported by: {{reportedBy}}</li></ul><p>The event is escalated under the protocol.</p>",
     tone: "danger",
     variables: [
       { name: "eventId", description: "Loss event id", example: "OLE-1ABC" },

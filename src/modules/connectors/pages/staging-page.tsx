@@ -10,14 +10,14 @@ export function StagingPage() {
   const d = staging24h.discounted;
   const discountedTotal = d.interBranch + d.suspense + d.inAndOut + d.reversals;
   return (
-    <ModulePage module="connectors" description="Staging / reconciliation layer and downstream read-model freshness (PRD §5.1, §4.3, §4.6). Simulated.">
+    <ModulePage module="connectors" description="Staging / reconciliation layer and downstream read-model freshness. Simulated.">
       <Stack gap="large">
         <Grid columns={{ base: 1, lg: 2 }} gap="medium">
           <Card>
             <CardHeader>
               <div>
                 <CardTitle>Discounted before promotion (24 h)</CardTitle>
-                <CardDescription>Inter-branch, suspense, in-and-out and reversal entries are detected algorithmically and excluded before data feeds the COP ratio and 360 RAR scoring (PRD §5.1).</CardDescription>
+                <CardDescription>Inter-branch, suspense, in-and-out and reversal entries are detected algorithmically and excluded before data feeds the COP ratio and 360 RAR scoring.</CardDescription>
               </div>
             </CardHeader>
             <BarChart
@@ -46,7 +46,7 @@ export function StagingPage() {
             <CardHeader>
               <div>
                 <CardTitle>Unreconciled items by age</CardTitle>
-                <CardDescription>Items ageing past their clearance window raise an exception through the escalation protocol (PRD §6.4.4).</CardDescription>
+                <CardDescription>Items ageing past their clearance window raise an exception through the escalation protocol.</CardDescription>
               </div>
             </CardHeader>
             <BarChart tone="info" label="Unreconciled items by age" data={staging24h.unreconciledAgeing.map((a) => ({ label: a.label, value: a.value }))} valueFormatter={(n) => number(n)} />
@@ -56,7 +56,7 @@ export function StagingPage() {
           <CardHeader>
             <div>
               <CardTitle>Read-model projection lag</CardTitle>
-              <CardDescription>How far each downstream engine’s read model trails the write side. Shown wherever lag affects a decision (PRD §4.3).</CardDescription>
+              <CardDescription>How far each downstream engine’s read model trails the write side. Shown wherever lag affects a decision.</CardDescription>
             </div>
           </CardHeader>
           <Table>

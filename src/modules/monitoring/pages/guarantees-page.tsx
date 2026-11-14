@@ -15,6 +15,7 @@ import {
   Stack,
   StatCard,
   StatusBadge,
+  SubmitButton,
   Tabs,
   Text,
   TextLink,
@@ -22,6 +23,7 @@ import {
   type DataTableColumn,
   type Tone,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/iam/permissions";
 import { useFacilities, useLookups, useObligors } from "@/lib/data/hooks";
@@ -218,20 +220,9 @@ export function GuaranteesPage() {
   const todOverdue = tods.filter((t) => t.status === "Regularisation overdue" || t.status.startsWith("Classified"));
 
   return (
-    <ModulePage module="monitoring" description="Advance payment guarantees, temporary overdrafts and collateral monitoring (PRD §6.4.2).">
+    <ModulePage module="monitoring" description="Advance payment guarantees, temporary overdrafts and collateral monitoring.">
       <Stack gap="large">
-        {notice && (
-          <Alert
-            tone="success"
-            action={
-              <Button size="small" variant="text" onClick={() => setNotice(null)}>
-                Dismiss
-              </Button>
-            }
-          >
-            {notice}
-          </Alert>
-        )}
+        <OutcomePopup value={notice} map={outcomeCopy.text("Done")} />
         <Grid columns={{ base: 2, lg: 4 }} gap="medium">
           <StatCard label="Live APG exposure" value={moneyShort(apgExposure)} hint={`${apgs.length} guarantees tracked`} />
           <StatCard label={`APGs expiring ≤ ${apgWarnDays} days`} value={number(apgs.filter((a) => a.status === "Expiring soon").length)} tone="warning" />
@@ -276,7 +267,7 @@ export function GuaranteesPage() {
                 <Stack gap="medium">
                   <Text variant="small" tone="muted">
                     Perfection status, revaluation due-dates and insurance currency for every collateral securing a live facility. Share-backed collateral is tracked on its SEC/CSCS mark-to-market
-                    value and lien status, not a periodic manual revaluation (PRD §5.7). Fixed-asset revaluation rules per CBN 3.11 apply to the bank’s own premises.
+                    value and lien status, not a periodic manual revaluation. Fixed-asset revaluation rules per CBN 3.11 apply to the bank’s own premises.
                   </Text>
                   <DataTable label="Collateral monitoring alerts" data={alerts} columns={alertCols} getRowId={(a) => a.id} searchable density="compact" filters={[{ id: "kind", label: "Alert", columnId: "kind" }]} exportFilename={canExport ? "collateral-alerts.csv" : undefined} emptyState={<EmptyState title="No collateral alerts" />} />
                 </Stack>
@@ -329,9 +320,9 @@ function StatusActionModal({ target, onClose, onDone }: { target: ActionTarget; 
           <Button variant="tertiary" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={save} disabled={note.trim().length < minNote || !!pending}>
+          <SubmitButton onClick={save} disabled={note.trim().length < minNote || !!pending}>
             {target.status === "Released" ? "Submit for approval" : "Confirm"}
-          </Button>
+          </SubmitButton>
         </>
       }
     >

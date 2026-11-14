@@ -2,8 +2,9 @@
 
 /** ERM module store (prototype persistence). BACKEND SEAM: swap actions for API calls. */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { seedBreaches, seedCirculars, seedEnterpriseRisks, seedPolicies, type BrcPack, type Circular, type EnterpriseRisk, type Policy, type RegBreach } from "./data";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 type ErmState = {
   risks: EnterpriseRisk[];
@@ -43,9 +44,11 @@ export const useErm = create<ErmState>()(
     {
       name: "credigit.ser.enterprise-risk",
       version: 1,
-      storage: createJSONStorage(() => localStorage),
+      storage: dataStorage(),
       partialize: (s) => ({ risks: s.risks, circulars: s.circulars, policies: s.policies, breaches: s.breaches, packs: s.packs, appetiteEscalations: s.appetiteEscalations }),
       migrate: () => initial() as unknown as ErmState,
     },
   ),
 );
+
+registerDatabaseStore(useErm);

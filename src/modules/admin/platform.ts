@@ -24,7 +24,7 @@ import { applyRolePermissionChange } from "@/lib/iam/grants-store";
 import { permissionFor, type PermissionKey } from "@/lib/iam/catalogue";
 import { roleById as staticRoleById } from "@/lib/rbac/roles";
 
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 
 /** PRD §4.2: tighter session defaults for Disbursement Maker/Checker and Legal. */
 const tighterByPrd: RoleId[] = ["disbursement-maker", "disbursement-checker", "legal-officer"];
@@ -45,7 +45,7 @@ defineRules([
       category: "Role names",
       type: "text",
       default: r.name,
-      source: "PRD §4.0 — default role set is illustrative; tenant renames",
+      source: "default role set is illustrative; tenant renames",
     }),
   ),
   // Per-role session security (PRD §4.2).
@@ -63,7 +63,7 @@ defineRules([
         default: tight ? 10 : 15,
         min: 1,
         max: 240,
-        source: "PRD §4.2 (configurable per role; tighter for disbursement and legal) — demo value",
+        source: "(configurable per role; tighter for disbursement and legal)",
       },
       {
         key: `session.deviceBinding.${r.id}`,
@@ -73,7 +73,7 @@ defineRules([
         category: "Session security",
         type: "boolean",
         default: tight,
-        source: "PRD §4.2 — demo value",
+        source: "Tenant parameter",
       },
       {
         key: `session.ipAllowList.${r.id}`,
@@ -83,7 +83,7 @@ defineRules([
         category: "Session security",
         type: "list",
         default: tight ? ["10.20.0.0/16"] : [],
-        source: "PRD §4.2 — demo value",
+        source: "Tenant parameter",
       },
     ];
   }),
@@ -101,14 +101,14 @@ defineRules([
       default: demoTenor(p),
       min: 1,
       max: 360,
-      source: `PRD §6.1 — ${DEMO}`,
+      source: `${DEMO}`,
     }),
   ),
   // User administration.
   {
     key: "admin.user.minNameParts",
     label: "Words required in a user's full name",
-    description: "Named individuals only — rejects shared or generic logins (PRD §4).",
+    description: "Named individuals only — rejects shared or generic logins.",
     module: "admin",
     category: "User administration",
     type: "number",
@@ -146,9 +146,10 @@ const log = (action: string, entityType: string, entityId: string, before?: stri
 export type UserInvitePayload = { user: User; reason: string };
 registerOperation<UserInvitePayload>({
   type: "user.invite",
+  finalApproverEligible: true,
   name: "User invitation",
   module: "admin",
-  description: "Invite a named user with a role (PRD §4: System Admin creates users; MFA on first sign-in).",
+  description: "Invite a named user with a role.",
   defaultSteps: confirm(),
   apply: ({ user }) => {
     db().upsert("users", user);
@@ -161,6 +162,7 @@ registerOperation<UserInvitePayload>({
 export type UserRoleChangePayload = { userId: string; from: RoleId; to: RoleId; reason: string };
 registerOperation<UserRoleChangePayload>({
   type: "user.role-change",
+  finalApproverEligible: true,
   name: "User role change",
   module: "admin",
   description: "Change a user's role (and so their module access and sign-on limit).",
@@ -178,6 +180,7 @@ registerOperation<UserRoleChangePayload>({
 export type UserStatusPayload = { userId: string; reason: string };
 registerOperation<UserStatusPayload>({
   type: "user.deactivate",
+  finalApproverEligible: true,
   name: "User deactivation",
   module: "admin",
   description: "Revoke a user's access. Their history and audit trail are kept.",
@@ -195,6 +198,7 @@ registerOperation<UserStatusPayload>({
 
 registerOperation<UserStatusPayload>({
   type: "user.reactivate",
+  finalApproverEligible: true,
   name: "User reactivation",
   module: "admin",
   description: "Restore a deactivated user's access (MFA still required).",
@@ -212,9 +216,10 @@ registerOperation<UserStatusPayload>({
 export type CustomRolePayload = { action: "create" | "update" | "delete"; role: CustomRole; reason: string };
 registerOperation<CustomRolePayload>({
   type: "role.custom-change",
+  finalApproverEligible: true,
   name: "Custom role change",
   module: "admin",
-  description: "Create (clone), change or delete a tenant-defined role (PRD §4: clone and adjust).",
+  description: "Create (clone), change or delete a tenant-defined role.",
   defaultSteps: confirm(48),
   apply: ({ action, role, reason }) => {
     if (action === "create") addCustomRole(role);
@@ -275,7 +280,7 @@ registerOperation<SectorLimitPayload>({
   type: "admin.sector-limits.change",
   name: "Sector limit change",
   module: "admin",
-  description: "Change sectoral concentration limits (% of loan book, PRD §6.6.1).",
+  description: "Change sectoral concentration limits (% of loan book).",
   defaultSteps: [step("review", "Risk review", ["head-of-risk", "cro"], 48)],
   apply: ({ changes, reason }) => {
     for (const c of changes) {

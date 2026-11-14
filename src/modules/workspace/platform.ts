@@ -9,7 +9,7 @@ import { defineEvents } from "@/lib/platform/events";
 import { defineHookPoints } from "@/lib/platform/hooks";
 import { defineRules } from "@/lib/platform/rules";
 
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 
 defineRules([
   { key: "workspace.nearLimitPct", label: "Near-limit warning from", description: "A sector counts as 'near limit' once its share reaches this % of its limit (e.g. 90% = within 10% of the limit).", module: "workspace", category: "Dashboard", type: "percent", default: 90, min: 50, max: 100, source: DEMO },
@@ -17,7 +17,7 @@ defineRules([
   { key: "workspace.taskDueSoonDays", label: "Task 'due soon' window", description: "Tasks due within this many days are highlighted in My tasks.", module: "workspace", category: "My tasks", type: "number", unit: "days", default: 1, min: 1, max: 30, source: DEMO },
   { key: "workspace.highPriorityAmountNgn", label: "High-priority approval amount", description: "Approvals above this amount are shown as High priority in My tasks.", module: "workspace", category: "My tasks", type: "money", default: 1_000_000_000, min: 0, source: DEMO },
   { key: "workspace.stalledStageDays", label: "Stalled workflow after", description: "AI flag: applications not updated for this many days in an active stage.", module: "workspace", category: "AI flags", type: "number", unit: "days", default: 7, min: 1, max: 90, source: DEMO },
-  { key: "workspace.inflowShortfallRatio", label: "Inflow shortfall ratio", description: "AI flag: verified ÷ declared turnover (COP ratio) below this value.", module: "workspace", category: "AI flags", type: "number", default: 0.6, min: 0.1, max: 1, step: 0.05, source: `PRD §6.4.3 (inflow monitoring) — ${DEMO}` },
+  { key: "workspace.inflowShortfallRatio", label: "Inflow shortfall ratio", description: "AI flag: verified ÷ declared turnover (COP ratio) below this value.", module: "workspace", category: "AI flags", type: "number", default: 0.6, min: 0.1, max: 1, step: 0.05, source: `(inflow monitoring) — ${DEMO}` },
   { key: "workspace.nplAlertPct", label: "NPL ratio alert above", description: "The dashboard NPL tile turns red above this ratio.", module: "workspace", category: "Dashboard", type: "percent", default: 5, min: 0, max: 100, step: 0.1, source: DEMO },
   { key: "workspace.decisionsWindowDays", label: "'My decisions' window", description: "Days of approval decisions counted on the dashboard.", module: "workspace", category: "Dashboard", type: "number", unit: "days", default: 30, min: 1, max: 365, source: DEMO },
   { key: "workspace.activityWindowHours", label: "Audit activity window", description: "Hours of audit events counted on the admin dashboard tile.", module: "workspace", category: "Dashboard", type: "number", unit: "hours", default: 24, min: 1, max: 720, source: DEMO },

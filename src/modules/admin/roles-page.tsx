@@ -19,6 +19,7 @@ import {
   Input,
   Stack,
   StatCard,
+  SubmitButton,
   Switch,
   Text,
   Textarea,
@@ -35,11 +36,14 @@ import { requestRuleChange } from "@/lib/platform/core";
 import { submitOperation, useOperationsStore, type SubmitResult } from "@/lib/platform/operations";
 import { ruleDefinition, useRule, type RuleValue } from "@/lib/platform/rules";
 import { ConfigNotice } from "./config-notice";
+import { useDirectoryRoleModules } from "./directory";
 import { operationHref, PendingBadge, submitWithHooks } from "./operation-ui";
 import { IPV4_OR_CIDR, roleName, ruleKeys } from "./rule-keys";
 import { useConfiguredRoles, type ConfiguredRole, type CustomRole } from "./store";
 import type { CustomRolePayload } from "./platform";
 
+/** Role cloning (PRD §4, ADM-FR-10) is hidden until cloned roles can be assigned to users (TD-805). */
+const CLONE_ROLES_ENABLED = false;
 const limitLabel = (n: number | null) => (n === null ? "—" : Number.isFinite(n) ? moneyShort(n) : "Apex (no ceiling)");
 const moduleLabel = (m: ModuleKey) => allNavItems.find((i) => i.module === m)?.label ?? m;
 const roleKeysOf = (id: string) => [ruleKeys.roleName(id), ruleKeys.limit(id), ruleKeys.idleTimeout(id), ruleKeys.deviceBinding(id), ruleKeys.ipAllowList(id)];
@@ -57,6 +61,7 @@ export function RolesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = configured.find((r) => r.id === selectedId) ?? null;
   const tiered = configured.filter((r) => r.tier !== null);
+  const directoryModules = useDirectoryRoleModules();
 
   const columns: DataTableColumn<ConfiguredRole>[] = [
     {
@@ -101,7 +106,7 @@ export function RolesPage() {
   ];
 
   return (
-    <ModulePage module="admin" description="The default role set is an illustrative configuration (PRD §4.1). Names, sign-on limits and per-role session rules are business rules; every change is approved in Operations.">
+    <ModulePage module="admin" description="The default role set is an illustrative configuration. Names, sign-on limits and per-role session rules are business rules; every change is approved in Operations.">
       <Stack gap="large">
         <ConfigNotice canEdit={canEdit} />
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
@@ -136,19 +141,31 @@ export function RolesPage() {
               )}
             />
             <Text variant="caption" tone="subtle" className="mt-4 block">
-              Limits are business rules <span className="font-mono">rbac.limit.*</span> (PRD §4.1–4.2, illustrative NGN values); session rules are <span className="font-mono">session.*.&lt;role&gt;</span> with tighter defaults for Disbursement Maker/Checker and Legal (PRD §4.2).
+              Limits are business rules <span className="font-mono">rbac.limit.*</span>; session rules are <span className="font-mono">session.*.&lt;role&gt;</span> with tighter defaults for Disbursement Maker/Checker and Legal.
             </Text>
           </CardContent>
         </Card>
       </Stack>
-      {selected ? <RoleDrawer key={selected.id} role={selected} canEdit={canEdit} onClose={() => setSelectedId(null)} tiered={tiered} /> : null}
+      {selected ? <RoleDrawer key={selected.id} role={selected} canEdit={canEdit} onClose={() => setSelectedId(null)} tiered={tiered} directoryModules={directoryModules} /> : null}
     </ModulePage>
   );
 }
 
 type Outcome = { label: string; result: SubmitResult };
 
-function RoleDrawer({ role, canEdit, onClose, tiered }: { role: ConfiguredRole; canEdit: boolean; onClose: () => void; tiered: ConfiguredRole[] }) {
+function RoleDrawer({
+  role,
+  canEdit,
+  onClose,
+  tiered,
+  directoryModules,
+}: {
+  role: ConfiguredRole;
+  canEdit: boolean;
+  onClose: () => void;
+  tiered: ConfiguredRole[];
+  directoryModules: Record<string, Record<string, "view" | "edit">> | null;
+}) {
   const canClone = useCan("identity.roles.create");
   const canDelete = useCan("identity.roles.delete");
   const minReason = useRule<number>("operations.minCommentLength");
@@ -247,7 +264,8 @@ function RoleDrawer({ role, canEdit, onClose, tiered }: { role: ConfiguredRole; 
     setOutcomes([{ label: "Delete role", result: await submitCustom("delete", role.custom, reason.trim()) }]);
   };
 
-  const modules = Object.entries(role.modules) as Array<[ModuleKey, "view" | "edit"]>;
+  // With the backend, what members actually see (from the role's current permissions); otherwise the app's role definition.
+  const modules = Object.entries(directoryModules?.[role.id] ?? role.modules) as Array<[ModuleKey, "view" | "edit"]>;
   const pendingKey = (key: string) => <PendingBadge subjectType="Rule" subjectId={key} />;
 
   return (
@@ -271,15 +289,15 @@ function RoleDrawer({ role, canEdit, onClose, tiered }: { role: ConfiguredRole; 
                 Restore defaults
               </Button>
             ) : null}
-            {canClone ? (
+            {CLONE_ROLES_ENABLED && canClone ? (
               <Button variant="tertiary" iconBefore={<Copy aria-hidden className="size-4" />} onClick={() => void clone()}>
                 Request clone
               </Button>
             ) : null}
             {canEdit ? (
-              <Button loading={busy} onClick={() => void save()}>
+              <SubmitButton loading={busy} onClick={() => void save()}>
                 Submit for approval
-              </Button>
+              </SubmitButton>
             ) : null}
           </div>
         ) : undefined
@@ -307,21 +325,21 @@ function RoleDrawer({ role, canEdit, onClose, tiered }: { role: ConfiguredRole; 
             </ul>
           </Alert>
         ) : null}
-        <Field label="Role name" htmlFor="role-name" description="Rename to match your organogram (PRD §4.0).">
+        <Field label="Role name" htmlFor="role-name" description="Rename to match your organogram.">
           <Input id="role-name" value={name} disabled={!canEdit} onChange={(e) => setName(e.target.value)} />
         </Field>
         {!role.custom ? pendingKey(ruleKeys.roleName(role.id)) : null}
         <Field
           label="Sign-on (approval) limit"
           htmlFor="role-limit"
-          description={apex ? "Apex tier — statutory single-obligor ceiling and above." : hasLimit ? `Rule rbac.limit.${role.custom?.clonedFrom ?? role.id} — mapped 1:1 to this tier in the chart-flow (PRD §4.2).` : "This role has no credit approval authority."}
+          description={apex ? "Apex tier — statutory single-obligor ceiling and above." : hasLimit ? `Rule rbac.limit.${role.custom?.clonedFrom ?? role.id} — mapped 1:1 to this tier in the chart-flow.` : "This role has no credit approval authority."}
         >
           <Input id="role-limit" prefix="₦" inputMode="numeric" value={apex ? "No ceiling" : hasLimit ? limit : "Not applicable"} disabled={!canEdit || !hasLimit} onChange={(e) => setLimit(e.target.value)} />
         </Field>
         {!role.custom ? pendingKey(ruleKeys.limit(role.id)) : null}
         <Stack gap="medium">
           <Text variant="eyebrow" tone="muted">
-            Session & sign-on rules (PRD §4.2)
+            Session & sign-on rules
           </Text>
           <Field label="Idle session timeout" htmlFor="role-timeout" description={`${timeoutDef?.min}–${timeoutDef?.max} minutes.`}>
             <Input id="role-timeout" type="number" suffix="min" value={timeout} disabled={!canEdit} onChange={(e) => setTimeoutMin(e.target.value)} />
@@ -333,7 +351,7 @@ function RoleDrawer({ role, canEdit, onClose, tiered }: { role: ConfiguredRole; 
             <ChipInput inputId="role-ip" label="IP allow-list" value={ips} onChange={setIps} disabled={!canEdit} mono placeholder="e.g. 10.20.0.0/16" />
           </Field>
           {!role.custom ? pendingKey(ruleKeys.ipAllowList(role.id)) : null}
-          <Switch label="Multi-factor authentication" description="Mandatory for every role (PRD §4, §10.1)." checked disabled />
+          <Switch label="Multi-factor authentication" description="Mandatory for every role." checked disabled />
         </Stack>
         {canEdit || canClone || canDelete ? (
           <Field label="Reason for the change" htmlFor="role-reason" required description="Shown to approvers in Operations and kept in the audit log.">
@@ -351,7 +369,16 @@ function RoleDrawer({ role, canEdit, onClose, tiered }: { role: ConfiguredRole; 
               </Chip>
             ))}
           </ChipList>
-          {role.id === "system-admin" ? <Text variant="small" tone="muted">System Admin has configuration, not credit, authority — it can&apos;t approve credit (PRD §4.1).</Text> : null}
+          {directoryModules ? (
+            <Text variant="small" tone="muted">
+              This is what people with this role see in the side menu. Change it in{" "}
+              <TextLink href="/admin/permissions" as={Link}>
+                Permissions
+              </TextLink>
+              .
+            </Text>
+          ) : null}
+          {role.id === "system-admin" ? <Text variant="small" tone="muted">System Admin has configuration, not credit, authority — it can&apos;t approve credit.</Text> : null}
         </Stack>
       </Stack>
     </Drawer>

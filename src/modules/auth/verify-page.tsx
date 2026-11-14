@@ -48,7 +48,7 @@ export function VerifyPage() {
           }
         >
           {demoAccessEnabled ? (
-            <Alert tone="info" title="Prototype">
+            <Alert tone="info" title="Development">
               Sign in as System Admin (demo access) and approve this request in Operations → Approvals (it is also listed under Admin → Users).
             </Alert>
           ) : null}
@@ -95,7 +95,7 @@ export function VerifyPage() {
           }}
           hint={
             challenge.demoCode ? (
-              <Alert tone="info" title="Prototype — no email is sent">
+              <Alert tone="info" title="No email is sent here">
                 Your code is <span className="font-mono text-lg font-semibold tracking-[0.2em]">{challenge.demoCode}</span>
               </Alert>
             ) : undefined

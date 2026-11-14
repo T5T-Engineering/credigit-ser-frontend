@@ -6,6 +6,7 @@ import {
   Button,
   Field,
   Modal,
+  SubmitButton,
   Textarea,
   Card,
   CardContent,
@@ -64,7 +65,7 @@ function AcceptanceModal({ risk, onClose, onSubmit }: { risk: EnterpriseRisk | n
       footer={
         <div className="flex justify-end gap-2">
           <Button variant="tertiary" onClick={close}>Cancel</Button>
-          <Button onClick={() => { setTouched(true); if (error || !risk) return; void onSubmit(risk, text.trim()); setText(""); setTouched(false); }}>Submit for approval</Button>
+          <SubmitButton onClick={() => { setTouched(true); if (error || !risk) return; void onSubmit(risk, text.trim()); setText(""); setTouched(false); }}>Submit for approval</SubmitButton>
         </div>
       }
     >
@@ -189,7 +190,7 @@ export function RegisterSection() {
         exportFilename={canExport ? "enterprise-risk-register.csv" : undefined}
         defaultPageSize={20}
       />
-      <Text variant="caption" tone="subtle">Responses follow ISO 31000 treatment options; stages follow COSO ERM’s identify-assess-respond-monitor cycle (§9.2).</Text>
+      <Text variant="caption" tone="subtle">Responses follow ISO 31000 treatment options; stages follow COSO ERM’s identify-assess-respond-monitor cycle.</Text>
 
       <Drawer
         open={!!selected}
@@ -201,7 +202,7 @@ export function RegisterSection() {
             <div className="flex flex-wrap justify-end gap-2">
               {canRequestAcceptance && !selected.acceptedBy && <AcceptButton risk={selected} onClick={() => setAccepting(selected)} />}
               {canReview && (
-                <Button
+                <SubmitButton
                   onClick={() => {
                     updateRisk(selected.id, { lastReviewed: DEMO_NOW.toISOString() });
                     audit("Reviewed enterprise risk", "Enterprise risk", selected.id, `Last reviewed ${date(selected.lastReviewed)}`, `Reviewed ${date(DEMO_NOW)}`);
@@ -209,7 +210,7 @@ export function RegisterSection() {
                   }}
                 >
                   Record review
-                </Button>
+                </SubmitButton>
               )}
             </div>
           ) : undefined

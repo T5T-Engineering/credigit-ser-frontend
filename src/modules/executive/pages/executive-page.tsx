@@ -100,19 +100,19 @@ export function ExecutivePage() {
   const solRag: Rag = !top ? "green" : top.solUtilisationPct >= 100 ? "red" : top.solUtilisationPct >= early ? "amber" : "green";
 
   const kris: Kri[] = [
-    { id: "npl", domain: "Credit", name: "NPL ratio", value: pct(totals.nplRatio, 2), threshold: `≤ ${p.nplAppetitePct.value}% (demo appetite)`, rag: totals.nplRatio >= p.nplAppetitePct.value ? "red" : totals.nplRatio >= p.nplAppetitePct.value * amberShare ? "amber" : "green", source: "Derived", href: "/portfolio", prd: "§6.6.5" },
-    { id: "s2", domain: "Credit", name: "Stage 2 share of book", value: pct(totals.stageShare[2]), threshold: `≤ ${stage2Red}% (demo)`, rag: totals.stageShare[2] >= stage2Red ? "red" : totals.stageShare[2] >= stage2Amber ? "amber" : "green", source: "Derived", href: "/ifrs9/staging", prd: "§6.7.1" },
+    { id: "npl", domain: "Credit", name: "NPL ratio", value: pct(totals.nplRatio, 2), threshold: `≤ ${p.nplAppetitePct.value}%`, rag: totals.nplRatio >= p.nplAppetitePct.value ? "red" : totals.nplRatio >= p.nplAppetitePct.value * amberShare ? "amber" : "green", source: "Derived", href: "/portfolio", prd: "§6.6.5" },
+    { id: "s2", domain: "Credit", name: "Stage 2 share of book", value: pct(totals.stageShare[2]), threshold: `≤ ${stage2Red}%`, rag: totals.stageShare[2] >= stage2Red ? "red" : totals.stageShare[2] >= stage2Amber ? "amber" : "green", source: "Derived", href: "/ifrs9/staging", prd: "§6.7.1" },
     { id: "sol", domain: "Credit", name: "Largest single-obligor utilisation", value: top ? pct(top.solUtilisationPct, 0) : "—", threshold: `< 100% of ${p.singleObligorLimitPct.value}% SHF (CBN 3.2(a))`, rag: solRag, source: "Derived", href: "/portfolio/limits", prd: "§6.6.2" },
     { id: "sec", domain: "Credit", name: "Sectors in breach / near breach", value: `${breaches.length} / ${nearBreaches.length}`, threshold: "0 breaches", rag: breaches.length ? "red" : nearBreaches.length ? "amber" : "green", source: "Derived", href: "/portfolio/limits", prd: "§6.6.2" },
-    { id: "warr", domain: "Credit", name: "WARR (whole book)", value: warr.warr.toFixed(2), threshold: `< ${p.warrCeiling.value} (demo ceiling)`, rag: warrStatus, source: "Derived", href: "/portfolio/warr", prd: "§6.6.9" },
+    { id: "warr", domain: "Credit", name: "WARR (whole book)", value: warr.warr.toFixed(2), threshold: `< ${p.warrCeiling.value}`, rag: warrStatus, source: "Derived", href: "/portfolio/warr", prd: "§6.6.9" },
     { id: "lex", domain: "Credit", name: "Large exposures to capital", value: pct(large.toCapitalPct, 0), threshold: `Aggregate ≤ ${p.aggregateLargeExposureMultiple.value}× SHF (CBN 3.2(e))`, rag: large.utilisationPct >= 100 ? "red" : large.utilisationPct >= early ? "amber" : "green", source: "Derived", href: "/portfolio/limits", prd: "§6.6.5" },
-    { id: "car", domain: "Capital", name: "Capital adequacy ratio", value: pct(demoFeeds.carPct), threshold: `≥ ${p.minCarPct.value}% (CBN, §9.1)`, rag: demoFeeds.carPct < p.minCarPct.value ? "red" : demoFeeds.carPct < p.minCarPct.value + carBuffer ? "amber" : "green", source: "Demo value", href: "/ifrs9/icaap", prd: "§6.7.4" },
-    { id: "ldr", domain: "Liquidity", name: "Loan-to-deposit ratio", value: pct(demoFeeds.ldrPct), threshold: `≥ ${ldrMin}% (CBN minimum, §9.1)`, rag: demoFeeds.ldrPct < ldrMin ? "red" : demoFeeds.ldrPct < ldrMin + ldrBuffer ? "amber" : "green", source: "Demo value", href: "/market-risk/liquidity", prd: "§6.8.2" },
-    { id: "liq", domain: "Liquidity", name: "Liquidity ratio", value: pct(demoFeeds.liquidityRatioPct), threshold: `≥ ${liqMin}% (tenant parameter)`, rag: demoFeeds.liquidityRatioPct < liqMin ? "red" : "green", source: "Demo value", href: "/market-risk/liquidity", prd: "§6.8" },
-    { id: "nop", domain: "Market", name: "Net open position to capital", value: pct(demoFeeds.nopToCapitalPct), threshold: `≤ ${nopLimit}% (tenant parameter)`, rag: demoFeeds.nopToCapitalPct >= nopLimit ? "red" : (demoFeeds.nopToCapitalPct / nopLimit) * 100 >= early ? "amber" : "green", source: "Demo value", href: "/market-risk", prd: "§6.8" },
-    { id: "var", domain: "Market", name: "Trading VaR (1-day, 99%)", value: moneyShort(demoFeeds.varNgn), threshold: `≤ ${moneyShort(varLimit)} (tenant parameter)`, rag: demoFeeds.varNgn >= varLimit ? "red" : (demoFeeds.varNgn / varLimit) * 100 >= early ? "amber" : "green", source: "Demo value", href: "/market-risk", prd: "§6.8.1" },
-    { id: "op", domain: "Operational", name: "KRI RAG mix", value: `${demoFeeds.kriRag.green}G · ${demoFeeds.kriRag.amber}A · ${demoFeeds.kriRag.red}R`, threshold: "0 Red", rag: demoFeeds.kriRag.red ? "red" : demoFeeds.kriRag.amber ? "amber" : "green", source: "Demo value", href: "/operational-risk", prd: "§6.9.1" },
-    { id: "loss", domain: "Operational", name: "Operational loss rate", value: pct(demoFeeds.opLossRatePct, 2), threshold: `≤ ${opLossAppetite}% of gross income (demo)`, rag: demoFeeds.opLossRatePct >= opLossAppetite ? "red" : demoFeeds.opLossRatePct >= opLossAppetite * amberShare ? "amber" : "green", source: "Demo value", href: "/operational-risk", prd: "§6.9" },
+    { id: "car", domain: "Capital", name: "Capital adequacy ratio", value: pct(demoFeeds.carPct), threshold: `≥ ${p.minCarPct.value}% (CBN)`, rag: demoFeeds.carPct < p.minCarPct.value ? "red" : demoFeeds.carPct < p.minCarPct.value + carBuffer ? "amber" : "green", source: "Tenant parameter", href: "/ifrs9/icaap", prd: "§6.7.4" },
+    { id: "ldr", domain: "Liquidity", name: "Loan-to-deposit ratio", value: pct(demoFeeds.ldrPct), threshold: `≥ ${ldrMin}% (CBN minimum)`, rag: demoFeeds.ldrPct < ldrMin ? "red" : demoFeeds.ldrPct < ldrMin + ldrBuffer ? "amber" : "green", source: "Tenant parameter", href: "/market-risk/liquidity", prd: "§6.8.2" },
+    { id: "liq", domain: "Liquidity", name: "Liquidity ratio", value: pct(demoFeeds.liquidityRatioPct), threshold: `≥ ${liqMin}% (tenant parameter)`, rag: demoFeeds.liquidityRatioPct < liqMin ? "red" : "green", source: "Tenant parameter", href: "/market-risk/liquidity", prd: "§6.8" },
+    { id: "nop", domain: "Market", name: "Net open position to capital", value: pct(demoFeeds.nopToCapitalPct), threshold: `≤ ${nopLimit}% (tenant parameter)`, rag: demoFeeds.nopToCapitalPct >= nopLimit ? "red" : (demoFeeds.nopToCapitalPct / nopLimit) * 100 >= early ? "amber" : "green", source: "Tenant parameter", href: "/market-risk", prd: "§6.8" },
+    { id: "var", domain: "Market", name: "Trading VaR (1-day, 99%)", value: moneyShort(demoFeeds.varNgn), threshold: `≤ ${moneyShort(varLimit)} (tenant parameter)`, rag: demoFeeds.varNgn >= varLimit ? "red" : (demoFeeds.varNgn / varLimit) * 100 >= early ? "amber" : "green", source: "Tenant parameter", href: "/market-risk", prd: "§6.8.1" },
+    { id: "op", domain: "Operational", name: "KRI RAG mix", value: `${demoFeeds.kriRag.green}G · ${demoFeeds.kriRag.amber}A · ${demoFeeds.kriRag.red}R`, threshold: "0 Red", rag: demoFeeds.kriRag.red ? "red" : demoFeeds.kriRag.amber ? "amber" : "green", source: "Tenant parameter", href: "/operational-risk", prd: "§6.9.1" },
+    { id: "loss", domain: "Operational", name: "Operational loss rate", value: pct(demoFeeds.opLossRatePct, 2), threshold: `≤ ${opLossAppetite}% of gross income`, rag: demoFeeds.opLossRatePct >= opLossAppetite ? "red" : demoFeeds.opLossRatePct >= opLossAppetite * amberShare ? "amber" : "green", source: "Tenant parameter", href: "/operational-risk", prd: "§6.9" },
   ];
 
   // 13-state posture distribution (§6.2.5)
@@ -188,7 +188,7 @@ export function ExecutivePage() {
     { id: "value", header: "Actual", accessor: "value", numeric: true },
     { id: "threshold", header: "Appetite / limit", accessor: "threshold" },
     { id: "rag", header: "RAG", accessor: "rag", sortable: true, cell: (r) => <RagIndicator status={r.rag} label={r.rag === "green" ? "Within" : r.rag === "amber" ? "Early warning" : "Breach"} /> },
-    { id: "source", header: "Source", accessor: "source", cell: (r) => <Badge tone={r.source === "Derived" ? "success" : "warning"} variant="soft">{r.source === "Derived" ? "Live (spine)" : "Demo value"}</Badge> },
+    { id: "source", header: "Source", accessor: "source", cell: (r) => <Badge tone={r.source === "Derived" ? "success" : "warning"} variant="soft">{r.source === "Derived" ? "Live (spine)" : "Tenant parameter"}</Badge> },
   ];
 
   const summary = (
@@ -204,9 +204,9 @@ export function ExecutivePage() {
       ]}
       bullets={[
         breaches.length ? "Recommend gating new approvals in breached sectors pending a Board-approved remediation plan." : "No sector remediation required this period.",
-        "Capital, liquidity and operational indicators are within appetite (demo feeds); one operational KRI is Red.",
+        "Capital, liquidity and operational indicators are within appetite; one operational KRI is Red.",
       ]}
-      sources={[{ label: "Portfolio & MIS (§6.6)", detail: "Limits, concentration, WARR" }, { label: "Risk appetite thresholds (§6.10)", detail: "Demo Board-approved values" }]}
+      sources={[{ label: "Portfolio & MIS", detail: "Limits, concentration, WARR" }, { label: "Risk appetite thresholds", detail: "Board-approved values" }]}
       signedOffBy={signOff ? `${signOff.by} (${roleById[signOff.role as keyof typeof roleById]?.name ?? signOff.role}), ${dateTime(signOff.at)} — ${gov.period}, through Operations` : undefined}
       signOffNote={
         summaryPending ? (
@@ -225,7 +225,7 @@ export function ExecutivePage() {
   return (
     <ModulePage
       module="executive"
-      description="Role-aware risk cockpit for the CRO, Head of Risk and executive management (§6.11, §4.3): risk appetite against actual, cross-functional KRIs and exceptions — every tile drills down to the owning module."
+      description="Role-aware risk cockpit for the CRO, Head of Risk and executive management: risk appetite against actual, cross-functional KRIs and exceptions — every tile drills down to the owning module."
       actions={
         <SegmentedControl
           label="Dashboard view"
@@ -245,7 +245,7 @@ export function ExecutivePage() {
 
         <Panel
           title="Risk appetite scorecard"
-          description="Actual vs Board-approved Risk Appetite Statement thresholds (§6.10). Credit gauges are live from the spine; capital and liquidity are demo feeds."
+          description="Actual vs Board-approved Risk Appetite Statement thresholds. Credit gauges are live from the spine; capital and liquidity are demo feeds."
         >
           <Grid columns={{ base: 1, sm: 2, lg: 3 }} gap="medium">
             <GaugeTile
@@ -255,7 +255,7 @@ export function ExecutivePage() {
               max={Math.max(120, Math.ceil((top?.solUtilisationPct ?? 0) / 10) * 10)}
               bands={[{ to: early, tone: "success" }, { to: 100, tone: "warning" }, { to: Math.max(120, Math.ceil((top?.solUtilisationPct ?? 0) / 10) * 10), tone: "danger" }]}
               fmt={(v) => pct(v, 0)}
-              calc={{ metric: "single-obligor utilisation", formula: `(On-balance + ${pct(p.offBalanceSolWeight.value, 2)} × off-balance) / (${p.singleObligorLimitPct.value}% × SHF)`, source: "CBN 3.2(a)–(b); SHF demo value (business rules).", prd: "§8", demo: true }}
+              calc={{ metric: "single-obligor utilisation", formula: `(On-balance + ${pct(p.offBalanceSolWeight.value, 2)} × off-balance) / (${p.singleObligorLimitPct.value}% × SHF)`, source: "CBN 3.2(a)–(b); SHF (business rules).", prd: "§8", demo: true }}
             />
             <GaugeTile
               label="Sectoral concentration"
@@ -268,7 +268,7 @@ export function ExecutivePage() {
             />
             <GaugeTile
               label="NPL ratio"
-              sub={`Appetite ${p.nplAppetitePct.value}% (demo)`}
+              sub={`Appetite ${p.nplAppetitePct.value}%`}
               value={totals.nplRatio}
               max={10}
               bands={[{ to: p.nplAppetitePct.value * amberShare, tone: "success" }, { to: p.nplAppetitePct.value, tone: "warning" }, { to: 10, tone: "danger" }]}
@@ -277,31 +277,31 @@ export function ExecutivePage() {
             />
             <GaugeTile
               label="WARR vs ceiling"
-              sub={`Ceiling ${p.warrCeiling.value} (demo)`}
+              sub={`Ceiling ${p.warrCeiling.value}`}
               value={warr.warr}
               min={1}
               max={10}
               bands={[{ to: p.warrEarlyWarning.value, tone: "success" }, { to: p.warrCeiling.value, tone: "warning" }, { to: 10, tone: "danger" }]}
               fmt={(v) => v.toFixed(2)}
-              calc={{ metric: "WARR", formula: "Σ (exposure × grade score) / Σ rated exposure", source: "Internal grades (§6.2.7), exposure = outstanding + undrawn × CCF.", prd: "§6.6.9" }}
+              calc={{ metric: "WARR", formula: "Σ (exposure × grade score) / Σ rated exposure", source: "Internal grades, exposure = outstanding + undrawn × CCF.", prd: "§6.6.9" }}
             />
             <GaugeTile
               label="Capital adequacy ratio"
-              sub={`Minimum ${p.minCarPct.value}% (CBN) · demo feed`}
+              sub={`Minimum ${p.minCarPct.value}% (CBN)`}
               value={demoFeeds.carPct}
               max={30}
               bands={[{ to: p.minCarPct.value, tone: "danger" }, { to: p.minCarPct.value + carBuffer, tone: "warning" }, { to: 30, tone: "success" }]}
               fmt={(v) => pct(v, 1)}
-              calc={{ metric: "CAR", formula: "Total qualifying capital / Risk-weighted assets × 100", source: "GL Tier 1 + Tier 2 capital net of deductions; RWA from the CBA facility ledger × risk weights. Demo value from the ICAAP module (§6.7.4).", prd: "§8, §9.1", demo: true }}
+              calc={{ metric: "CAR", formula: "Total qualifying capital / Risk-weighted assets × 100", source: "GL Tier 1 + Tier 2 capital net of deductions; RWA from the CBA facility ledger × risk weights. Demo value from the ICAAP module.", prd: "§8, §9.1", demo: true }}
             />
             <GaugeTile
               label="Loan-to-deposit ratio"
-              sub={`Minimum ${ldrMin}% (CBN) · demo feed`}
+              sub={`Minimum ${ldrMin}% (CBN)`}
               value={demoFeeds.ldrPct}
               max={100}
               bands={[{ to: ldrMin, tone: "danger" }, { to: ldrMin + ldrBuffer, tone: "warning" }, { to: 100, tone: "success" }]}
               fmt={(v) => pct(v, 1)}
-              calc={{ metric: "LDR", formula: "Total loans / Total deposits (150% weighting on qualifying SME, retail, mortgage and consumer lending)", source: "CBA facility and deposit ledgers. Demo value from Market & Liquidity (§6.8.2).", prd: "§8, §9.1", demo: true }}
+              calc={{ metric: "LDR", formula: "Total loans / Total deposits (150% weighting on qualifying SME, retail, mortgage and consumer lending)", source: "CBA facility and deposit ledgers. Value from Market & Liquidity.", prd: "§8, §9.1", demo: true }}
             />
           </Grid>
         </Panel>
@@ -338,7 +338,7 @@ export function ExecutivePage() {
         {view === "hor" ? (
           <Grid columns={{ base: 1, lg: 3 }} gap="medium">
             <div className="lg:col-span-2">
-              <Panel title="Cross-functional exception feed" description="Consolidated from Credit, Market, Liquidity, Operational and Collateral modules, ranked by severity (§6.11, §6.12).">
+              <Panel title="Cross-functional exception feed" description="Consolidated from Credit, Market, Liquidity, Operational and Collateral modules, ranked by severity.">
                 <DataTable
                   label="Exception feed"
                   data={exceptions}
@@ -388,7 +388,7 @@ export function ExecutivePage() {
               />
             </div>
           </Panel>
-          <Panel title="Portfolio by 360 RAR posture" description="Exposure across the thirteen posture states (§6.2.5).">
+          <Panel title="Portfolio by 360 RAR posture" description="Exposure across the thirteen posture states.">
             <BarChart label="Exposure by 360 RAR posture" orientation="horizontal" data={posture.map((x) => ({ label: x.label, value: x.value }))} valueFormatter={moneyShort} tone="accent" />
           </Panel>
         </Grid>
@@ -420,14 +420,14 @@ export function ExecutivePage() {
               <Button as={Link} href="/portfolio/warr" variant="text" size="small">Migration matrix</Button>
             </Stack>
           </Panel>
-          <Panel title="Capital adequacy trend" description="CAR, last 12 months (demo feed).">
+          <Panel title="Capital adequacy trend" description="CAR, last 12 months.">
             <Stack gap="small">
               <Sparkline values={demoFeeds.carHistory} tone="info" height={56} />
               <RagIndicator status={demoFeeds.carPct < p.minCarPct.value ? "red" : demoFeeds.carPct < p.minCarPct.value + carBuffer ? "amber" : "green"} label={`${pct(demoFeeds.carPct)} vs ${p.minCarPct.value}% minimum`} />
               <Button as={Link} href="/ifrs9/icaap" variant="text" size="small">ICAAP</Button>
             </Stack>
           </Panel>
-          <Panel title="Liquidity & NOP" description="Demo feeds from Market & Liquidity (§6.8).">
+          <Panel title="Liquidity & NOP" description="Feeds from Market & Liquidity.">
             <Stack gap="small">
               <RagIndicator status={demoFeeds.liquidityRatioPct < liqMin ? "red" : "green"} label={`Liquidity ratio ${pct(demoFeeds.liquidityRatioPct)} (min ${liqMin}%)`} />
               <RagIndicator status={demoFeeds.ldrPct < ldrMin ? "red" : demoFeeds.ldrPct < ldrMin + ldrBuffer ? "amber" : "green"} label={`LDR ${pct(demoFeeds.ldrPct)} (min ${ldrMin}%)`} />
@@ -435,7 +435,7 @@ export function ExecutivePage() {
               <Button as={Link} href="/market-risk" variant="text" size="small">Market & liquidity</Button>
             </Stack>
           </Panel>
-          <Panel title="Share-collateral margin" description={`CSCS mark-to-market after ${haircut}% haircut (§5.7, simulated).`}>
+          <Panel title="Share-collateral margin" description={`CSCS mark-to-market after ${haircut}% haircut.`}>
             <Stack gap="small">
               <Text variant="figure" className="text-2xl">{margin.shortfalls.length} / {margin.count}</Text>
               <RagIndicator status={margin.shortfalls.length ? "amber" : "green"} label={margin.shortfalls.length ? `${margin.shortfalls.length} pledges in margin shortfall (${moneyShort(margin.shortfalls.reduce((a, r) => a + r.shortfall, 0))})` : "No shortfalls"} />
@@ -445,16 +445,16 @@ export function ExecutivePage() {
         </Grid>
 
         <Grid columns={{ base: 1, lg: 3 }} gap="medium">
-          <Panel title="Operational risk" description="KRI RAG scorecard and monthly loss trend (demo feed, §6.9.1).">
+          <Panel title="Operational risk" description="KRI RAG scorecard and monthly loss trend.">
             <Stack gap="medium">
               <DonutChart label="Operational KRI RAG mix" showLegend centerLabel="KRIs" centerValue={String(demoFeeds.kriRag.green + demoFeeds.kriRag.amber + demoFeeds.kriRag.red)} segments={[{ label: "Green", value: demoFeeds.kriRag.green, tone: "success" }, { label: "Amber", value: demoFeeds.kriRag.amber, tone: "warning" }, { label: "Red", value: demoFeeds.kriRag.red, tone: "danger" }]} />
               <LineChart label="Operational loss trend" series={[{ name: "Losses", points: history.map((h, i) => ({ x: h.month, y: demoFeeds.opLossTrend[i] ?? 0 })), tone: "danger" }]} yFormatter={moneyShort} height={150} />
             </Stack>
           </Panel>
-          <Panel title={<span className="inline-flex items-center gap-2">Share of Business Wallet <PhaseBadge phase={2} /></span>} description="Portfolio mix across the four wallet positions (§6.2.9, demo).">
+          <Panel title={<span className="inline-flex items-center gap-2">Share of Business Wallet <PhaseBadge phase={2} /></span>} description="Portfolio mix across the four wallet positions.">
             <DonutChart label="Wallet position mix" showLegend segments={demoFeeds.walletMix.map((w, i) => ({ label: w.label, value: w.value, tone: (["success", "info", "warning", "neutral"] as const)[i] }))} valueFormatter={(v) => `${v}%`} />
           </Panel>
-          <Panel title={<span className="inline-flex items-center gap-2">Peer benchmarking <PhaseBadge phase={2} /></span>} description="Outliers and trend/momentum flags (§6.2.10–6.2.11, demo).">
+          <Panel title={<span className="inline-flex items-center gap-2">Peer benchmarking <PhaseBadge phase={2} /></span>} description="Outliers and trend/momentum flags.">
             <Stack gap="small">
               <Text variant="figure" className="text-2xl">{demoFeeds.peerOutliers}</Text>
               <Text variant="small">obligors outside the NGX sector inter-quartile range on two or more ratios</Text>

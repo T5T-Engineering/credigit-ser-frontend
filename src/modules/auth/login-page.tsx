@@ -8,6 +8,7 @@ import { Alert, Button, Divider, Field, Input, Logo, PasswordInput, RolePicker, 
 import { demoAccessEnabled } from "@/components/auth-guard";
 import { demoPassword } from "@/lib/auth/accounts";
 import { useAuthConfig } from "@/lib/auth/auth-config";
+import { backendSsoEnabled, startMicrosoftSignIn } from "@/lib/auth/backend-sso";
 import { msalConfigured } from "@/lib/auth/msal";
 import { completeEntraSignIn, signInDemo, signInMicrosoftWithRole, startSignIn } from "@/lib/auth/service";
 import { useHydrated, useSession } from "@/lib/auth/session";
@@ -68,6 +69,17 @@ export function LoginPage() {
 
   const onMicrosoft = async () => {
     setError(null);
+    if (backendSsoEnabled) {
+      // Backend code flow (AUTH-FR-21): the browser leaves for Microsoft and comes back to /callback/.
+      setMsLoading(true);
+      try {
+        await startMicrosoftSignIn(next);
+      } catch (e) {
+        setMsLoading(false);
+        setError(`Microsoft sign-in couldn't start: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      return;
+    }
     if (!msalConfigured()) {
       setError("Microsoft sign-in isn't configured for this environment yet. Ask your administrator.");
       return;
@@ -97,7 +109,7 @@ export function LoginPage() {
   };
 
   const local = config?.mode === "Local" ? config.local : null;
-  const entra = config?.mode === "MicrosoftEntra";
+  const entra = config?.mode === "MicrosoftEntra" || backendSsoEnabled;
   const showDemo = demoAccessEnabled && !apiEnabled;
 
   return (
@@ -167,8 +179,8 @@ export function LoginPage() {
               </Stack>
             </form>
           ) : null}
-          {showDemo && local && !pickRoleFor ? (
-            <Alert tone="info" title="Prototype sign-in">
+          {showDemo && !backendSsoEnabled && local && !pickRoleFor ? (
+            <Alert tone="info" title="Sign in by role (development)">
               {demoPassword ? (
                 <>
                   Any demo user signs in with the demo password configured for this deployment
@@ -196,7 +208,7 @@ export function LoginPage() {
           ) : null}
           {showDemo || pickRoleFor ? (
             <Stack gap="small" className="pt-2">
-              {pickRoleFor ? null : <Divider label="or explore the prototype by role" />}
+              {pickRoleFor ? null : <Divider label="or sign in by role (development)" />}
               <RolePicker
                 roles={options}
                 groupOrder={roleGroups}

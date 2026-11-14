@@ -14,8 +14,8 @@ export function useMe(): { user: User; roleId: RoleId | undefined } {
   return useMemo(() => {
     const seeded = users.find((u) => u.id === session?.id);
     const user: User = seeded ?? {
-      id: session?.id ?? "USR-DEMO",
-      name: session?.name ?? "Demo user",
+      id: session?.id ?? "USR-UNKNOWN",
+      name: session?.name ?? "Unknown user",
       email: session?.email ?? "",
       roleId: role?.id ?? "account-officer",
       branch: "Victoria Island",

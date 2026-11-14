@@ -79,7 +79,7 @@ ladder in Operations. A fully approved request is released to the Offer Letter m
 | `origination.docs.required` / `.requiredNonRetail` / `.acceptedTypes` / `.maxUploadMb` / `origination.ocr.reviewBelowPct` | Document rules | see code / 25 MB / 90% | Demo (§5.4) |
 | `origination.roles.initiators` / `.analysts` / `.recommenders` / `.releasers` / `.uploaders` | Role mappings | see §2 | §6.1.1, §6.1.5, demo |
 | `origination.haircut.<type>` (11), `origination.collateral.forcedSalePct` / `.revaluationDays` | New-pledge haircuts, FSV, first revaluation | 0–100 / 70 / 365 | Demo (TD-111) |
-| `origination.chartFlow.T1…T7.{roles,adjudicator,limitRole,slaHours}` | Standard chart-flow tiers (defined in `src/lib/workflow.ts`) | PRD default ladder | §6.1.2 (Q 4) |
+| `origination.chartFlow.T1…T12.{roles,adjudicator,limitRole,slaHours}` | Standard chart-flow tiers (defined in `src/lib/workflow.ts`); up to 12 tiers, T8–T12 empty (skipped) by default; an empty limit role = the last signer | PRD default ladder (T1–T7) | §6.1.2 (Q 4) |
 | `origination.fastTrack.{roles,adjudicator,limitRole,slaHours}` | Fast-Track pair | BDM + CA, CCO, BDM limit | §6.1.3 (O1) |
 | `rbac.limit.<role>` (core) | Sign-on limits | illustrative NGN | §4.1 (Q 3) |
 | `approvals.stepUpThresholdNgn` (core) | Step-up threshold | ₦100m | §4.2 (W2, DS1) |
@@ -88,7 +88,7 @@ ladder in Operations. A fully approved request is released to the Offer Letter m
 
 | Operation type | Trigger | Steps · approvers · SLA | Source |
 |---|---|---|---|
-| `credit.facility-approval.t1` … `.t7` | Initiator submits for approval (Standard flow); type picked by route length | Steps generated from `origination.chartFlow.*`: single-signer tiers "any", co-signer tiers "all" + adjudicator; SLA `…slaHours`; repeat approver allowed | §6.1.1–6.1.2 (TD-113) |
+| `credit.facility-approval.t1` … `.t12` | Initiator submits for approval (Standard flow); type picked by route length | Steps generated from `origination.chartFlow.*`: single-signer tiers "any", co-signer tiers "all" + adjudicator; SLA `…slaHours`; repeat approver allowed | §6.1.1–6.1.2 (TD-113) |
 | `credit.facility-approval.fast-track` | Submit for approval, Fast-Track within ceiling | One "all" step: Fast-Track pair + adjudicator | §6.1.3 (O1) |
 | `origination.limit-exception` | Analyst requests an exception after a limit-gate breach | One step: CRO or Board, `origination.sla.limitExceptionHours` | §6.1.5, §5.6 |
 | `origination.recommendation-override` | Recommender picks an outcome other than the engine's | One step: CCO or CRO, `origination.sla.overrideHours` | §6.1.5 |

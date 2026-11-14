@@ -56,7 +56,7 @@ export function ConcentrationPage() {
   ];
 
   return (
-    <ModulePage module="portfolio" description="Bank-wide obligor concentration ranked by outstanding exposure at the Top 10 / 20 / 50 / 100 cut-offs (§6.6.3) — how concentrated the book is at its top end, not just whether a name breaches the statutory limit.">
+    <ModulePage module="portfolio" description="Bank-wide obligor concentration ranked by outstanding exposure at the Top 10 / 20 / 50 / 100 cut-offs — how concentrated the book is at its top end, not just whether a name breaches the statutory limit.">
       <Stack gap="large">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SegmentedControl
@@ -73,7 +73,7 @@ export function ConcentrationPage() {
             label={`Top ${cut} aggregate exposure`}
             value={moneyShort(c.exposure)}
             hint={`${number(c.top.length)} obligors / connected groups`}
-            calc={{ metric: "Top-N exposure", formula: "Σ (on-balance + off-balance exposure) of the N largest obligors", source: "CBA facility ledger, ranked by outstanding exposure (§6.6.3).", prd: "§6.6.3" }}
+            calc={{ metric: "Top-N exposure", formula: "Σ (on-balance + off-balance exposure) of the N largest obligors", source: "CBA facility ledger, ranked by outstanding exposure.", prd: "§6.6.3" }}
           />
           <KpiCard
             label="% of total loan book"
@@ -85,16 +85,16 @@ export function ConcentrationPage() {
           <KpiCard
             label="% of shareholders' funds"
             value={pct(c.pctOfShf, 0)}
-            hint={`SHF ${moneyShort(param("shareholdersFunds"))} (demo value)`}
+            hint={`SHF ${moneyShort(param("shareholdersFunds"))}`}
             tone="warning"
-            calc={{ metric: "% of SHF", formula: "Top-N exposure / Shareholders' funds unimpaired by losses × 100", source: "SHF from GL capital accounts — demo value.", prd: "§6.6.3", demo: true }}
+            calc={{ metric: "% of SHF", formula: "Top-N exposure / Shareholders' funds unimpaired by losses × 100", source: "SHF from GL capital accounts.", prd: "§6.6.3", demo: true }}
           />
           <KpiCard
             label="Stage 2/3 within cut-off"
             value={moneyShort(sum(c.top.filter((e) => e.worstStage > 1), (e) => e.exposure))}
             hint={`${c.top.filter((e) => e.worstStage > 1).length} obligors in Stage 2 or 3`}
             tone="danger"
-            calc={{ metric: "Stage 2/3 concentration", formula: "Σ exposure of Top-N obligors whose worst facility stage is 2 or 3", source: "IFRS 9 staging (§6.7.1).", prd: "§6.6.3" }}
+            calc={{ metric: "Stage 2/3 concentration", formula: "Σ exposure of Top-N obligors whose worst facility stage is 2 or 3", source: "IFRS 9 staging.", prd: "§6.6.3" }}
           />
         </Grid>
 

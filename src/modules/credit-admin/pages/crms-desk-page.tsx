@@ -20,10 +20,12 @@ import {
   Stack,
   StatCard,
   StatusBadge,
+  SubmitButton,
   Tabs,
   Text,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/iam/permissions";
 import { useObligors } from "@/lib/data/hooks";
@@ -136,7 +138,7 @@ export function CrmsDeskPage() {
   return (
     <ModulePage
       module="credit-admin"
-      description="CBN Credit Risk Management System desk — search requests and results per obligor (CBN 3.7(d)) and facility reporting (PRD §6.3.3)."
+      description="CBN Credit Risk Management System desk — search requests and results per obligor (CBN 3.7(d)) and facility reporting."
       actions={
         canSearch ? (
           <Button iconBefore={<Search aria-hidden className="size-4" />} onClick={() => setSearchOpen(true)}>
@@ -154,13 +156,9 @@ export function CrmsDeskPage() {
         </Grid>
 
         <Alert tone="info" title="Simulated CRMS connector">
-          In production the CRMS desk calls the CBN CRMS through the Credit Bureau + CRMS connector (§5). In this prototype responses are simulated and labelled as such. Batch submissions are recorded as Operations requests (approval steps are optional per tenant).
+          In production the CRMS desk calls the CBN CRMS through the Credit Bureau + CRMS connector. In this prototype responses are simulated and labelled as such. Batch submissions are recorded as Operations requests (approval steps are optional per tenant).
         </Alert>
-        {result ? (
-          <Alert tone={result.ok ? "success" : "danger"} title={result.ok ? "Done" : "Not done"} action={<Button size="small" variant="text" onClick={() => setResult(null)}>Dismiss</Button>}>
-            {result.ok ? result.message : result.reason}
-          </Alert>
-        ) : null}
+        <OutcomePopup value={result} map={outcomeCopy.okMessage()} />
 
         <Tabs
           value={tab}
@@ -225,9 +223,9 @@ export function CrmsDeskPage() {
                       Facilities are reported to CRMS once disbursed. Exceptions must be resolved in the source record before they can be submitted.
                     </Text>
                     {canSubmitBatch ? (
-                      <Button iconBefore={<Send aria-hidden className="size-4" />} disabled={pendingReports.length === 0} onClick={() => setSubmitOpen(true)}>
+                      <SubmitButton iconBefore={<Send aria-hidden className="size-4" />} disabled={pendingReports.length === 0} onClick={() => setSubmitOpen(true)}>
                         Submit batch to CRMS
-                      </Button>
+                      </SubmitButton>
                     ) : null}
                   </div>
                   <DataTable
@@ -259,15 +257,15 @@ export function CrmsDeskPage() {
         open={submitOpen}
         onOpenChange={(o) => !submitting && setSubmitOpen(o)}
         title="Submit batch to CRMS?"
-        description="Simulated submission — no data leaves the prototype."
+        description="Simulated submission — no data leaves the application."
         footer={
           <>
             <Button variant="tertiary" disabled={submitting} onClick={() => setSubmitOpen(false)}>
               Cancel
             </Button>
-            <Button loading={submitting} iconBefore={<Send aria-hidden className="size-4" />} onClick={submitBatch}>
+            <SubmitButton loading={submitting} iconBefore={<Send aria-hidden className="size-4" />} onClick={submitBatch}>
               Submit {pendingReports.length} facilities
-            </Button>
+            </SubmitButton>
           </>
         }
       >
@@ -335,9 +333,9 @@ function NewSearchModal({ open, onOpenChange }: { open: boolean; onOpenChange: (
             <Button variant="tertiary" disabled={!!pending} onClick={() => close(false)}>
               Cancel
             </Button>
-            <Button loading={!!pending} disabled={!obligorId} iconBefore={<Search aria-hidden className="size-4" />} onClick={run}>
+            <SubmitButton loading={!!pending} disabled={!obligorId} iconBefore={<Search aria-hidden className="size-4" />} onClick={run}>
               Run search
-            </Button>
+            </SubmitButton>
           </>
         )
       }

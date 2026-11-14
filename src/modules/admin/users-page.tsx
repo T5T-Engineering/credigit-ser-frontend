@@ -24,6 +24,7 @@ import {
   Select,
   Stack,
   StatCard,
+  SubmitButton,
   Text,
   Textarea,
   type DataTableColumn,
@@ -45,6 +46,8 @@ import { submitOperation, usePendingFor, type SubmitResult } from "@/lib/platfor
 import { useRule } from "@/lib/platform/rules";
 import { ConfigNotice } from "./config-notice";
 import { AccessRequests } from "./access-requests";
+import { changeDirectoryUserRole, deactivateDirectoryUser, directoryEnabled, inviteDirectoryUser, reactivateDirectoryUser, resetDirectoryUserMfa, useDirectoryUsers } from "./directory";
+import { mfaMethodLabel } from "@/lib/auth/backend-mfa";
 import { PendingBadge, submitWithHooks, SubmitOutcome } from "./operation-ui";
 import { roleName } from "./rule-keys";
 import { useConfiguredRoles } from "./store";
@@ -62,7 +65,7 @@ function useRoleOptions() {
   return useMemo(() => roleGroups.flatMap((g) => roles.filter((r) => r.group === g).map((r) => ({ value: r.id, label: `${configured.find((c) => c.id === r.id)?.name ?? r.name} (${g})` }))), [configured]);
 }
 
-type Pending = { kind: "deactivate" | "reactivate" | "role"; user: User; to?: RoleId };
+type Pending = { kind: "deactivate" | "reactivate" | "role" | "mfa-reset"; user: User; to?: RoleId };
 type Security = { kind: "lock" | "unlock" | "mfa"; user: User };
 
 /** Permission keys of the user-admin actions (invariant 12). Lock / unlock use the closest keys until TD-972. */
@@ -91,9 +94,12 @@ export function UsersPage() {
 }
 
 function UsersView() {
+  // The backend directory (users in the database) when the backend is configured; otherwise the API gateway or app user list.
   const localUsers = useUsers();
-  const directory = useApiDirectory();
-  const users = directory.users ?? localUsers;
+  const apiDirectory = useApiDirectory();
+  const backendDirectory = useDirectoryUsers();
+  const users = directoryEnabled ? backendDirectory.users : (apiDirectory.users ?? localUsers);
+  const directory = { ...apiDirectory, error: directoryEnabled ? backendDirectory.error : apiDirectory.error };
   const can = useUserPermissions();
   const canEdit = can.changeRoles || can.deactivate || can.reactivate || can.lock || can.unlock || can.resetMfa;
   const accounts = useAccounts((s) => s.accounts);
@@ -144,7 +150,9 @@ function UsersView() {
     { id: "role", header: "Role", accessor: (u) => roleName(u.roleId), sortable: true },
     { id: "group", header: "Group", accessor: (u) => roleById[u.roleId]?.group, hidden: true },
     { id: "branch", header: "Branch", accessor: "branch", sortable: true },
-    { id: "mfa", header: "MFA", accessor: (u) => (u.mfa ? "Enrolled" : "Not enrolled"), cell: (u) => (u.mfa ? <Badge tone="success">Enrolled</Badge> : <Badge tone="warning">Not enrolled</Badge>) },
+    directoryEnabled
+      ? { id: "mfa", header: "MFA", accessor: (u) => mfaMethodLabel(u.mfaMethod), cell: (u) => <Badge tone="success">{mfaMethodLabel(u.mfaMethod)}</Badge> }
+      : { id: "mfa", header: "MFA", accessor: (u) => (u.mfa ? "Enrolled" : "Not enrolled"), cell: (u) => (u.mfa ? <Badge tone="success">Enrolled</Badge> : <Badge tone="warning">Not enrolled</Badge>) },
     {
       id: "lastLogin",
       header: "Last sign-in",
@@ -175,16 +183,23 @@ function UsersView() {
                 : can.deactivate
                   ? [{ label: "Request deactivation", icon: <UserX aria-hidden className="size-4" />, danger: true, onSelect: () => setConfirm({ kind: "deactivate", user: u }) }]
                   : []),
-              ...(apiEnabled
-                ? []
-                : statusOf(u) === "Locked"
-                  ? can.unlock
-                    ? [{ label: "Unlock sign-in", icon: <LockOpen aria-hidden className="size-4" />, onSelect: () => openSecurity("unlock", u) }]
-                    : []
-                  : can.lock && u.status === "Active"
-                    ? [{ label: "Lock sign-in", icon: <Lock aria-hidden className="size-4" />, danger: true, onSelect: () => openSecurity("lock", u) }]
-                    : []),
-              ...(can.resetMfa && !apiEnabled ? [{ label: "Request MFA reset", icon: <KeyRound aria-hidden className="size-4" />, onSelect: () => openSecurity("mfa", u) }] : []),
+              // Backend: only an authenticator app can be reset (back to e-mailed codes); never your own (ADR-0017).
+              ...(directoryEnabled
+                ? can.resetMfa && u.mfaMethod === "authenticator" && u.id !== me?.id
+                  ? [{ label: "Reset MFA", icon: <KeyRound aria-hidden className="size-4" />, onSelect: () => setConfirm({ kind: "mfa-reset", user: u }) }]
+                  : []
+                : [
+                  ...(apiEnabled
+                    ? []
+                    : statusOf(u) === "Locked"
+                      ? can.unlock
+                        ? [{ label: "Unlock sign-in", icon: <LockOpen aria-hidden className="size-4" />, onSelect: () => openSecurity("unlock", u) }]
+                        : []
+                      : can.lock && u.status === "Active"
+                        ? [{ label: "Lock sign-in", icon: <Lock aria-hidden className="size-4" />, danger: true, onSelect: () => openSecurity("lock", u) }]
+                        : []),
+                  ...(can.resetMfa && !apiEnabled ? [{ label: "Request MFA reset", icon: <KeyRound aria-hidden className="size-4" />, onSelect: () => openSecurity("mfa", u) }] : []),
+                  ]),
             ]}
           />
         ) : (
@@ -201,15 +216,19 @@ function UsersView() {
       description="Named users only — no shared logins. MFA is enforced on every sign-in. Invitations, role changes and deactivations are approved by a second person in Operations."
       actions={
         can.invite ? (
-          <Button iconBefore={<UserPlus aria-hidden className="size-4" />} onClick={() => setInviteOpen(true)}>
+          <SubmitButton iconBefore={<UserPlus aria-hidden className="size-4" />} onClick={() => setInviteOpen(true)}>
             Invite user
-          </Button>
+          </SubmitButton>
         ) : null
       }
     >
       <Stack gap="large">
         <ConfigNotice canEdit={canEdit} />
-        {directory.error ? <Alert tone="danger" title="Couldn't load users">{directory.error}</Alert> : null}
+        {directory.error ? (
+          <Alert tone="warning" title="The user directory couldn't be loaded">
+            {directory.error}
+          </Alert>
+        ) : null}
         {notice ? <Alert tone="success">{notice}</Alert> : null}
         {can.reviewAccess ? <AccessRequests canEdit={can.reviewAccess} apiRequests={apiEnabled ? directory.accessRequests : undefined} /> : null}
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
@@ -269,7 +288,7 @@ function UsersView() {
       <InviteModal open={inviteOpen} onOpenChange={setInviteOpen} existingEmails={users.map((u) => u.email.toLowerCase())} />
 
       <Drawer open={selected !== null} onOpenChange={(o) => !o && setSelectedId(null)} title={selected?.name ?? "User"} description={selected?.email}>
-        {selected ? <UserDetails user={selected} status={statusOf(selected)} can={can} onAction={setConfirm} onSecurity={(kind) => openSecurity(kind, selected)} /> : null}
+        {selected ? <UserDetails user={selected} status={statusOf(selected)} can={can} isSelf={selected.id === me?.id} onAction={setConfirm} onSecurity={(kind) => openSecurity(kind, selected)} /> : null}
       </Drawer>
 
       {confirm ? <ConfirmModal key={`${confirm.kind}:${confirm.user.id}:${confirm.to ?? ""}`} pending={confirm} isSelf={confirm.user.id === me?.id} onClose={() => setConfirm(null)} /> : null}
@@ -277,7 +296,9 @@ function UsersView() {
   );
 }
 
-function UserDetails({ user, status, can, onAction, onSecurity }: { user: User; status: DisplayStatus; can: UserPermissions; onAction: (p: Pending) => void; onSecurity: (kind: Security["kind"]) => void }) {
+const signInMethodLabel = (method?: string) => (method === "microsoft" ? "Microsoft (Entra ID)" : method === "password" ? "E-mail and password + one-time code" : "Not signed in yet");
+
+function UserDetails({ user, status, can, isSelf, onAction, onSecurity }: { user: User; status: DisplayStatus; can: UserPermissions; isSelf: boolean; onAction: (p: Pending) => void; onSecurity: (kind: Security["kind"]) => void }) {
   const canEdit = can.changeRoles || can.deactivate || can.reactivate || can.lock || can.unlock || can.resetMfa;
   const roleOptions = useRoleOptions();
   const pending = usePendingFor("User", user.id);
@@ -287,13 +308,19 @@ function UserDetails({ user, status, can, onAction, onSecurity }: { user: User; 
       <DescriptionList
         columns={1}
         items={[
-          { label: "User ID", value: user.id, mono: true, copyValue: user.id },
-          { label: "Role", value: roleName(user.roleId), hint: roleById[user.roleId].authority },
+          { label: "Role", value: roleName(user.roleId), hint: roleById[user.roleId]?.authority },
           { label: "Branch", value: user.branch },
           { label: "Status", status, statusTones: statusTone },
-          { label: "MFA", value: user.mfa ? "Enrolled (Microsoft Authenticator)" : "Not enrolled — sign-in blocked until enrolment" },
+          {
+            label: "MFA",
+            value: directoryEnabled
+              ? `${mfaMethodLabel(user.mfaMethod)}${user.signInMethod === "microsoft" ? " — Microsoft sign-in uses the organisation's Entra ID MFA" : ""}`
+              : user.mfa
+                ? "Enrolled"
+                : "Not enrolled — sign-in blocked until enrolment",
+          },
           { label: "Last sign-in", value: user.lastLogin ? dateTime(user.lastLogin) : "Never" },
-          { label: "Sign-in method", value: "As configured for this deployment (work e-mail + password + one-time code, or Microsoft Entra ID)" },
+          ...(directoryEnabled ? [{ label: "Last sign-in method", value: signInMethodLabel(user.signInMethod) }] : []),
         ]}
       />
       {canEdit ? (
@@ -311,23 +338,29 @@ function UserDetails({ user, status, can, onAction, onSecurity }: { user: User; 
                 </Button>
               ) : null
             ) : can.deactivate ? (
-              <Button variant="danger" disabled={Boolean(pending)} onClick={() => onAction({ kind: "deactivate", user })}>
+              <SubmitButton variant="danger" disabled={Boolean(pending)} onClick={() => onAction({ kind: "deactivate", user })}>
                 Request deactivation
+              </SubmitButton>
+            ) : null}
+            {directoryEnabled ? (
+              can.resetMfa && user.mfaMethod === "authenticator" && !isSelf ? (
+                <Button variant="tertiary" onClick={() => onAction({ kind: "mfa-reset", user })}>
+                  Reset MFA
+                </Button>
+              ) : null
+            ) : can.resetMfa ? (
+              <Button variant="tertiary" disabled={apiEnabled || Boolean(pending)} title={apiEnabled ? "Not available yet — the backend has no MFA reset endpoint (BE-31, TD-036)." : undefined} onClick={() => onSecurity("mfa")}>
+                Request MFA reset
               </Button>
             ) : null}
-            {!apiEnabled && status === "Locked" && can.unlock ? (
+            {!apiEnabled && !directoryEnabled && status === "Locked" && can.unlock ? (
               <Button variant="secondary" iconBefore={<LockOpen aria-hidden className="size-4" />} onClick={() => onSecurity("unlock")}>
                 Unlock sign-in
               </Button>
             ) : null}
-            {!apiEnabled && status === "Active" && can.lock ? (
+            {!apiEnabled && !directoryEnabled && status === "Active" && can.lock ? (
               <Button variant="tertiary" iconBefore={<Lock aria-hidden className="size-4" />} onClick={() => onSecurity("lock")}>
                 Lock sign-in
-              </Button>
-            ) : null}
-            {can.resetMfa ? (
-              <Button variant="tertiary" disabled={apiEnabled || Boolean(pending)} title={apiEnabled ? "Not available yet — the backend has no MFA reset endpoint (BE-31, TD-036)." : undefined} onClick={() => onSecurity("mfa")}>
-                Request MFA reset
               </Button>
             ) : null}
           </div>
@@ -348,6 +381,7 @@ const copy = {
   deactivate: { title: "Request deactivation?", button: "Request deactivation", type: "user.deactivate", verb: "Deactivate" },
   reactivate: { title: "Request reactivation?", button: "Request reactivation", type: "user.reactivate", verb: "Reactivate" },
   role: { title: "Request role change?", button: "Request role change", type: "user.role-change", verb: "Change role of" },
+  "mfa-reset": { title: "Reset sign-in steps?", button: "Reset MFA", type: "user.mfa-reset", verb: "Reset sign-in steps of" },
 } as const;
 
 function ConfirmModal({ pending, isSelf, onClose }: { pending: Pending; isSelf: boolean; onClose: () => void }) {
@@ -363,7 +397,7 @@ function ConfirmModal({ pending, isSelf, onClose }: { pending: Pending; isSelf: 
     if (reason.trim().length < minReason) return setResult({ ok: false, reason: `Give a reason of at least ${minReason} characters.` });
     setBusy(true);
     const subject = { type: "User", id: user.id, title: user.name, href: `/admin?user=${user.id}` };
-    if (apiEnabled) {
+    if (apiEnabled && kind !== "mfa-reset") {
       // API mode: the backend routes the command through Operations (202 → operationId).
       const outcome = await apiUserCommand(kind, user.id, reason.trim(), to);
       setBusy(false);
@@ -371,7 +405,15 @@ function ConfirmModal({ pending, isSelf, onClose }: { pending: Pending; isSelf: 
       return;
     }
     const r = await submitWithHooks("admin.user.change", { action: kind, userId: user.id, to, reason: reason.trim() }, (ctx) =>
-      kind === "role"
+      directoryEnabled
+        ? kind === "mfa-reset"
+          ? resetDirectoryUserMfa(user.id, ctx.reason)
+          : kind === "role"
+          ? changeDirectoryUserRole(user.id, ctx.to!, ctx.reason)
+          : kind === "deactivate"
+            ? deactivateDirectoryUser(user.id, ctx.reason)
+            : reactivateDirectoryUser(user.id, ctx.reason)
+        : kind === "role"
         ? submitOperation<UserRoleChangePayload>(c.type, {
             title: `${c.verb} ${user.name}: ${roleName(user.roleId)} → ${roleName(ctx.to!)}`,
             subject,
@@ -410,6 +452,8 @@ function ConfirmModal({ pending, isSelf, onClose }: { pending: Pending; isSelf: 
           ? `${user.name} will be signed out and blocked once a second person approves. Their history and audit trail are kept.`
           : kind === "reactivate"
             ? `${user.name} will be able to sign in again with MFA once approved.`
+            : kind === "mfa-reset"
+            ? `${user.name} goes back to codes sent by e-mail (for example after losing their phone) and every open session is signed out. They can set up an authenticator app again in Settings → Security.`
             : `${user.name}: ${roleName(user.roleId)} → ${roleName(to!)}. Applies at the next sign-in once approved.`
       }
       footer={
@@ -531,7 +575,9 @@ function InviteModal({ open, onOpenChange, existingEmails }: { open: boolean; on
       return;
     }
     const r = await submitWithHooks("admin.user.change", { action: "invite", user, reason: reason.trim() }, (ctx) =>
-      submitOperation<UserInvitePayload>("user.invite", {
+      directoryEnabled
+        ? inviteDirectoryUser({ email: ctx.user.email, name: ctx.user.name, roleId: ctx.user.roleId, branch: ctx.user.branch, reason: ctx.reason })
+        : submitOperation<UserInvitePayload>("user.invite", {
         title: `Invite ${ctx.user.name} as ${roleName(ctx.user.roleId)}`,
         subject: { type: "User", id: ctx.user.id, title: ctx.user.name, href: `/admin?user=${ctx.user.id}` },
         payload: { user: ctx.user, reason: ctx.reason },
@@ -561,7 +607,7 @@ function InviteModal({ open, onOpenChange, existingEmails }: { open: boolean; on
             <Button variant="tertiary" onClick={close}>
               Cancel
             </Button>
-            <Button onClick={() => void submit()}>Request invitation</Button>
+            <SubmitButton onClick={() => void submit()}>Request invitation</SubmitButton>
           </>
         )
       }

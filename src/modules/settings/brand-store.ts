@@ -9,9 +9,9 @@
  */
 import { useEffect } from "react";
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { useBrand, type BrandConfig } from "@credigit/web-ui";
-import { deploymentTenantId } from "@/lib/tenant";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 type BrandingState = {
   /** Approved tenant brand; null = Credigit defaults. */
@@ -26,7 +26,7 @@ type BrandingState = {
 };
 
 export const useBrandingStore = create<BrandingState>()(
-  persist((): BrandingState => ({ approved: null, version: 0, appliedVersion: 0 }), { name: `credigit.brand.tenant.${deploymentTenantId}`, storage: createJSONStorage(() => localStorage) }),
+  persist((): BrandingState => ({ approved: null, version: 0, appliedVersion: 0 }), { name: "credigit.brand.tenant", storage: dataStorage() }),
 );
 
 /** Only the "brand.change" operation (on approval) calls this. */
@@ -52,3 +52,5 @@ export function TenantBrandSync() {
 /** Comparable fingerprint of a brand (name, colours, font, logos). */
 export const brandFingerprint = (b: Pick<BrandConfig, "name" | "colors" | "font" | "logos">) =>
   JSON.stringify([b.name, b.colors.primary.toUpperCase(), b.colors.accent.toUpperCase(), b.colors.neutral.toUpperCase(), b.font.family, b.logos]);
+
+registerDatabaseStore(useBrandingStore);

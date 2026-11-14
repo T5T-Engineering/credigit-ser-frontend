@@ -4,14 +4,14 @@
  * Notifications (invariant 9: notified). Templates hold a subject and an HTML body with {{variables}};
  * `notify()` creates the in-app notification for the target roles/users and renders a branded HTML email
  * into the outbox (Operations → Notifications). The prototype doesn't send email: outbox items are
- * "Queued (demo — not sent)".
+ * "Queued (not sent)".
  *
  * Templates are registered by modules; tenant edits are stored as overrides (approved through Operations).
  * BACKEND SEAM: `notify` posts to the notification service (email/SMS/in-app).
  */
 import { useMemo } from "react";
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { defaultBrand } from "@credigit/web-ui";
 import type { RoleId } from "../rbac/roles";
 import { useSession } from "../auth/session";
@@ -19,6 +19,7 @@ import { useDb, newId } from "../data/store";
 import type { Notification } from "../data/types";
 import { publish } from "./events";
 import { currentActor } from "./scope";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type TemplateVariable = { name: string; description: string; example: string };
 
@@ -44,7 +45,7 @@ export type OutboxItem = {
   subject: string;
   html: string;
   createdAt: string;
-  status: "Queued (demo — not sent)" | "Sent" | "Failed";
+  status: "Queued (not sent)" | "Sent" | "Failed";
 };
 
 type NotificationState = {
@@ -56,7 +57,7 @@ type NotificationState = {
 const OUTBOX_LIMIT = 300;
 
 export const useNotificationStore = create<NotificationState>()(
-  persist((): NotificationState => ({ overrides: {}, outbox: [] }), { name: "credigit.ser.notifications", storage: createJSONStorage(() => localStorage) }),
+  persist((): NotificationState => ({ overrides: {}, outbox: [] }), { name: "credigit.ser.notifications", storage: dataStorage() }),
 );
 
 const templates = new Map<string, NotificationTemplate>();
@@ -169,12 +170,14 @@ export function notify(input: NotifyInput) {
     db.upsert("notifications", { ...base, id: newId("NTF"), roleIds: [], userIds: [u.id] });
   }
   const { subject, html } = renderEmail(template, data);
-  const items: OutboxItem[] = recipients.map((u) => ({ id: newId("OUT"), templateId: template.id, to: `${u.name} <${u.email}>`, subject, html, createdAt, status: "Queued (demo — not sent)" }));
+  const items: OutboxItem[] = recipients.map((u) => ({ id: newId("OUT"), templateId: template.id, to: `${u.name} <${u.email}>`, subject, html, createdAt, status: "Queued (not sent)" }));
   useNotificationStore.setState((s) => ({ outbox: [...items, ...s.outbox].slice(0, OUTBOX_LIMIT) }));
   const actor = currentActor();
   db.log({ actorId: actor.id, actorName: actor.name, roleId: actor.roleId, action: `Sent notification "${template.name}"`, entityType: "Notification", entityId: template.id, after: `${items.length} recipient(s)` });
   publish("platform.notification.sent", { module: "platform", subject: { type: "NotificationTemplate", id: template.id, title: template.name }, payload: { recipients: items.length } });
 }
+
+registerDatabaseStore(useNotificationStore);
 
 // ---------------------------------------------------------------- in-app visibility & read state (OPS-FR-18)
 

@@ -20,10 +20,10 @@ import {
   Stack,
   Text,
   WorkflowInstanceCard,
-  useToast,
   type OperationStep,
   type OperationStatus as UiOperationStatus,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { roleById } from "@/lib/rbac/roles";
 import { dateTime } from "@/lib/format";
 import {
@@ -132,7 +132,7 @@ export function PendingNotice({ subjectType, subjectId, children }: { subjectTyp
 
 /** Submit to the Operations workflow with consistent toasts. Returns the result. */
 export function useSubmitOperation() {
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   return useCallback(
     async <P,>(type: string, input: SubmitInput<P>) => {
       const res = await submitOperation<P>(type, input);

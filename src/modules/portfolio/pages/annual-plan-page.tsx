@@ -16,9 +16,9 @@ import {
   Stack,
   StatusBadge,
   Text,
-  useToast,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/iam/permissions";
 import { publish } from "@/lib/platform/events";
@@ -75,7 +75,7 @@ export function AnnualPlanPage() {
   const canExport = useCan("portfolio.data.export");
   const actor = useActor();
   const { actor: me } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const submit = useSubmitOperation();
   const uploaded = usePortfolioStore((s) => s.uploadedPlans);
   const activeId = usePortfolioStore((s) => s.activePlanId);
@@ -212,10 +212,10 @@ export function AnnualPlanPage() {
   ];
 
   return (
-    <ModulePage module="portfolio" description="Annual portfolio plan ingestion & sectoral allocation guidance (§6.6.8): the Board-approved plan reconciled against the forward-looking sector projection and the sectoral concentration limits.">
+    <ModulePage module="portfolio" description="Annual portfolio plan ingestion & sectoral allocation guidance: the Board-approved plan reconciled against the forward-looking sector projection and the sectoral concentration limits.">
       <Stack gap="large">
         <Alert tone="info" title={<span className="inline-flex items-center gap-2">Phase 2 capability <PhaseBadge phase={2} /></span>}>
-          Flags carry their supporting data; the decision stays with the Credit and ALCO-equivalent committees — the module never silently approves or blocks disbursement. Plan changes feed the ILAAP funding plan and stress-testing assumptions (§6.8.4).
+          Flags carry their supporting data; the decision stays with the Credit and ALCO-equivalent committees — the module never silently approves or blocks disbursement. Plan changes feed the ILAAP funding plan and stress-testing assumptions.
         </Alert>
 
         <Grid columns={{ base: 1, lg: 3 }} gap="medium">
@@ -272,8 +272,8 @@ export function AnnualPlanPage() {
             hint={`${moneyShort(totals.grossLoans)} of ${moneyShort(plan.targetBook)} target`}
             calc={{ metric: "plan achievement", formula: "Actual gross loans / Planned year-end loan book × 100", source: "Actual: CBA facility ledger. Target: active plan version.", prd: "§6.6.8" }}
           />
-          <KpiCard label="Limit conflicts" value={String(count("Limit conflict"))} hint="Plan would breach or sits in a breached sector" tone="danger" calc={{ metric: "limit conflicts", formula: "Planned sector share > sectoral limit, or sector already in breach", source: "Sectoral limits (§6.6.2).", prd: "§6.6.8" }} />
-          <KpiCard label="Cycle conflicts" value={String(count("Cycle conflict"))} hint="Planned growth into a deteriorating projection" tone="warning" calc={{ metric: "cycle conflicts", formula: "Planned share > current share while the 12m projection deteriorates", source: "Forward-looking projection (§6.6.7), base scenario.", prd: "§6.6.8", demo: true }} />
+          <KpiCard label="Limit conflicts" value={String(count("Limit conflict"))} hint="Plan would breach or sits in a breached sector" tone="danger" calc={{ metric: "limit conflicts", formula: "Planned sector share > sectoral limit, or sector already in breach", source: "Sectoral limits.", prd: "§6.6.8" }} />
+          <KpiCard label="Cycle conflicts" value={String(count("Cycle conflict"))} hint="Planned growth into a deteriorating projection" tone="warning" calc={{ metric: "cycle conflicts", formula: "Planned share > current share while the 12m projection deteriorates", source: "Forward-looking projection, base scenario.", prd: "§6.6.8", demo: true }} />
           <KpiCard label="Reallocation opportunities" value={String(count("Reallocation opportunity"))} hint="Favourable sectors under-allocated" tone="info" calc={{ metric: "reallocation opportunities", formula: "Improving sector where plan share < cycle-adjusted recommendation", source: `Cycle-adjusted = plan × (${getRule<number>(PORTFOLIO_RULES.planDeterioratingFactor)} deteriorating · 1.0 stable · ${getRule<number>(PORTFOLIO_RULES.planImprovingFactor)} improving), renormalised, capped at the early-warning share of the limit (business rules, demo calibration).`, prd: "§6.6.8", demo: true }} />
         </Grid>
 
@@ -292,11 +292,11 @@ export function AnnualPlanPage() {
           />
         </Panel>
 
-        <Panel title="Variance report" description={`Actual vs ${plan.name} (v${plan.version}) vs cycle-adjusted guidance — produced on the configured MIS cadence (§6.6.6). Operative plan: v${operative.version}; original plan v${original.version} retained.`}>
+        <Panel title="Variance report" description={`Actual vs ${plan.name} (v${plan.version}) vs cycle-adjusted guidance — produced on the configured MIS cadence. Operative plan: v${operative.version}; original plan v${original.version} retained.`}>
           <DataTable label="Plan variance report" data={rows} columns={columns} getRowId={(r) => r.sectorId} paginate={false} exportFilename={canExport ? `plan-variance-v${plan.version}.csv` : undefined} filters={[{ id: "flag", label: "Flag" }]} defaultSort={{ id: "flag", direction: "asc" }} />
         </Panel>
 
-        <Panel title="Budgeted disbursement progress" description="Year-to-date new disbursement against the budget, by largest sectors (demo budget split).">
+        <Panel title="Budgeted disbursement progress" description="Year-to-date new disbursement against the budget, by largest sectors.">
           <Stack gap="medium">
             {top.slice(0, 6).map((r) => {
               const line = plan.lines.find((l) => l.sectorId === r.sectorId)!;

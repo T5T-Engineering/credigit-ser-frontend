@@ -28,6 +28,7 @@ import {
   Select,
   Stack,
   StatusBadge,
+  SubmitButton,
   Table,
   TableBody,
   TableCell,
@@ -36,10 +37,10 @@ import {
   TableRow,
   Text,
   Textarea,
-  useToast,
   Wizard,
   type DataTableColumn,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/iam/permissions";
 import { useApplications, useCollateral, useDbActions, useFacilities, useObligors, useSectors, useUsers } from "@/lib/data/hooks";
@@ -100,7 +101,7 @@ export function NewApplicationPage() {
         <EmptyState
           icon={<FilePlus2 aria-hidden />}
           title="Only the Account Officer or BDM initiates applications"
-          description={`The ${roleId ? roleById[roleId].name : "current role"} reviews and decides on requests but doesn't initiate them (PRD §6.1.1). Switch role from the user menu to try it.`}
+          description={`The ${roleId ? roleById[roleId].name : "current role"} reviews and decides on requests but doesn't initiate them. Switch role from the user menu to try it.`}
           action={<Button as={Link} href="/origination/">Back to applications</Button>}
         />
       )}
@@ -110,7 +111,7 @@ export function NewApplicationPage() {
 
 function NewApplicationWizard({ meId }: { meId: string }) {
   const router = useRouter();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const db = useDbActions();
   const patchExtra = useOriginationStore((s) => s.patch);
   const { user: me, roleId } = useMe();
@@ -393,7 +394,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
           options={productOptions().map((p) => ({ value: p, label: p }))}
         />
       </Field>
-      <Field label="Fast-Track product" htmlFor="f-variant" description={variants.length ? "Lower-risk standardised products run on the Fast-Track chart-flow (PRD §6.1.3)." : "Not available for this product — Standard chart-flow."}>
+      <Field label="Fast-Track product" htmlFor="f-variant" description={variants.length ? "Lower-risk standardised products run on the Fast-Track chart-flow." : "Not available for this product — Standard chart-flow."}>
         <Select id="f-variant" value={variant} disabled={!variants.length} onChange={(e) => setVariant(e.target.value)} options={[{ value: "", label: "None — Standard credit" }, ...variants.map((v) => ({ value: v.id, label: v.label }))]} />
       </Field>
       <Field label="Amount requested" htmlFor="f-amount" required description={amountN ? `${money(amountN)} (${moneyShort(amountN)})` : undefined}>
@@ -425,7 +426,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
           <Stack gap="medium">
             <FileUpload accept={getRule<string>("origination.docs.acceptedTypes")} multiple maxSizeMb={getRule<number>("origination.docs.maxUploadMb")} files={picked} onFilesChange={setPicked} />
             <Stack direction="horizontal" gap="small" wrap>
-              <Button
+              <SubmitButton
                 disabled={!picked.length}
                 onClick={() => {
                   addFiles(picked);
@@ -433,7 +434,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
                 }}
               >
                 Upload {picked.length ? `${picked.length} file(s)` : ""}
-              </Button>
+              </SubmitButton>
               <Button variant="tertiary" iconBefore={<FileStack aria-hidden />} onClick={addSamples}>
                 Use sample customer pack
               </Button>
@@ -490,7 +491,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
           </Table>
         </div>
       ) : (
-        <EmptyState icon={<ScanSearch aria-hidden />} title="No documents yet" description="Upload the audited financials, bank statements, KYC and board resolution. OCR parses each into structured fields (PRD §5.4)." />
+        <EmptyState icon={<ScanSearch aria-hidden />} title="No documents yet" description="Upload the audited financials, bank statements, KYC and board resolution. OCR parses each into structured fields." />
       )}
       {afsReady && obligor ? (
         <Stack gap="small">
@@ -533,12 +534,12 @@ function NewApplicationWizard({ meId }: { meId: string }) {
           </Grid>
         )}
         {band?.requiresExplanation ? (
-          <Field label="Customer explanation (required for Low confidence)" htmlFor="cop-exp" required description="The Credit Analyst confirms this during analysis (PRD §6.1.4).">
+          <Field label="Customer explanation (required for Low confidence)" htmlFor="cop-exp" required description="The Credit Analyst confirms this during analysis.">
             <Textarea id="cop-exp" rows={3} value={copExplanation} onChange={(e) => setCopExplanation(e.target.value)} />
           </Field>
         ) : null}
         <Text variant="caption" tone="muted">
-          Bands: ≥ {getRule<number>("origination.cop.highBand")} High, {getRule<number>("origination.cop.mediumBand")}–{getRule<number>("origination.cop.highBand")} Medium, below {getRule<number>("origination.cop.mediumBand")} Low — PRD §6.1.4 example banding (business rules).
+          Bands: ≥ {getRule<number>("origination.cop.highBand")} High, {getRule<number>("origination.cop.mediumBand")}–{getRule<number>("origination.cop.highBand")} Medium, below {getRule<number>("origination.cop.mediumBand")} Low.4 example banding (business rules).
         </Text>
       </Stack>
     );
@@ -550,7 +551,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
           {bureauState === "done" ? "Re-run checks" : "Run bureau & CRMS checks"}
         </Button>
         <Text variant="small" tone="muted">
-          Two licensed bureaux plus a CBN CRMS search — mandatory before approval (PRD §5.2). Simulated connector.
+          Two licensed bureaux plus a CBN CRMS search — mandatory before approval. Simulated connector.
         </Text>
       </Stack>
       {bureauState === "running" ? <ProgressBar value={bureauProgress} label="Querying CRC, FirstCentral and CRMS" showValue /> : null}
@@ -631,7 +632,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
             Add collateral
           </Button>
         </div>
-        {newCollateral.length ? <Text variant="caption" tone="muted">New collateral is sent to Legal for search in parallel with the BDM review (PRD §6.1.1 step 2). Haircuts: {TENANT_PARAM_NOTE.toLowerCase()}.</Text> : null}
+        {newCollateral.length ? <Text variant="caption" tone="muted">New collateral is sent to Legal for search in parallel with the BDM review. Haircuts: {TENANT_PARAM_NOTE.toLowerCase()}.</Text> : null}
       </Stack>
       <KeyValueGrid
         columns={3}
@@ -658,7 +659,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
       {gate ? (
         <Alert tone={gate.result === "Within limit" ? "success" : "danger"} title={`Portfolio-limit gate: ${gate.result}`}>
           Single obligor {pct(gate.solUtilisation * 100)} of limit · {sector?.name ?? "Sector"} {pct(gate.sectorUtilisation * 100)} of limit.
-          {gate.result !== "Within limit" ? " The request will be routed to the CRO / Board for an informed exception decision (PRD §6.1.5)." : ""}
+          {gate.result !== "Within limit" ? " The request will be routed to the CRO / Board for an informed exception decision." : ""}
         </Alert>
       ) : null}
       <ApprovalTimeline tiers={toApprovalTiers(chain, users)} />
@@ -687,7 +688,7 @@ function NewApplicationWizard({ meId }: { meId: string }) {
       />
       {engine ? (
         <Alert tone="info" title={`Indicative system recommendation: ${engine.recommendation === "Approve" ? "Proceed" : engine.recommendation === "Approve with conditions" ? "Proceed with conditions" : engine.recommendation}`}>
-          The Credit Analyst reviews and adopts or overrides the recommendation during analysis (PRD §6.1.5).
+          The Credit Analyst reviews and adopts or overrides the recommendation during analysis.
         </Alert>
       ) : null}
     </Stack>

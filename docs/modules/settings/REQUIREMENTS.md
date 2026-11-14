@@ -13,7 +13,7 @@
 
 Settings is where a user sees their own account, sign-in method and session rules, changes their password, and where the tenant's runtime brand (colours, logos, font — invariant 2) is previewed and changed through an approved Operations request.
 
-- In scope: Profile & security view, Password page (rendered from the auth module), personal brand preview, tenant brand change request, brand presets, demo-data reset (prototype only), sign-out.
+- In scope: Profile & security view, Password page (rendered from the auth module), personal brand preview, tenant brand change request, brand presets, sign-out. Out of scope: demo-data reset on Settings (removed 2026-11-13; the command palette keeps "Reset to initial data" for demo access).
 - Out of scope: password / OTP / session mechanics (auth module), roles and limits (admin), per-role session rules (admin `useRoleSecurity`).
 
 ## 2. Users and permissions
@@ -23,7 +23,6 @@ Settings is where a user sees their own account, sign-in method and session rule
 | Every signed-in user | View profile & security, change own password, sign out, step-up | `settings.profile.view`, `identity.me.view`, `identity.password.change`, `identity.session.sign-out`, `identity.step-up.verify` |
 | Every user (when rule `settings.brand.personalPreview` is on) | View branding, preview a brand in own browser | `settings.branding.view`, `settings.branding.preview` |
 | Roles in rule `settings.brand.requesterRoles` (System Admin) | Request a tenant brand change | `settings.branding.request-change` |
-| Demo access users | Reset demo data in this browser | `settings.demo-data.reset` |
 
 ## 3. Functional requirements
 
@@ -35,7 +34,8 @@ Settings is where a user sees their own account, sign-in method and session rule
 | SET-FR-04 | A tenant brand change (colours, logos, font) is requested by an allowed role with a reason and applies to every user only after approval in Operations (`brand.change`). | Invariant 2, 9; ADM-OPS2 |
 | SET-FR-05 | Approved brand is applied in every browser session that sees the new version (`TenantBrandSync`); emails use the live brand. | Invariant 2 |
 | SET-FR-06 | Brand presets and shareable preview links (`?preset=…`, `?preview=pending`). | Assumption (demo); TD-801 |
-| SET-FR-07 | Demo access only: reset demo data and configuration (branding kept), audited and published. | Prototype only |
+| SET-FR-07 | Withdrawn 2026-11-13: no demo-data reset on Settings (user request). | — |
+| SET-FR-08 | Security: each person chooses their second sign-in step — an authenticator app (e.g. Microsoft Authenticator; QR code + manual key, confirmed with a first code) or e-mailed codes; switching back needs a current app code. Microsoft sign-in users see that Entra ID handles their MFA. Permission `identity.me.mfa` (baseline). | Backend ADR-0017; user decision 2026-11-13 |
 
 ## 4. Business rules and parameters
 
@@ -63,7 +63,6 @@ Settings is where a user sees their own account, sign-in method and session rule
 | Kind | Name | When | Payload / can veto? |
 |---|---|---|---|
 | event | `settings.brand.changed` | Approved brand applied | `summary`, `operationId` |
-| event | `settings.demo-data.reset` | User reset demo data | Tenant subject |
 | hook (before) | `settings.brand.change.before` | Before the request is submitted | Veto (e.g. contrast policy); enrich brand / reason |
 | hook (after) | `settings.brand.change.after` | After submission to Operations | Observe (`payload`, `result`) |
 

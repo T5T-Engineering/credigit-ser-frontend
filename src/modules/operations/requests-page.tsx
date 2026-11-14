@@ -3,7 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Send, Undo2 } from "lucide-react";
-import { Button, EmptyState, Field, Grid, Modal, Spinner, Stack, Tabs, Textarea, WorkflowInstanceCard, useToast } from "@credigit/web-ui";
+import { Button, EmptyState, Field, Grid, Modal, Spinner, Stack, SubmitButton, Tabs, Textarea, WorkflowInstanceCard } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { dateTime } from "@/lib/format";
 import { cancelOperation, useMyRequests, type OperationInstance, type OperationStatus } from "@/lib/platform/operations";
@@ -30,7 +31,7 @@ export function RequestsPage() {
   const warnHours = useRule<number>("operations.slaWarningHours");
   const minComment = useRule<number>("operations.minCommentLength");
   const canWithdraw = useCan("operations.items.withdraw");
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const [withdrawing, setWithdrawing] = useState<OperationInstance | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -74,9 +75,9 @@ export function RequestsPage() {
                     Open
                   </Button>
                   {canWithdraw && isOpen(i) ? (
-                    <Button size="small" variant="danger" iconBefore={<Undo2 aria-hidden />} onClick={() => setWithdrawing(i)}>
+                    <SubmitButton size="small" variant="danger" iconBefore={<Undo2 aria-hidden />} onClick={() => setWithdrawing(i)}>
                       Withdraw
-                    </Button>
+                    </SubmitButton>
                   ) : null}
                 </Stack>
               }
@@ -112,9 +113,9 @@ export function RequestsPage() {
             <Button variant="tertiary" onClick={() => setWithdrawing(null)}>
               Keep request
             </Button>
-            <Button variant="danger" loading={busy} disabled={reason.trim().length < minComment} onClick={confirmWithdraw}>
+            <SubmitButton variant="danger" loading={busy} disabled={reason.trim().length < minComment} onClick={confirmWithdraw}>
               Withdraw
-            </Button>
+            </SubmitButton>
           </Stack>
         }
       >

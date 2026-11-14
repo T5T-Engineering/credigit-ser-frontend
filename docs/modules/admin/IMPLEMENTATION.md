@@ -27,6 +27,14 @@ Layering: page (`*-page.tsx`) → `operation-ui.tsx` / `rule-editor.tsx` → pla
 | `src/modules/admin/operation-ui.tsx` | `submitWithHooks`, `PendingBadge`, `SubmitOutcome` |
 | `src/modules/admin/config-notice.tsx` | Notice on configuration screens |
 | `src/modules/admin/audit-page.tsx` | Audit log viewer (nav module `audit`) |
+| `src/modules/admin/backend-permissions-page.tsx` (`BackendPermissionsPage`, route picks it when `NEXT_PUBLIC_API_BASE_URL` is set — TD-976) | Role permission matrix (backend `/identity/permissions`, `/identity/roles`) |
+| `src/modules/admin/groups-page.tsx` | Permission groups (backend `/identity/groups`) |
+| `src/modules/admin/entra-mapping-page.tsx` | Entra role mapping (backend `/identity/entra-mappings`, ADR-0016) |
+| `src/modules/admin/workflow-mode.ts` | `useAppliesOnSave` — reads `/operations/workflows`; screens show "Save" when a workflow has no approval steps |
+| `src/modules/admin/backend-permissions-page.tsx` (save checks) | Reason is a required `Field` in a `ValidationScope`: Save with no reason shows "This field is required." under it and focuses it; a too-short reason shows the rule message (`operations.minCommentLength`). Unsaved toggles show an "Unsaved changes" warning and `useUnsavedChangesWarning` asks before refresh / close |
+| `src/modules/admin/groups-page.tsx` (confirmations) | Delete group / add member / remove member use library `ConfirmDialog` (`reason="required"`, `minReasonLength` from `operations.minCommentLength`, danger tone for delete and remove); the reason is sent with the request and the outcome shows in `SaveOutcomeModal`. Unsaved permission ticks and the page reason are kept when a dialog action runs |
+| `src/modules/admin/save-outcome.tsx` | `SaveOutcomeModal` (library `ResultDialog`: tone icon, title, message, track-request link) for save results; `refreshOwnAccess` re-reads the admin's own access after a saved change |
+| `src/modules/admin/directory.ts` | Backend users and `useDirectoryRoleModules` (role → side-menu modules from current permissions, shown on Roles & limits) |
 | `src/app/(app)/admin/**/page.tsx`, `src/app/(app)/audit/page.tsx` | Thin route files |
 
 ## 3. Routes / endpoints / public API
@@ -36,6 +44,9 @@ Layering: page (`*-page.tsx`) → `operation-ui.tsx` / `rule-editor.tsx` → pla
 | `/admin/roles` | `RolesPage` | → Roles & limits |
 | `/admin/permissions?role=<id>` | `PermissionsPage` | → Permissions |
 | `/admin/parameters?tab=approvals\|rar\|ifrs9\|haircuts\|sectors\|products\|platform` | `ParametersPage` | → Rules & parameters |
+| `/admin/permissions` | `PermissionsPage` | → Permissions |
+| `/admin/groups` | `GroupsPage` | → Permission groups |
+| `/admin/entra-mapping` | `EntraMappingPage` | Hidden from the menu (user decision 2026-11-13); direct URL only |
 | `/audit` | `AuditPage` | Administration → Audit log |
 
 Exported for other modules: `roleName`, `roleSecurity`, `roleIdleTimeoutMinutes` (app shell idle sign-out), store read hooks above, `RuleEditorList`, `RuleChangeDialog`, `submitWithHooks`.
@@ -119,7 +130,7 @@ Exported for other modules: `roleName`, `roleSecurity`, `roleIdleTimeoutMinutes`
 | ADM-FR-07 | `admin.roleName.*` + `roleName()` | — | Done |
 | ADM-FR-08 | `roles-page.tsx` (`rbac.limit.*`) | — | Done |
 | ADM-FR-09 | session rules + `app-frame.tsx` idle timer | session-timeout.spec | Partial (device binding / IP allow-list stored, not enforced) |
-| ADM-FR-10 | `roles-page.tsx`, `role.custom-change` | — | Partial (custom roles can't be assigned, TD-805) |
+| ADM-FR-10 | `roles-page.tsx`, `role.custom-change` | — | Partial — "Request clone" hidden (`CLONE_ROLES_ENABLED = false`) because custom roles can't be assigned (TD-805); existing custom roles can still be edited or deleted |
 | ADM-FR-11 | `parameters-page.tsx`, `rule-editor.tsx` | rule-change.spec | Done |
 | ADM-FR-12 | `admin.sector-limits.change` | — | Done |
 | ADM-FR-13 | `admin.product.maxTenorMonths.*` | — | Done |
@@ -127,11 +138,14 @@ Exported for other modules: `roleName`, `roleSecurity`, `roleIdleTimeoutMinutes`
 | ADM-FR-15 | `audit-page.tsx` IT Support effect | — | Done (once per browser session) |
 | ADM-FR-16 | — | — | Missing |
 | ADM-FR-17 | `rule.change` for all rules | rule-change.spec | Partial (no regulatory distinction, W1) |
-| ADM-FR-18 | `permissions-page.tsx`, `role.permissions-change` | role-permissions.spec | Done |
-| ADM-FR-19 | `iam-service.ts` `setUserLock`, `accounts.ts` | user-lock.spec | Done (demo; backend endpoint TD-972) |
-| ADM-FR-20 | `adminExport` | — | Done |
-| ADM-FR-21 | `user.mfa-reset` | — | Done (demo; API disabled, BE-31) |
-| ADM-FR-22 | `useCan` call sites, nav | permissions-nav.spec | Done |
+| ADM-FR-18 | `backend-permissions-page.tsx` | backend tests | Done |
+| ADM-FR-19 | `groups-page.tsx` | backend tests | Done |
+| ADM-FR-20 | `entra-mapping-page.tsx` (actions gated by `identity.entra-mappings.change`) | backend `EntraMappingTests` | Done |
+| ADM-FR-26 | `permissions-page.tsx`, `role.permissions-change` | role-permissions.spec | Done |
+| ADM-FR-27 | `iam-service.ts` `setUserLock`, `accounts.ts` | user-lock.spec | Done (demo; backend endpoint TD-972) |
+| ADM-FR-28 | `adminExport` | — | Done |
+| ADM-FR-29 | `user.mfa-reset` | — | Done (demo; API disabled, BE-31) |
+| ADM-FR-30 | `useCan` call sites, nav | permissions-nav.spec | Done |
 
 ## 10. Gaps against the invariants
 - Inv. 12: every admin control uses a catalogue key; lock / unlock borrow deactivate / reactivate keys (TD-972); IT Support audit-view logging reads the role id (TD-969).

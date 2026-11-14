@@ -40,6 +40,7 @@ flowchart LR
 | `src/modules/operations/platform.ts` | Area rules, `extension.toggle`, templates, events, hooks, EXAMPLE audit mirror + large-exposure guard |
 | `src/modules/operations/logic.ts` | Status mapping, timeline, payload facts, rule value ↔ input mapping, 30 s clock, hydration flag |
 | `src/modules/operations/*-page.tsx` | approvals, requests, item, workflows, rules, notifications, events pages |
+| `src/lib/platform/operations.ts` (final approver) | `finalApproverEligible` on `OperationHandler` (set on rule/workflow/template change, extension.toggle, connectors.config.change, user.*, role.custom-change, brand.change), `finalApproverAppliesDirectly` on `WorkflowDefinition` (tenant switch, unset = on), `appliesDirectlyForMe` in `submitOperation`; permission read from the backend session (`actorHolds`, so demo access without a backend keeps four-eyes). Backend parity: ADR-0018. `workflow-mode.ts` / `config-notice.tsx` / `workflows-page.tsx` show it |
 
 ## 3. Routes / endpoints / public API
 

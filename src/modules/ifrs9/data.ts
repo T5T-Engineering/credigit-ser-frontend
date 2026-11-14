@@ -41,10 +41,10 @@ export const SCENARIO_DEFAULTS: Record<string, Record<string, number>> = {
   severe: { gdpPct: -2.5, inflationPct: 35, fxDevaluationPct: 60, mprBps: 600, pdMultiplier: 2.4, lgdAddOn: 0.12 },
 };
 export const PILLAR2 = [
-  { id: "concentration", risk: "Credit concentration (single obligor & sector)", basis: "HHI-based add-on on sector exposures (§6.6.2)", def: 0.9 },
-  { id: "irrbb", risk: "Interest-rate risk in the banking book (IRRBB)", basis: "EVE sensitivity, +200 bps (§6.8.1)", def: 0.6 },
-  { id: "liquidity", risk: "Liquidity & funding risk", basis: "ILAAP survival-horizon outcome (§6.8.2)", def: 0.3 },
-  { id: "strategic", risk: "Strategic & reputational risk", basis: "ERM risk register (§6.10)", def: 0.4 },
+  { id: "concentration", risk: "Credit concentration (single obligor & sector)", basis: "HHI-based add-on on sector exposures", def: 0.9 },
+  { id: "irrbb", risk: "Interest-rate risk in the banking book (IRRBB)", basis: "EVE sensitivity, +200 bps", def: 0.6 },
+  { id: "liquidity", risk: "Liquidity & funding risk", basis: "ILAAP survival-horizon outcome", def: 0.3 },
+  { id: "strategic", risk: "Strategic & reputational risk", basis: "ERM risk register", def: 0.4 },
 ] as const;
 
 const r = (key: string) => getRule<number>(`ifrs9.${key}`);
@@ -212,7 +212,7 @@ export function eclFor(f: Facility, input: Omit<EngineInput, "facilities">, stag
       }),
     );
     prudential = Math.max(0, outstanding - eligible);
-    prudentialBasis = eligible > 0 ? "Lost — haircut-adjusted (§6.7.3)" : "Lost — 100%";
+    prudentialBasis = eligible > 0 ? "Lost — haircut-adjusted" : "Lost — 100%";
   } else {
     const rate = cbnSpecificRate(cls);
     prudential = outstanding * rate;
@@ -344,7 +344,7 @@ export function eclMovement(rows: EclRow[], transfers: StageTransfer[]): { openi
   const steps: MovementStep[] = [
     { label: "New assets", value: newAssets, caption: "ECL on facilities originated this quarter" },
     { label: "Transfers to S2/S3", value: transfersNet, caption: "12-month → lifetime basis on SICR / default" },
-    { label: "Cures to S1/S2", value: cures, caption: "Approved declassifications (§6.7.5)" },
+    { label: "Cures to S1/S2", value: cures, caption: "Approved declassifications" },
     { label: "Remeasurement", value: remeasurement, caption: "PD/LGD/FLI parameter update" },
     { label: "Repaid / derecognised", value: derecognised, caption: "Matured and repaid exposures" },
     { label: "Write-offs", value: writeOffs, caption: "Lost facilities written off" },
@@ -375,7 +375,7 @@ export function sicrTriggers(rows: EclRow[]): SicrTrigger[] {
       kind: "Backstop",
       rule: `DPD ≥ ${p.stage2Dpd} and < ${p.stage3Dpd} → Stage 2`,
       parameter: `${p.stage2Dpd} days · rule ifrs9.stage2DpdTrigger`,
-      source: "CBA facility ledger · Loan Review past-due register (§6.4.1)",
+      source: "CBA facility ledger · Loan Review past-due register",
       count: rows.filter((r) => r.facility.dpd >= p.stage2Dpd && r.facility.dpd < p.stage3Dpd).length,
     },
     {
@@ -384,7 +384,7 @@ export function sicrTriggers(rows: EclRow[]): SicrTrigger[] {
       kind: "Qualitative",
       rule: "Obligor on Loan Review watchlist → Stage 2",
       parameter: p.watchlist ? "On · rule ifrs9.sicr.watchlistTrigger" : "Off · rule ifrs9.sicr.watchlistTrigger",
-      source: "Loan Review watchlist (§6.4.1)",
+      source: "Loan Review watchlist",
       count: p.watchlist ? rows.filter((r) => r.obligor?.watchlist && r.stage < 3).length : 0,
     },
     {
@@ -393,7 +393,7 @@ export function sicrTriggers(rows: EclRow[]): SicrTrigger[] {
       kind: "Quantitative",
       rule: `Internal grade ≥ ${p.grade} (proxy for ≥ ${p.notches}-notch downgrade since origination)`,
       parameter: `Grade ${p.grade} · ${p.notches} notches · rules ifrs9.sicr.*`,
-      source: "Internal rating (§6.2) — origination grade not yet in the data spine",
+      source: "Internal rating — origination grade not yet in the data spine",
       count: rows.filter((r) => (r.obligor?.riskGrade ?? 0) >= p.grade).length,
     },
     {
@@ -401,7 +401,7 @@ export function sicrTriggers(rows: EclRow[]): SicrTrigger[] {
       name: "360 RAR posture",
       kind: "Qualitative",
       rule: "Posture moved to Defensive",
-      parameter: p.defensive ? "Defensive quadrant (§6.2.5) · On" : "Off · rule ifrs9.sicr.defensiveTrigger",
+      parameter: p.defensive ? "Defensive quadrant · On" : "Off · rule ifrs9.sicr.defensiveTrigger",
       source: "360 RAR Engine",
       count: p.defensive ? rows.filter((r) => r.obligor && rarPosition(r.obligor.rar).base === "Defensive").length : 0,
     },
@@ -544,7 +544,7 @@ export const seedModels: RiskModel[] = [
     nextReview: d(55),
     status: "Pending approval",
     performance: "Scenario weights 15 / 60 / 25",
-    inputs: "GDP, inflation, MPR, FX — external data feed (§5.5)",
+    inputs: "GDP, inflation, MPR, FX — external data feed",
   },
   {
     id: "MDL-NMD",
@@ -558,7 +558,7 @@ export const seedModels: RiskModel[] = [
     nextReview: d(115),
     status: "Approved",
     performance: "Core ratio 68%",
-    inputs: "CBA deposit ledger history — used by NII-at-Risk (§6.8.1)",
+    inputs: "CBA deposit ledger history — used by NII-at-Risk",
   },
 ];
 
@@ -567,21 +567,21 @@ export const sourceMapping = [
   {
     input: "Probability of Default (PD)",
     source:
-      "Historical facility-level default/cure data from the CBA + Loan Review past-due register (§6.4.1), segmented by product, sector and 360 RAR posture (§6.2.5); refreshed at least annually per CBN 12.15.",
+      "Historical facility-level default/cure data from the CBA + Loan Review past-due register, segmented by product, sector and 360 RAR posture; refreshed at least annually per CBN 12.15.",
     connector: "CBA connector · Loan Review",
     refresh: "Annual (minimum)",
   },
   {
     input: "Loss Given Default (LGD)",
     source:
-      "Collateral register (§6.5) forced-sale value and haircut-adjusted recovery value — for share-backed collateral, the SEC/CSCS mark-to-market value (§5.7) — combined with historical work-out recovery data from Loan Review.",
+      "Collateral register forced-sale value and haircut-adjusted recovery value — for share-backed collateral, the SEC/CSCS mark-to-market value — combined with historical work-out recovery data from Loan Review.",
     connector: "Collateral register · SEC/CSCS",
     refresh: "Daily MTM · annual recalibration",
   },
   {
     input: "Exposure at Default (EAD)",
     source: "CBA facility book — outstanding principal plus accrued interest plus, for revolving/overdraft facilities, an undrawn-limit credit-conversion factor.",
-    connector: "CBA connector (§5.1)",
+    connector: "CBA connector",
     refresh: "Daily",
   },
   {

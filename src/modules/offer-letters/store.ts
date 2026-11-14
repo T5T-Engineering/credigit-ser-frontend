@@ -9,7 +9,7 @@
  */
 import { useMemo } from "react";
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { useApplications, useCollateral, useObligors } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { Application, Collateral, Obligor, User } from "@/lib/data/types";
@@ -17,6 +17,7 @@ import { getRule } from "@/lib/platform/rules";
 import { addDaysIso, pristineSeed } from "../credit-admin/common";
 import { seedClauses, type Clause, type ClauseLibrary } from "./library";
 import { seedTemplates, type HouseTemplate } from "./template";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type LetterStatus = "Draft" | "Legal review" | "Issued" | "Accepted";
 export type LetterDisplayStatus = LetterStatus | "Expired";
@@ -219,7 +220,7 @@ export const useOfferLetterStore = create<OfferLetterStore>()(
       saveTemplate: (template) => set((s) => ({ templates: { ...s.templates, [template.id]: template } })),
       reset: () => set({ letters: {}, clauses: {}, templates: {} }),
     }),
-    { name: "credigit.ser.offer-letters", version: 1, storage: createJSONStorage(() => localStorage), partialize: ({ letters, clauses, templates }) => ({ letters, clauses, templates }) },
+    { name: "credigit.ser.offer-letters", version: 1, storage: dataStorage(), partialize: ({ letters, clauses, templates }) => ({ letters, clauses, templates }) },
   ),
 );
 
@@ -282,3 +283,5 @@ export function letterCovenants(letter: OfferLetter | undefined, clauses: Clause
     ...letter.customClauses.filter((c) => c.library === "special").map((c) => ({ id: c.id, title: c.title, category: "Special covenant", library: "special" as const, text: c.text })),
   ];
 }
+
+registerDatabaseStore(useOfferLetterStore);

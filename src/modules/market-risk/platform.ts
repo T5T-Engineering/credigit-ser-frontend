@@ -19,7 +19,7 @@ import { DESK_IDS, FX_CCYS, FUNDING_IDS, STRESS_BANDS, STRESS_FIELDS, type Stres
 import { RAS_METRICS, useMarketRisk, type RasVersion } from "./store";
 
 const M = "market-risk";
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 
 type Def = Omit<RuleDefinition, "module">;
 const rule = (d: Def): RuleDefinition => ({ module: M, ...d });
@@ -56,46 +56,46 @@ const rasDefaults: Record<string, { earlyWarning: number; buffer: number }> = {
 // ---------------------------------------------------------------- business rules
 defineRules([
   // Market limits (§6.8.1)
-  rule({ key: "market-risk.nopLimitPct", label: "Aggregate NOP limit", description: "Net open position limit as % of total capital.", category: "Market limits", type: "percent", default: 20, min: 0, max: 100, source: "PRD §6.8.1 (NOP / Total Capital ratio; limit is a tenant parameter — demo value)" }),
+  rule({ key: "market-risk.nopLimitPct", label: "Aggregate NOP limit", description: "Net open position limit as % of total capital.", category: "Market limits", type: "percent", default: 20, min: 0, max: 100, source: "(NOP / Total Capital ratio; limit is a tenant parameter)" }),
   ...FX_CCYS.map((c) => rule({ key: `market-risk.nopLimitPct.${c}`, label: `NOP limit — ${c}`, description: `Net open position limit for ${c} as % of total capital.`, category: "Market limits", type: "percent", default: ccyLimit[c], min: 0, max: 100, source: DEMO })),
   ...DESK_IDS.flatMap((d) => [
-    rule({ key: `market-risk.varLimitPct.${d}`, label: `VaR limit — ${deskNames[d]}`, description: "Board-approved 99% 1-day VaR limit as % of total capital.", category: "Market limits", type: "percent", default: deskDefaults[d].varLimit, min: 0, max: 10, step: 0.01, source: "PRD §6.8.1 (Market Risk Policy Manual — demo value)" }),
-    rule({ key: `market-risk.stopLossPct.${d}`, label: `Stop-loss trigger — ${deskNames[d]}`, description: "Cumulative MTM loss trigger as % of total capital.", category: "Market limits", type: "percent", default: deskDefaults[d].stopLoss, min: 0, max: 10, step: 0.01, source: "PRD §6.8.1 (demo value)" }),
+    rule({ key: `market-risk.varLimitPct.${d}`, label: `VaR limit — ${deskNames[d]}`, description: "Board-approved 99% 1-day VaR limit as % of total capital.", category: "Market limits", type: "percent", default: deskDefaults[d].varLimit, min: 0, max: 10, step: 0.01, source: "(Market Risk Policy Manual)" }),
+    rule({ key: `market-risk.stopLossPct.${d}`, label: `Stop-loss trigger — ${deskNames[d]}`, description: "Cumulative MTM loss trigger as % of total capital.", category: "Market limits", type: "percent", default: deskDefaults[d].stopLoss, min: 0, max: 10, step: 0.01, source: "" }),
   ]),
   rule({ key: "market-risk.stopLossEarlyWarningPct", label: "Stop-loss early warning", description: "Amber when cumulative MTM loss reaches this % of the stop-loss trigger.", category: "Market limits", type: "percent", default: 60, min: 1, max: 100, source: DEMO }),
   rule({ key: "market-risk.limitWarningPct", label: "Limit utilisation warning", description: "Amber when utilisation of any market limit reaches this %.", category: "Market limits", type: "percent", default: 80, min: 1, max: 100, source: DEMO }),
   rule({ key: "market-risk.interbankSpreadLimitPp", label: "Interbank spread limit", description: "Highest − lowest interbank quote, in percentage points.", category: "Market limits", type: "number", unit: "pp", default: 2.5, min: 0, max: 20, step: 0.1, source: DEMO }),
-  rule({ key: "market-risk.irrbbShockBps", label: "Headline IRRBB shock", description: "Parallel rate shock used for headline NII-at-Risk and ΔEVE.", category: "IRRBB", type: "number", unit: "bps", default: 200, min: 0, max: 1000, source: "PRD §6.8.1 / §6.7.4 (+200 bps — demo default)" }),
+  rule({ key: "market-risk.irrbbShockBps", label: "Headline IRRBB shock", description: "Parallel rate shock used for headline NII-at-Risk and ΔEVE.", category: "IRRBB", type: "number", unit: "bps", default: 200, min: 0, max: 1000, source: "(+200 bps)" }),
   rule({ key: "market-risk.irrbbShockLadderBps", label: "IRRBB shock ladder", description: "Parallel shocks shown in the sensitivity table (bps).", category: "IRRBB", type: "list", default: ["-200", "-100", "100", "200"], source: DEMO }),
   // Liquidity ratios (§6.8.2)
-  rule({ key: "market-risk.liquidityRatioMinPct", label: "Minimum liquidity ratio", description: "Liquid assets / deposit liabilities floor.", category: "Liquidity ratios", type: "percent", default: 30, min: 0, max: 100, source: "PRD §6.8.2 (CBN 3.13 — figure not stated in the PRD; demo value)" }),
-  rule({ key: "market-risk.lcrFloorPct", label: "LCR floor", description: "Liquidity Coverage Ratio regulatory floor.", category: "Liquidity ratios", type: "percent", default: 100, min: 0, max: 300, source: "PRD §6.8.2 (Basel III)" }),
-  rule({ key: "market-risk.nsfrFloorPct", label: "NSFR floor", description: "Net Stable Funding Ratio regulatory floor.", category: "Liquidity ratios", type: "percent", default: 100, min: 0, max: 300, source: "PRD §6.8.2 (Basel III)" }),
-  rule({ key: "market-risk.ldrMinPct", label: "Minimum loan-to-deposit ratio", description: "CBN minimum weighted LDR.", category: "Liquidity ratios", type: "percent", default: 65, min: 0, max: 200, source: "PRD §6.8.2, §9.1 (CBN)" }),
-  rule({ key: "market-risk.ldrQualifyingUpliftPct", label: "LDR qualifying-lending uplift", description: "Extra weighting on SME / retail / mortgage / consumer lending (150% weighting = 50% uplift).", category: "Liquidity ratios", type: "percent", default: 50, min: 0, max: 200, source: "PRD §6.8.2 (150% weighting)" }),
+  rule({ key: "market-risk.liquidityRatioMinPct", label: "Minimum liquidity ratio", description: "Liquid assets / deposit liabilities floor.", category: "Liquidity ratios", type: "percent", default: 30, min: 0, max: 100, source: "CBN 3.13" }),
+  rule({ key: "market-risk.lcrFloorPct", label: "LCR floor", description: "Liquidity Coverage Ratio regulatory floor.", category: "Liquidity ratios", type: "percent", default: 100, min: 0, max: 300, source: "(Basel III)" }),
+  rule({ key: "market-risk.nsfrFloorPct", label: "NSFR floor", description: "Net Stable Funding Ratio regulatory floor.", category: "Liquidity ratios", type: "percent", default: 100, min: 0, max: 300, source: "(Basel III)" }),
+  rule({ key: "market-risk.ldrMinPct", label: "Minimum loan-to-deposit ratio", description: "CBN minimum weighted LDR.", category: "Liquidity ratios", type: "percent", default: 65, min: 0, max: 200, source: "(CBN)" }),
+  rule({ key: "market-risk.ldrQualifyingUpliftPct", label: "LDR qualifying-lending uplift", description: "Extra weighting on SME / retail / mortgage / consumer lending (150% weighting = 50% uplift).", category: "Liquidity ratios", type: "percent", default: 50, min: 0, max: 200, source: "(150% weighting)" }),
   rule({ key: "market-risk.ratioWarningMarginPct", label: "Ratio warning margin", description: "Amber zone above a regulatory floor, as % of the floor.", category: "Liquidity ratios", type: "percent", default: 10, min: 0, max: 100, source: DEMO }),
   // LCR / NSFR factors
   ...FUNDING_IDS.flatMap((f) => [
-    rule({ key: `market-risk.runOffPct.${f}`, label: `LCR run-off — ${fundingDefaults[f].label}`, description: "30-day stressed outflow rate for this funding segment.", category: "LCR / NSFR factors", type: "percent", default: fundingDefaults[f].runOff, min: 0, max: 100, step: 0.5, source: "Basel III LCR taxonomy — tenant parameter (demo value)" }),
-    rule({ key: `market-risk.asfPct.${f}`, label: `NSFR ASF factor — ${fundingDefaults[f].label}`, description: "Available-stable-funding factor for this funding segment.", category: "LCR / NSFR factors", type: "percent", default: fundingDefaults[f].asf, min: 0, max: 100, source: "Basel III NSFR — tenant parameter (demo value)" }),
+    rule({ key: `market-risk.runOffPct.${f}`, label: `LCR run-off — ${fundingDefaults[f].label}`, description: "30-day stressed outflow rate for this funding segment.", category: "LCR / NSFR factors", type: "percent", default: fundingDefaults[f].runOff, min: 0, max: 100, step: 0.5, source: "Basel III LCR taxonomy — tenant parameter" }),
+    rule({ key: `market-risk.asfPct.${f}`, label: `NSFR ASF factor — ${fundingDefaults[f].label}`, description: "Available-stable-funding factor for this funding segment.", category: "LCR / NSFR factors", type: "percent", default: fundingDefaults[f].asf, min: 0, max: 100, source: "Basel III NSFR — tenant parameter" }),
   ]),
   rule({ key: "market-risk.undrawnOutflowPct", label: "LCR undrawn-facility outflow", description: "Share of undrawn commitments treated as 30-day outflow.", category: "LCR / NSFR factors", type: "percent", default: 10, min: 0, max: 100, source: DEMO }),
   rule({ key: "market-risk.inflowCapPct", label: "LCR inflow cap", description: "Inflows recognised up to this % of outflows.", category: "LCR / NSFR factors", type: "percent", default: 75, min: 0, max: 100, source: "Basel III LCR (75% cap)" }),
   rule({ key: "market-risk.monthlyRepaymentPct", label: "Monthly contractual loan repayment", description: "Share of the loan book repaid each month (inflow assumption).", category: "LCR / NSFR factors", type: "percent", default: 4.5, min: 0, max: 100, step: 0.1, source: DEMO }),
-  rule({ key: "market-risk.lcrInflowRecognitionPct", label: "LCR inflow recognition", description: "Share of contractual loan inflows recognised in the LCR.", category: "LCR / NSFR factors", type: "percent", default: 50, min: 0, max: 100, source: "Basel III LCR (50% of performing inflows — demo)" }),
+  rule({ key: "market-risk.lcrInflowRecognitionPct", label: "LCR inflow recognition", description: "Share of contractual loan inflows recognised in the LCR.", category: "LCR / NSFR factors", type: "percent", default: 50, min: 0, max: 100, source: "Basel III LCR (50% of performing inflows)" }),
   rule({ key: "market-risk.interbankInflowPct", label: "Interbank placements maturing (30d)", description: "Interbank placements maturing within 30 days, as % of deposits.", category: "LCR / NSFR factors", type: "percent", default: 5.2, min: 0, max: 100, step: 0.1, source: DEMO }),
-  rule({ key: "market-risk.rsfLoansPct", label: "NSFR RSF factor — loans", description: "Required-stable-funding factor on the loan book.", category: "LCR / NSFR factors", type: "percent", default: 72, min: 0, max: 100, source: "Basel III NSFR — tenant parameter (demo value)" }),
-  rule({ key: "market-risk.rsfHqlaPct", label: "NSFR RSF factor — HQLA", description: "Required-stable-funding factor on Level 1 HQLA.", category: "LCR / NSFR factors", type: "percent", default: 5, min: 0, max: 100, source: "Basel III NSFR — tenant parameter (demo value)" }),
+  rule({ key: "market-risk.rsfLoansPct", label: "NSFR RSF factor — loans", description: "Required-stable-funding factor on the loan book.", category: "LCR / NSFR factors", type: "percent", default: 72, min: 0, max: 100, source: "Basel III NSFR — tenant parameter" }),
+  rule({ key: "market-risk.rsfHqlaPct", label: "NSFR RSF factor — HQLA", description: "Required-stable-funding factor on Level 1 HQLA.", category: "LCR / NSFR factors", type: "percent", default: 5, min: 0, max: 100, source: "Basel III NSFR — tenant parameter" }),
   rule({ key: "market-risk.rsfOtherPct", label: "NSFR RSF — other assets", description: "Other assets requiring stable funding, as % of deposits.", category: "LCR / NSFR factors", type: "percent", default: 12, min: 0, max: 100, source: DEMO }),
   // Early warning (CBN 3.13(c))
-  rule({ key: "market-risk.ew.overdrawnDays", label: "CBN account overdrawn — trigger", description: "Consecutive working days the CBN current account is overdrawn and uncovered.", category: "Early warning", type: "number", unit: "days", default: 5, min: 1, max: 60, source: "PRD §6.8.2 (CBN 3.13(c))" }),
-  rule({ key: "market-risk.ew.clearingDeficitDays", label: "Clearing deficit — trigger", description: "Consecutive days of clearing-operation deficit.", category: "Early warning", type: "number", unit: "days", default: 5, min: 1, max: 60, source: "PRD §6.8.2 (CBN 3.13(c))" }),
-  rule({ key: "market-risk.ew.unableToPayDays", label: "Unable to pay maturing obligations — trigger", description: "Consecutive days unable to meet maturing obligations.", category: "Early warning", type: "number", unit: "days", default: 5, min: 1, max: 60, source: "PRD §6.8.2 (CBN 3.13(c))" }),
-  rule({ key: "market-risk.ew.interbankTakerPct", label: "Net interbank taker — share", description: "Net taker of interbank deposits at or above this % of total deposits…", category: "Early warning", type: "percent", default: 25, min: 1, max: 100, source: "PRD §6.8.2 (CBN 3.13(c))" }),
-  rule({ key: "market-risk.ew.interbankTakerDays", label: "Net interbank taker — duration", description: "…for this many consecutive days.", category: "Early warning", type: "number", unit: "days", default: 90, min: 1, max: 365, source: "PRD §6.8.2 (CBN 3.13(c))" }),
+  rule({ key: "market-risk.ew.overdrawnDays", label: "CBN account overdrawn — trigger", description: "Consecutive working days the CBN current account is overdrawn and uncovered.", category: "Early warning", type: "number", unit: "days", default: 5, min: 1, max: 60, source: "(CBN 3.13(c))" }),
+  rule({ key: "market-risk.ew.clearingDeficitDays", label: "Clearing deficit — trigger", description: "Consecutive days of clearing-operation deficit.", category: "Early warning", type: "number", unit: "days", default: 5, min: 1, max: 60, source: "(CBN 3.13(c))" }),
+  rule({ key: "market-risk.ew.unableToPayDays", label: "Unable to pay maturing obligations — trigger", description: "Consecutive days unable to meet maturing obligations.", category: "Early warning", type: "number", unit: "days", default: 5, min: 1, max: 60, source: "(CBN 3.13(c))" }),
+  rule({ key: "market-risk.ew.interbankTakerPct", label: "Net interbank taker — share", description: "Net taker of interbank deposits at or above this % of total deposits…", category: "Early warning", type: "percent", default: 25, min: 1, max: 100, source: "(CBN 3.13(c))" }),
+  rule({ key: "market-risk.ew.interbankTakerDays", label: "Net interbank taker — duration", description: "…for this many consecutive days.", category: "Early warning", type: "number", unit: "days", default: 90, min: 1, max: 365, source: "(CBN 3.13(c))" }),
   rule({ key: "market-risk.ew.watchPct", label: "Early-warning watch level", description: "Amber when a counter reaches this % of its trigger.", category: "Early warning", type: "percent", default: 30, min: 1, max: 100, source: DEMO }),
   // Concentration
-  rule({ key: "market-risk.concentrationCutoffs", label: "Depositor concentration bands", description: "Top-N cut-offs for depositor concentration.", category: "Concentration", type: "list", default: ["5", "10", "25", "50", "100", "200"], source: "PRD §6.8.2" }),
+  rule({ key: "market-risk.concentrationCutoffs", label: "Depositor concentration bands", description: "Top-N cut-offs for depositor concentration.", category: "Concentration", type: "list", default: ["5", "10", "25", "50", "100", "200"], source: "Platform default" }),
   // Stress model (§6.8.2–§6.8.4)
   ...STRESS_BANDS.flatMap((b) =>
     STRESS_FIELDS.map((f) =>
@@ -109,13 +109,13 @@ defineRules([
         default: bandDefaults[b.id][f.key],
         min: 0,
         max: f.suffix === "bps" ? 2000 : 100,
-        source: "PRD §6.8.4 (severity bands are tenant-configurable — demo values)",
+        source: "(severity bands are tenant-configurable)",
       }),
     ),
   ),
-  rule({ key: "market-risk.dyn.retailAddPp", label: "Dynamic add-on — retail run-off", description: "Added to retail run-off when the sector-cycle engine signals contraction.", category: "Stress model", type: "number", unit: "pp", default: 2, min: 0, max: 50, source: "PRD §6.8.4 (demo value)" }),
-  rule({ key: "market-risk.dyn.corporateAddPp", label: "Dynamic add-on — corporate run-off", description: "Added to corporate run-off on a contraction signal.", category: "Stress model", type: "number", unit: "pp", default: 6, min: 0, max: 50, source: "PRD §6.8.4 (demo value)" }),
-  rule({ key: "market-risk.dyn.haircutAddPp", label: "Dynamic add-on — HQLA haircut", description: "Added to the HQLA haircut on a contraction signal.", category: "Stress model", type: "number", unit: "pp", default: 3, min: 0, max: 50, source: "PRD §6.8.4 (demo value)" }),
+  rule({ key: "market-risk.dyn.retailAddPp", label: "Dynamic add-on — retail run-off", description: "Added to retail run-off when the sector-cycle engine signals contraction.", category: "Stress model", type: "number", unit: "pp", default: 2, min: 0, max: 50, source: "" }),
+  rule({ key: "market-risk.dyn.corporateAddPp", label: "Dynamic add-on — corporate run-off", description: "Added to corporate run-off on a contraction signal.", category: "Stress model", type: "number", unit: "pp", default: 6, min: 0, max: 50, source: "" }),
+  rule({ key: "market-risk.dyn.haircutAddPp", label: "Dynamic add-on — HQLA haircut", description: "Added to the HQLA haircut on a contraction signal.", category: "Stress model", type: "number", unit: "pp", default: 3, min: 0, max: 50, source: "" }),
   rule({ key: "market-risk.stress.horizonDays", label: "Stress horizon", description: "Days projected in the survival-horizon path.", category: "Stress model", type: "number", unit: "days", default: 90, min: 30, max: 365, source: DEMO }),
   rule({ key: "market-risk.stress.fgnDurationYears", label: "FGN bond modified duration", description: "Duration used for the HQLA MTM loss under a rate shock.", category: "Stress model", type: "number", unit: "years", default: 4, min: 0, max: 30, step: 0.1, source: DEMO }),
   rule({ key: "market-risk.stress.frontLoadExponent", label: "Run-off front-loading exponent", description: "Shape of the outflow curve within the first 30 days (lower = more front-loaded).", category: "Stress model", type: "number", default: 0.7, min: 0.1, max: 2, step: 0.05, source: DEMO }),
@@ -123,12 +123,12 @@ defineRules([
   rule({ key: "market-risk.stress.reverseMaxMultiplier", label: "Reverse stress search ceiling", description: "Largest run-off multiplier searched by the reverse stress test.", category: "Stress model", type: "number", default: 6, min: 1, max: 20, step: 0.5, source: DEMO }),
   // Risk appetite statement (ILAAP) — changed only through the RAS change operation (Board approval).
   ...RAS_METRICS.flatMap((m) => [
-    rule({ key: `market-risk.ras.${m.id}.earlyWarning`, label: `RAS early warning — ${m.metric}`, description: "Risk Appetite Statement early-warning trigger.", category: "Risk appetite", type: m.unit === "%" ? "percent" : "number", unit: m.unit === "%" ? undefined : m.unit, default: rasDefaults[m.id]!.earlyWarning, min: 0, max: 400, source: "PRD §6.8.3 (Board-approved RAS — demo value)" }),
-    rule({ key: `market-risk.ras.${m.id}.buffer`, label: `RAS buffer / limit — ${m.metric}`, description: "Risk Appetite Statement management buffer or limit.", category: "Risk appetite", type: m.unit === "%" ? "percent" : "number", unit: m.unit === "%" ? undefined : m.unit, default: rasDefaults[m.id]!.buffer, min: 0, max: 400, source: "PRD §6.8.3 (Board-approved RAS — demo value)" }),
+    rule({ key: `market-risk.ras.${m.id}.earlyWarning`, label: `RAS early warning — ${m.metric}`, description: "Risk Appetite Statement early-warning trigger.", category: "Risk appetite", type: m.unit === "%" ? "percent" : "number", unit: m.unit === "%" ? undefined : m.unit, default: rasDefaults[m.id]!.earlyWarning, min: 0, max: 400, source: "(Board-approved RAS)" }),
+    rule({ key: `market-risk.ras.${m.id}.buffer`, label: `RAS buffer / limit — ${m.metric}`, description: "Risk Appetite Statement management buffer or limit.", category: "Risk appetite", type: m.unit === "%" ? "percent" : "number", unit: m.unit === "%" ? undefined : m.unit, default: rasDefaults[m.id]!.buffer, min: 0, max: 400, source: "(Board-approved RAS)" }),
   ]),
   // Escalation & recipients (§6.4.4)
-  rule({ key: "market-risk.escalationRoles", label: "Breach escalation ladder", description: "Roles a limit breach escalates through, in order.", category: "Escalation", type: "roles", default: ["market-risk-analyst", "head-of-risk", "cro", "board"], source: "PRD §6.4.4 escalation protocol" }),
-  rule({ key: "market-risk.alertRoles", label: "Market & liquidity alert recipients", description: "Roles notified of breaches, early warnings and approvals.", category: "Escalation", type: "roles", default: ["market-risk-analyst", "head-of-risk", "cro"], source: "PRD §6.8.2 (auto-escalated to Market Risk Analyst, Head of Risk and CRO)" }),
+  rule({ key: "market-risk.escalationRoles", label: "Breach escalation ladder", description: "Roles a limit breach escalates through, in order.", category: "Escalation", type: "roles", default: ["market-risk-analyst", "head-of-risk", "cro", "board"], source: "escalation protocol" }),
+  rule({ key: "market-risk.alertRoles", label: "Market & liquidity alert recipients", description: "Roles notified of breaches, early warnings and approvals.", category: "Escalation", type: "roles", default: ["market-risk-analyst", "head-of-risk", "cro"], source: "(auto-escalated to Market Risk Analyst, Head of Risk and CRO)" }),
   rule({ key: "market-risk.ilaapRoles", label: "ILAAP sign-off recipients", description: "Roles notified when the ILAAP is approved.", category: "Escalation", type: "roles", default: ["market-risk-analyst", "head-of-risk", "cro", "md", "board"], source: DEMO }),
 ]);
 
@@ -148,7 +148,7 @@ registerOperation<BreachClosePayload>({
   type: "market-risk.breach.close",
   name: "Close market-risk limit breach",
   module: M,
-  description: "Closure of a market or liquidity limit breach with its resolution note (PRD §6.8, §6.4.4).",
+  description: "Closure of a market or liquidity limit breach with its resolution note.",
   defaultSteps: [step("confirm", "Head of Risk / CRO confirmation", ["head-of-risk", "cro"], 24)],
   apply: (p, { actor }) => {
     const b = useMarketRisk.getState().breaches.find((x) => x.id === p.breachId);
@@ -165,7 +165,7 @@ registerOperation<RasChangePayload>({
   type: "market-risk.ras.change",
   name: "Risk Appetite Statement change (liquidity)",
   module: M,
-  description: "New version of the liquidity Risk Appetite Statement thresholds (PRD §6.8.3). Board-approved.",
+  description: "New version of the liquidity Risk Appetite Statement thresholds. Board-approved.",
   defaultSteps: [step("review", "Head of Risk review", ["head-of-risk"], 48), step("cro", "CRO endorsement", ["cro"], 48), step("board", "Board approval", ["board"], 168)],
   apply: (p, { instance, actor }) => {
     const changes: string[] = [];
@@ -191,7 +191,7 @@ registerOperation<IlaapSignOffPayload>({
   type: "market-risk.ilaap.signoff",
   name: "ILAAP sign-off",
   module: M,
-  description: "Governance sign-off chain for the ILAAP document (CBN Guidelines on Liquidity Risk Management and ILAAP, 2021; PRD §6.8.3).",
+  description: "Governance sign-off chain for the ILAAP document (CBN Guidelines on Liquidity Risk Management and ILAAP, 2021).",
   defaultSteps: [
     step("review", "Reviewed — Head of Risk", ["head-of-risk"], 72),
     step("cro", "Endorsed — Chief Risk Officer", ["cro"], 72),
@@ -216,7 +216,7 @@ registerOperation<StressApprovePayload>({
   type: "market-risk.stress.approve",
   name: "Liquidity stress scenario approval",
   module: M,
-  description: "Approve a liquidity stress scenario and its full assumption set for use in the ILAAP stress-testing chapter (PRD §6.8.3–§6.8.4).",
+  description: "Approve a liquidity stress scenario and its full assumption set for use in the ILAAP stress-testing chapter.",
   defaultSteps: [step("review", "Head of Risk review", ["head-of-risk"], 48), step("cro", "CRO approval", ["cro"], 48)],
   apply: (p, { actor }) => {
     useMarketRisk.getState().setRun(p.runId, { approval: { status: "Approved", by: actor.name, at: new Date().toISOString() } });
@@ -245,7 +245,7 @@ defineTemplates([
     trigger: "market-risk.breach.raised",
     subject: "Limit breach: {{metric}} — {{desk}}",
     inApp: "{{metric}} on {{desk}}: {{actual}} vs limit {{limit}}. With {{level}}.",
-    body: "<p>A limit breach was raised.</p><ul><li>Metric: <strong>{{metric}}</strong></li><li>Desk / portfolio: {{desk}}</li><li>Actual: <strong>{{actual}}</strong> vs limit {{limit}}</li><li>Now with: {{level}}</li></ul><p>Review the position and record the resolution (§6.4.4).</p>",
+    body: "<p>A limit breach was raised.</p><ul><li>Metric: <strong>{{metric}}</strong></li><li>Desk / portfolio: {{desk}}</li><li>Actual: <strong>{{actual}}</strong> vs limit {{limit}}</li><li>Now with: {{level}}</li></ul><p>Review the position and record the resolution.</p>",
     tone: "danger",
     variables: [
       { name: "metric", description: "Limit metric", example: "VaR limit utilisation" },
@@ -355,7 +355,7 @@ defineTemplates([
 // ---------------------------------------------------------------- events & hooks
 defineEvents([
   { name: "market-risk.breach.raised", module: M, description: "A market or liquidity limit breach was raised.", payloadExample: { metric: "VaR limit utilisation", utilisation: 103 } },
-  { name: "market-risk.breach.escalated", module: M, description: "A limit breach moved up the §6.4.4 escalation ladder.", payloadExample: { from: "market-risk-analyst", to: "head-of-risk" } },
+  { name: "market-risk.breach.escalated", module: M, description: "A limit breach moved up the escalation ladder.", payloadExample: { from: "market-risk-analyst", to: "head-of-risk" } },
   { name: "market-risk.breach.close-requested", module: M, description: "Closure of a breach was submitted for approval." },
   { name: "market-risk.breach.closed", module: M, description: "A breach closure was approved." },
   { name: "market-risk.early-warning.triggered", module: M, description: "An illiquidity early-warning indicator was raised as a breach." },

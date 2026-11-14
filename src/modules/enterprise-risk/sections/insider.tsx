@@ -65,7 +65,7 @@ export function InsiderSection() {
     { id: "security", header: "Security", accessor: (r) => (r.secured ? "Secured" : "Unsecured") },
     { id: "maturity", header: "Maturity", accessor: (r) => date(r.maturityDate), sortValue: (r) => r.maturityDate, sortable: true },
     { id: "class", header: "Performance", accessor: "cbnClass", sortable: true, cell: (r) => <StatusBadge status={r.cbnClass} tones={{ ...riskStatusTones, ...cbnTones }} /> },
-    { id: "provision", header: "Provision", accessor: () => "From IFRS 9 ECL run", cell: () => <span className="text-xs text-fg-subtle">From IFRS 9 ECL run (§6.7)</span> },
+    { id: "provision", header: "Provision", accessor: () => "From IFRS 9 ECL run", cell: () => <span className="text-xs text-fg-subtle">From IFRS 9 ECL run</span> },
   ];
 
   return (

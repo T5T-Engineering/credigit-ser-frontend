@@ -23,6 +23,7 @@ import {
   Text,
   Textarea,
 } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/iam/permissions";
 import { useApplications, useCollateral, useFacilities, useObligors, useTenant, useUsers } from "@/lib/data/hooks";
@@ -103,7 +104,7 @@ export function HouseTemplatePage() {
   };
 
   return (
-    <ModulePage module="offer-letters" description="The tenant's own house style — letterhead, section order, standing wording and signature/witness block — versioned and approved by Legal (PRD §7.0).">
+    <ModulePage module="offer-letters" description="The tenant's own house style — letterhead, section order, standing wording and signature/witness block — versioned and approved by Legal.">
       <Stack gap="large">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <Field label="Product line" htmlFor="tpl-line" description="Tenants may keep separate templates per product line.">
@@ -150,12 +151,7 @@ export function HouseTemplatePage() {
           </Stack>
         </div>
 
-        {notice ? (
-          <Alert tone={notice.tone} title={notice.tone === "success" ? "Template updated" : "Not saved"} action={<Button size="small" variant="text" onClick={() => setNotice(null)}>Dismiss</Button>}>
-            {notice.text}
-            {notice.tone === "success" ? ". Recorded in the audit trail." : ""}
-          </Alert>
-        ) : null}
+        <OutcomePopup value={notice} map={outcomeCopy.toneText({ success: "Template updated", danger: "Not saved" })} />
         {pending ? <PendingOperationNotice instance={pending} title={`v${working?.version} is awaiting Legal sign-off`}>To return it for changes, decide it in Operations. </PendingOperationNotice> : null}
         {working && !pending ? (
 

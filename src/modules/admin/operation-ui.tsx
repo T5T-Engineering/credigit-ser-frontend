@@ -2,8 +2,9 @@
 
 /** Small page compositions shared by the admin pages for Operations-routed changes. */
 import Link from "next/link";
-import { Alert, Badge, TextLink } from "@credigit/web-ui";
+import { Badge, TextLink } from "@credigit/web-ui";
 import { runHooks } from "@/lib/platform/hooks";
+import { OutcomePopup } from "@/lib/ui/outcome-popup";
 import { usePendingFor, type SubmitResult } from "@/lib/platform/operations";
 
 export const operationHref = (id: string) => `/operations/item?id=${encodeURIComponent(id)}`;
@@ -28,18 +29,27 @@ export function PendingBadge({ subjectType, subjectId }: { subjectType: string; 
   );
 }
 
-/** Outcome of a submission: link to the operation or the reason it failed. */
-export function SubmitOutcome({ result }: { result: SubmitResult | null }) {
-  if (!result) return null;
-  if (!result.ok) return <Alert tone="danger">{result.reason}</Alert>;
-  return result.applied ? (
-    <Alert tone="success">Applied — the workflow for this change has no approval steps.</Alert>
-  ) : (
-    <Alert tone="success" title="Sent for approval">
-      The change applies once it&apos;s approved in Operations.{" "}
-      <TextLink href={operationHref(result.instance.id)} as={Link}>
-        Track request {result.instance.id}
-      </TextLink>
-    </Alert>
+/** Outcome of a submission as a popup: applied, sent for approval (with the request link) or the reason it failed. */
+export function SubmitOutcome({ result, appliedText = "Applied — the workflow for this change has no approval steps." }: { result: SubmitResult | null; appliedText?: string }) {
+  return (
+    <OutcomePopup
+      value={result}
+      map={(r) =>
+        !r.ok
+          ? { tone: "danger", title: "Not submitted", description: r.reason }
+          : r.applied
+            ? { tone: "success", title: "Saved", description: appliedText }
+            : {
+                tone: "info",
+                title: "Sent for approval",
+                description: "The change applies once it's approved in Operations.",
+                action: (
+                  <TextLink href={operationHref(r.instance.id)} as={Link}>
+                    Track request {r.instance.id}
+                  </TextLink>
+                ),
+              }
+      }
+    />
   );
 }

@@ -3,8 +3,9 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Pencil, RefreshCw, Send, SearchX, Undo2, X } from "lucide-react";
-import { Alert, Button, EmptyState, EntityHeader, Field, Skeleton, Stack, Tabs, Textarea } from "@credigit/web-ui";
+import { Pencil, RefreshCw, Send, SearchX, Undo2 } from "lucide-react";
+import { Alert, Button, EmptyState, EntityHeader, Field, Skeleton, Stack, SubmitButton, Tabs, Textarea } from "@credigit/web-ui";
+import { OutcomePopup, outcomeCopy } from "@/lib/ui/outcome-popup";
 import { ModulePage } from "@/components/module-page";
 import { useApplications, useFacilities, useLookups, useObligor, useObligors } from "@/lib/data/hooks";
 import { DEMO_NOW } from "@/lib/data/seed";
@@ -226,7 +227,7 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
             { label: "NGX benchmark", value: a.ngx?.name ?? "No listed proxy" },
             { label: "Relationship manager", value: rm?.name ?? "—" },
             {
-              label: "Internal grade (§6.2.7)",
+              label: "Internal grade",
               value: `${obligor.riskGrade} / 10`,
               mono: true,
             },
@@ -255,19 +256,7 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
           }
         />
 
-        {notice && (
-          <Alert
-            tone="success"
-            title="Done"
-            action={
-              <Button variant="text" size="small" iconBefore={<X aria-hidden />} onClick={() => setNotice(null)}>
-                Dismiss
-              </Button>
-            }
-          >
-            {notice}
-          </Alert>
-        )}
+        <OutcomePopup value={notice} map={outcomeCopy.text("Done")} />
         {error && !editing && (
           <Alert tone="danger" title="Couldn’t complete that">
             {error}
@@ -295,7 +284,7 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
         )}
         {a.position.neutral && (
           <Alert tone="warning" title="Neutral / Transitional — mandatory analyst narrative">
-            Magnitude {a.position.magnitude.toFixed(2)} is below the neutral threshold, so no posture-driven stance is generated (§6.2.5). The advisory note needs a Credit Analyst
+            Magnitude {a.position.magnitude.toFixed(2)} is below the neutral threshold, so no posture-driven stance is generated. The advisory note needs a Credit Analyst
             narrative.
           </Alert>
         )}
@@ -310,7 +299,7 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
             }
           >
             {openExceptions.map((g) => g.applicationId).join(", ")}: long-tenor expansion request in a {openExceptions[0]!.stage}-stage industry. CCO/CRO override with documented
-            rationale is required before it passes the Credit Analyst tier (§6.2.6).
+            rationale is required before it passes the Credit Analyst tier.
           </Alert>
         )}
         {editing && (
@@ -330,9 +319,9 @@ function AssessmentView({ obligor, initialTab, initialEdit }: { obligor: Obligor
                 <Button size="small" variant="tertiary" onClick={cancelEdit}>
                   Discard
                 </Button>
-                <Button size="small" iconBefore={<Send aria-hidden />} onClick={submitEdit} disabled={!dirty} loading={submitting}>
+                <SubmitButton size="small" iconBefore={<Send aria-hidden />} onClick={submitEdit} disabled={!dirty} loading={submitting}>
                   Submit for approval
-                </Button>
+                </SubmitButton>
               </span>
             }
           >

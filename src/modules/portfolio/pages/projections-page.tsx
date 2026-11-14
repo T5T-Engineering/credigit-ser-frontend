@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { AiInsightCard, Alert, AreaChart, Badge, ChipList, Chip, DataTable, Grid, PhaseBadge, SegmentedControl, Stack, StatusBadge, Text, useToast, type DataTableColumn } from "@credigit/web-ui";
+import { AiInsightCard, Alert, AreaChart, Badge, ChipList, Chip, DataTable, Grid, PhaseBadge, SegmentedControl, Stack, StatusBadge, Text, type DataTableColumn } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/iam/permissions";
 import { publish } from "@/lib/platform/events";
@@ -29,7 +30,7 @@ export function ProjectionsPage() {
   const [scenario, setScenario] = useState<Scenario>("Base");
   const actor = useActor();
   const { actor: me } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const submit = useSubmitOperation();
   const canSubmitForAdoption = useCan("portfolio.projection-commentary.submit");
   const canExport = useCan("portfolio.data.export");
@@ -81,19 +82,19 @@ export function ProjectionsPage() {
       <ChipList>{r.drivers.map((d) => <Chip key={d} size="small">{d}</Chip>)}</ChipList>
     ) },
     { id: "dir", header: "Trend", accessor: "direction", sortable: true, cell: (r) => <StatusBadge status={r.direction} tones={dirTone} /> },
-    { id: "gate", header: "Origination gate (§6.2.6)", accessor: (r) => (r.direction === "Deteriorating" ? "Gate earlier" : "Normal"), cell: (r) => (r.direction === "Deteriorating" ? <Badge tone="warning">Gate earlier</Badge> : "—") },
+    { id: "gate", header: "Origination gate", accessor: (r) => (r.direction === "Deteriorating" ? "Gate earlier" : "Normal"), cell: (r) => (r.direction === "Deteriorating" ? <Badge tone="warning">Gate earlier</Badge> : "—") },
   ];
 
   return (
-    <ModulePage module="portfolio" description="Forward-looking sector & macro-economic loan-performance projection (§6.6.7): the relationship between macro variables and each sector's realised NPL and roll-rate history, projected forward on the current book.">
+    <ModulePage module="portfolio" description="Forward-looking sector & macro-economic loan-performance projection: the relationship between macro variables and each sector's realised NPL and roll-rate history, projected forward on the current book.">
       <Stack gap="large">
         <Alert tone="info" title={<span className="inline-flex items-center gap-2">Phase 2 capability — simulated engine output <PhaseBadge phase={2} /></span>}>
-          Every output is a decision-support signal reviewed by the Credit Analyst or Head of Risk through the §6.4.4 escalation protocol before it affects a credit, allocation or provisioning outcome. The engine does not act on its own output.
+          Every output is a decision-support signal reviewed by the Credit Analyst or Head of Risk through the escalation protocol before it affects a credit, allocation or provisioning outcome. The engine does not act on its own output.
         </Alert>
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SegmentedControl label="Scenario" value={scenario} onChange={setScenario} options={[{ value: "Base", label: "Base" }, { value: "Upside", label: "Upside" }, { value: "Downside", label: "Downside" }]} />
-          <Text variant="caption">Macro data as of {dateTime(DEMO_NOW)} · NGX Corpus update Q3 2026 (demo)</Text>
+          <Text variant="caption">Macro data as of {dateTime(DEMO_NOW)} · NGX Corpus update Q3 2026</Text>
         </div>
 
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
@@ -102,11 +103,11 @@ export function ProjectionsPage() {
             value={pct(sel.points[12]!.y, 2)}
             hint={`from ${pct(totals.nplRatio, 2)} today · ${scenario.toLowerCase()} scenario`}
             tone={scenario === "Downside" ? "danger" : scenario === "Upside" ? "success" : "info"}
-            calc={{ metric: "projected NPL ratio", formula: "Sector NPL/roll-rate history regressed on §5.5 macro variables, projected on the current macro trend and portfolio composition", source: "External Data Feeds (§5.5), sector NPL/roll-rate history (§6.6.5), NGX Corpus life-cycle (§6.2.8). Prototype: simulated.", prd: "§6.6.7", demo: true }}
+            calc={{ metric: "projected NPL ratio", formula: "Sector NPL/roll-rate history regressed on macro variables, projected on the current macro trend and portfolio composition", source: "External Data Feeds, sector NPL/roll-rate history, NGX Corpus life-cycle. Prototype: simulated.", prd: "§6.6.7", demo: true }}
           />
           <KpiCard label="Sectors deteriorating" value={String(deteriorating.length)} hint={deteriorating.slice(0, 2).map((d) => d.sector.name).join(", ") || "None"} tone="warning" calc={{ metric: "deteriorating sectors", formula: "12-month projected NPL midpoint > current × 1.08", source: "Projection engine output under the selected scenario.", prd: "§6.6.7", demo: true }} />
-          <KpiCard label="Projected WARR (12m)" value={fw.m12.toFixed(2)} hint={`6m ${fw.m6.toFixed(2)} · today ${warr.warr.toFixed(2)}`} tone="accent" calc={{ metric: "forward-looking WARR", formula: "WARR re-computed on scenario-projected grades and exposures", source: "Projection engine (§6.6.7) and ICAAP stress cases (§6.7.4).", prd: "§6.6.9", demo: true }} />
-          <KpiCard label="Sectors in contraction" value={String(proj.filter((x) => x.phase === "Contraction").length)} hint="Macro-cycle phase, refreshed with life-cycle classification" tone="danger" calc={{ metric: "macro-cycle phase", formula: "Expansion / Peak / Contraction / Trough tag computed by the AI trend engine from §5.5 variables", source: "Read together with the Industry Life-Cycle Stage (§6.2.8).", prd: "§6.6.7", demo: true }} />
+          <KpiCard label="Projected WARR (12m)" value={fw.m12.toFixed(2)} hint={`6m ${fw.m6.toFixed(2)} · today ${warr.warr.toFixed(2)}`} tone="accent" calc={{ metric: "forward-looking WARR", formula: "WARR re-computed on scenario-projected grades and exposures", source: "Projection engine and ICAAP stress cases.", prd: "§6.6.9", demo: true }} />
+          <KpiCard label="Sectors in contraction" value={String(proj.filter((x) => x.phase === "Contraction").length)} hint="Macro-cycle phase, refreshed with life-cycle classification" tone="danger" calc={{ metric: "macro-cycle phase", formula: "Expansion / Peak / Contraction / Trough tag computed by the AI trend engine from variables", source: "Read together with the Industry Life-Cycle Stage.", prd: "§6.6.7", demo: true }} />
         </Grid>
 
         <Grid columns={{ base: 1, lg: 3 }} gap="medium">
@@ -125,8 +126,8 @@ export function ProjectionsPage() {
               headline,
               deteriorating.length ? `${deteriorating.map((d) => d.sector.name).slice(0, 3).join(", ")} ${deteriorating.length > 1 ? "show" : "shows"} the steepest projected deterioration, driven mainly by ${deteriorating[0]!.drivers.join(" and ")}.` : "No sector shows material projected deterioration.",
             ]}
-            bullets={["Consider earlier origination gating for deteriorating sectors (§6.2.6).", "Feed projected roll-rates into ILAAP cash-inflow assumptions (§6.8.4)."]}
-            sources={[{ label: "Macro feed (§5.5)", detail: "MPR, inflation, FX, crude, GDP, PMI, T-bill" }, { label: "Sector NPL history (§6.6.5)" }]}
+            bullets={["Consider earlier origination gating for deteriorating sectors.", "Feed projected roll-rates into ILAAP cash-inflow assumptions."]}
+            sources={[{ label: "Macro feed", detail: "MPR, inflation, FX, crude, GDP, PMI, T-bill" }, { label: "Sector NPL history" }]}
             signedOffBy={signOff ? `${signOff.by} (${roleById[signOff.role as keyof typeof roleById]?.name ?? signOff.role}), ${dateTime(signOff.at)} — adopted through Operations` : undefined}
             signOffNote={
               pending ? (
@@ -148,7 +149,7 @@ export function ProjectionsPage() {
           <DataTable label="Sector projections" data={proj} columns={columns} getRowId={(r) => r.sector.id} paginate={false} exportFilename={canExport ? `sector-projection-${scenario.toLowerCase()}.csv` : undefined} defaultSort={{ id: "m12", direction: "desc" }} />
         </Panel>
 
-        <Panel title="Macro-economic variables" description="Carried in the External Data Feeds layer (§5.5). Values shown are demo feed values.">
+        <Panel title="Macro-economic variables" description="Carried in the External Data Feeds layer. Values shown are demo feed values.">
           <DataTable
             label="Macro variables"
             data={macroVariables}

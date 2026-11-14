@@ -5,9 +5,10 @@
  * approvals live in the Operations workflow — this store only holds the resulting records. BACKEND SEAM: API mutations.
  */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import type { Ifrs9Stage } from "@/lib/data/types";
 import { seedModels, type ModelStatus, type RiskModel } from "./data";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type ModelChange = { id: string; modelId: string; at: string; by: string; action: string; from?: string; to?: string; note?: string };
 
@@ -114,6 +115,8 @@ export const useIfrs9 = create<State>()(
       reset: () => set(initial()),
     }),
     // v2: parameters (cure, minimum CAR, scenarios) moved to business rules; approvals moved to Operations.
-    { name: "credigit.ser.ifrs9", version: 2, storage: createJSONStorage(() => localStorage), migrate: () => initial() as unknown as State },
+    { name: "credigit.ser.ifrs9", version: 2, storage: dataStorage(), migrate: () => initial() as unknown as State },
   ),
 );
+
+registerDatabaseStore(useIfrs9);

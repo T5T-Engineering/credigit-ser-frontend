@@ -26,8 +26,8 @@ const MODULE = "disbursement";
 
 // ---------------------------------------------------------------- business rules
 defineRules([
-  { key: "disbursement.accountNumberLength", label: "Beneficiary account number length", description: "Digits in a beneficiary account number (NUBAN).", module: MODULE, category: "Validation", type: "number", unit: "digits", default: 10, min: 6, max: 20, source: "Tenant parameter (demo value) — CBN NUBAN is 10 digits" },
-  { key: "disbursement.makerRoles", label: "Who prepares disbursements (Maker)", description: "Roles with execution authority within the approved amount.", module: MODULE, category: "Roles", type: "roles", default: ["disbursement-maker"], source: "PRD §4.1 Domestic Operations — Disbursement Maker" },
+  { key: "disbursement.accountNumberLength", label: "Beneficiary account number length", description: "Digits in a beneficiary account number (NUBAN).", module: MODULE, category: "Validation", type: "number", unit: "digits", default: 10, min: 6, max: 20, source: "Tenant parameter — CBN NUBAN is 10 digits" },
+  { key: "disbursement.makerRoles", label: "Who prepares disbursements (Maker)", description: "Roles with execution authority within the approved amount.", module: MODULE, category: "Roles", type: "roles", default: ["disbursement-maker"], source: "Domestic Operations — Disbursement Maker" },
 ]);
 
 // ---------------------------------------------------------------- operations
@@ -40,7 +40,7 @@ registerOperation<AuthorisePayload>({
   type: "disbursement.authorise",
   name: "Disbursement authorisation (Checker)",
   module: MODULE,
-  description: "A Disbursement Checker, different from the Maker and from the facility's initiator/recommender, authorises a prepared disbursement; step-up re-authentication above the high-value threshold (PRD §4.1, §4.2).",
+  description: "A Disbursement Checker, different from the Maker and from the facility's initiator/recommender, authorises a prepared disbursement; step-up re-authentication above the high-value threshold.",
   defaultSteps: [{ id: "checker", name: "Checker authorisation", approverRoles: ["disbursement-checker"], mode: "any", slaHours: 8 }],
   apply: async (p, { instance, actor }) => {
     const d = requestOf(p);
@@ -113,7 +113,7 @@ export function recordStepUp(operationId: string, actorId: string) {
 
 registerHook<{ instance: OperationInstance; decision: string; actor: Actor; stepUpVerified?: boolean }>({
   id: "disbursement.sod-and-step-up",
-  name: "Disbursement — initiator/recommender can't authorise; step-up above threshold (PRD §4.2)",
+  name: "Disbursement — initiator/recommender can't authorise; step-up above threshold",
   point: "operations.decide.before",
   priority: 10,
   run: ({ instance, decision, actor, stepUpVerified }) => {
@@ -121,7 +121,7 @@ registerHook<{ instance: OperationInstance; decision: string; actor: Actor; step
     const p = instance.payload as AuthorisePayload;
     const app = p.applicationId ? useDb.getState().applications.find((a) => a.id === p.applicationId) : undefined;
     const conflict = conflictedPeople(app).get(actor.id);
-    if (conflict) return { veto: `You ${conflict} — PRD §4.2 bars you from authorising its disbursement.` };
+    if (conflict) return { veto: `You ${conflict}.2 bars you from authorising its disbursement.` };
     if (decision === "approve" && requestOf(p).amount > getRule<number>("approvals.stepUpThresholdNgn")) {
       const key = `${instance.id}:${actor.id}`;
       if (!stepUpVerified && !stepUpProofs.has(key)) return { veto: "High-value disbursement — step-up re-authentication is required. Verify with your one-time code to authorise." };

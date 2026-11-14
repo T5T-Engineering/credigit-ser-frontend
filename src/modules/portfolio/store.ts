@@ -9,9 +9,10 @@
  * BACKEND SEAM: replace actions with API mutations (report-generation jobs, plan ingestion endpoint).
  */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import type { PlanVersion } from "./data";
 import type { LimitStatus } from "./selectors";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type ReportRunStatus = "Generating" | "AI-drafted — awaiting validation" | "Validated" | "Submitted for release" | "Returned for correction" | "Released";
 
@@ -102,8 +103,10 @@ export const usePortfolioStore = create<PortfolioState>()(
     {
       name: "credigit.ser.portfolio",
       version: 1,
-      storage: createJSONStorage(() => localStorage),
+      storage: dataStorage(),
       partialize: ({ runs, uploadedPlans, activePlanId, signOffs, planStatus, operativePlanId, limitStates }) => ({ runs, uploadedPlans, activePlanId, signOffs, planStatus, operativePlanId, limitStates }),
     },
   ),
 );
+
+registerDatabaseStore(usePortfolioStore);

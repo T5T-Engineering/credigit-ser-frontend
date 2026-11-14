@@ -7,7 +7,8 @@
  */
 import { useCallback, type ReactNode } from "react";
 import Link from "next/link";
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, DecisionPanel, RuleRow, Stack, WorkflowInstanceCard, useToast, type DecisionSubmission, type OperationStep } from "@credigit/web-ui";
+import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, DecisionPanel, RuleRow, Stack, WorkflowInstanceCard, type DecisionSubmission, type OperationStep } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { dateTime } from "@/lib/format";
 import { roleById } from "@/lib/rbac/roles";
 import {
@@ -49,7 +50,7 @@ function steps(instance: OperationInstance): OperationStep[] {
 export function PendingApproval({ subjectType, subjectId, notice }: { subjectType: string; subjectId: string; notice?: ReactNode }) {
   const pending = usePendingFor(subjectType, subjectId);
   const { actor } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const minComment = useRule<number>("operations.minCommentLength");
   const alwaysComment = useRule<boolean>("operations.commentAlwaysRequired");
   if (!pending) return null;
@@ -89,7 +90,7 @@ export function PendingApproval({ subjectType, subjectId, notice }: { subjectTyp
 
 /** Submit to the Operations workflow with consistent toasts. */
 export function useSubmitOperation() {
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   return useCallback(
     async <P,>(type: string, input: SubmitInput<P>) => {
       const res = await submitOperation<P>(type, input);

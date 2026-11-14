@@ -105,7 +105,7 @@ export function CreditFilesPage() {
   ];
 
   return (
-    <ModulePage module="credit-admin" description="Credit-file completeness per obligor against the CBN Annexure 1 minimum content (PRD §6.3.3).">
+    <ModulePage module="credit-admin" description="Credit-file completeness per obligor against the CBN Annexure 1 minimum content.">
       <Stack gap="large">
         <Grid columns={{ base: 1, sm: 2, xl: 4 }} gap="medium">
           <StatCard label="Average completeness" value={pct(kpi.avg)} icon={<FolderOpen aria-hidden />} hint="Items on file ÷ applicable Annexure 1 items">

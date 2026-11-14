@@ -20,15 +20,16 @@ import {
   Grid,
   Modal,
   Stack,
+  SubmitButton,
   SubscriptionList,
   Tabs,
   Text,
   Textarea,
-  useToast,
   type DataTableColumn,
   type DomainEventEntry,
   type HookSubscription,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/iam/permissions";
 import { dateTime } from "@/lib/format";
@@ -164,7 +165,7 @@ function SubscriptionsTab() {
   const canEdit = useCan("operations.extensions.toggle");
   const minComment = useRule<number>("operations.minCommentLength");
   const { actor } = useScope();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const [toggle, setToggle] = useState<Toggle | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -256,9 +257,9 @@ function SubscriptionsTab() {
             <Button variant="tertiary" onClick={() => setToggle(null)}>
               Cancel
             </Button>
-            <Button loading={busy} disabled={reason.trim().length < minComment} onClick={submit}>
+            <SubmitButton loading={busy} disabled={reason.trim().length < minComment} onClick={submit}>
               Submit for approval
-            </Button>
+            </SubmitButton>
           </Stack>
         }
       >

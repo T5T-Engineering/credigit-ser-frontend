@@ -3,13 +3,14 @@
 /** Workspace selectors (dashboard + My tasks) over the shared Risk Data Spine. Pure functions + thin hooks. */
 import { useMemo } from "react";
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { currentSteps } from "@/lib/workflow";
 import { DEMO_NOW } from "@/lib/data/seed";
 import type { Application, ApprovalStep, CbnClass, Facility, Obligor, Sector, Task } from "@/lib/data/types";
 import type { RoleId } from "@/lib/rbac/roles";
 import { useApplications, useFacilities, useObligors, useSectors, useTasks } from "@/lib/data/hooks";
 import { getRule, useRulesStore } from "@/lib/platform/rules";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export const DAY = 24 * 60 * 60 * 1000;
 export const nowMs = DEMO_NOW.getTime();
@@ -130,6 +131,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       signOff: (id, by) => set((s) => ({ signedOff: { ...s.signedOff, [id]: { by, at: new Date().toISOString() } } })),
       dismiss: (id) => set((s) => ({ dismissed: [...s.dismissed, id] })),
     }),
-    { name: "credigit.ser.workspace", storage: createJSONStorage(() => localStorage), partialize: ({ signedOff, dismissed }) => ({ signedOff, dismissed }) },
+    { name: "credigit.ser.workspace", storage: dataStorage(), partialize: ({ signedOff, dismissed }) => ({ signedOff, dismissed }) },
   ),
 );
+
+registerDatabaseStore(useWorkspaceStore);

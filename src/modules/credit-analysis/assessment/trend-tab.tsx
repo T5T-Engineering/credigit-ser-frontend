@@ -31,7 +31,7 @@ export function TrendTab({ a, trends, history }: Props) {
         <CardHeader>
           <div>
             <CardTitle>360 RAR axis averages over time</CardTitle>
-            <CardDescription>Quarterly refreshes; momentum from the trend line’s slope and second-derivative shape (§6.2.11)</CardDescription>
+            <CardDescription>Quarterly refreshes; momentum from the trend line’s slope and second-derivative shape</CardDescription>
           </div>
         </CardHeader>
         <CardContent>

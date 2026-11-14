@@ -55,7 +55,7 @@ export function FinancialsTab({ c }: { c: AppCtx }) {
         <Card>
           <CardHeader>
             <div><CardTitle>COP Ratio — confidence overlay</CardTitle>
-            <CardDescription>Verified bank-account credit turnover ÷ declared turnover per audited financial statements (PRD §6.1.4).</CardDescription></div>
+            <CardDescription>Verified bank-account credit turnover ÷ declared turnover per audited financial statements.</CardDescription></div>
           </CardHeader>
           <CardContent>
             {app.copRatio === undefined ? (
@@ -76,7 +76,7 @@ export function FinancialsTab({ c }: { c: AppCtx }) {
                 />
                 <Stack direction="horizontal" gap="small" align="center" wrap justify="center">
                   {band ? <StatusBadge status={band.label} tones={{ [band.label]: band.tone }} /> : null}
-                  <Tooltip content={`Bands: ≥ ${high} High · ${medium}–${(high - 0.01).toFixed(2)} Medium · < ${medium} Low (PRD §6.1.4 example; business rules)`}>
+                  <Tooltip content={`Bands: ≥ ${high} High · ${medium}–${(high - 0.01).toFixed(2)} Medium · < ${medium} Low (example; business rules)`}>
                     <Badge variant="outline">How bands work</Badge>
                   </Tooltip>
                 </Stack>
@@ -97,7 +97,7 @@ export function FinancialsTab({ c }: { c: AppCtx }) {
         <Card>
           <CardHeader>
             <div><CardTitle>Statement reconciliation</CardTitle>
-            <CardDescription>Gross credits less entries that are not genuine, sustained trade turnover (PRD §5.1, §5.3).</CardDescription></div>
+            <CardDescription>Gross credits less entries that are not genuine, sustained trade turnover.</CardDescription></div>
           </CardHeader>
           <CardContent>
             <WaterfallChart
@@ -156,7 +156,7 @@ export function FinancialsTab({ c }: { c: AppCtx }) {
       <Card>
         <CardHeader>
           <div><CardTitle>Extracted financial-statement fields</CardTitle>
-          <CardDescription>Parsed by OCR from the audited financial statements and mapped into the 360 RAR Internal Risk parameter table (PRD §5.4, §6.2.1). Fields below {getRule<number>("origination.ocr.reviewBelowPct")}% confidence are flagged for review.</CardDescription></div>
+          <CardDescription>Parsed by OCR from the audited financial statements and mapped into the 360 RAR Internal Risk parameter table. Fields below {getRule<number>("origination.ocr.reviewBelowPct")}% confidence are flagged for review.</CardDescription></div>
         </CardHeader>
         <CardContent>
           <Stack gap="large">
@@ -219,7 +219,7 @@ function BureauSection({ c, isAnalyst }: { c: AppCtx; isAnalyst: boolean }) {
         <Stack direction="horizontal" justify="between" align="start" wrap gap="medium">
           <div>
             <CardTitle>Credit bureau & CRMS</CardTitle>
-            <CardDescription>Mandatory pull from at least two licensed bureaux plus a CBN CRMS search before any approval (PRD §5.2). Simulated connector responses.</CardDescription>
+            <CardDescription>Mandatory pull from at least two licensed bureaux plus a CBN CRMS search before any approval. Simulated connector responses.</CardDescription>
           </div>
           {isAnalyst ? (
             <Button variant={done ? "tertiary" : "primary"} loading={running} iconBefore={<RefreshCw aria-hidden />} onClick={run}>
@@ -248,7 +248,7 @@ function BureauSection({ c, isAnalyst }: { c: AppCtx; isAnalyst: boolean }) {
             </Grid>
             <BureauLines report={c.bureau[2] ?? c.bureau[0]!} />
             <Text variant="caption" tone="muted">
-              Per-institution breakdown feeds the Share of Business Wallet analysis (§6.2.9). Demo date {date(DEMO_NOW)}. {TENANT_PARAM_NOTE}: bureau providers.
+              Per-institution breakdown feeds the Share of Business Wallet analysis. Demo date {date(DEMO_NOW)}. {TENANT_PARAM_NOTE}: bureau providers.
             </Text>
           </Stack>
         )}

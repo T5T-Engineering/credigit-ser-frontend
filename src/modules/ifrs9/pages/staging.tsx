@@ -56,7 +56,7 @@ export function Ifrs9StagingPage() {
           "—"
         ),
         tone: (r.length === 0 ? "neutral" : expected ? (s === 1 ? "success" : s === 2 ? "warning" : "danger") : "info") as "neutral" | "success" | "warning" | "danger" | "info",
-        description: `${r.length} facilities, EAD ${ms(ead)}${expected ? " — PRD default mapping" : " — override / qualitative trigger"}`,
+        description: `${r.length} facilities, EAD ${ms(ead)}${expected ? " — default mapping" : " — override / qualitative trigger"}`,
       };
     }),
   );
@@ -110,7 +110,7 @@ export function Ifrs9StagingPage() {
     {
       metric: "CBN specific provision",
       formula: `Sub-Standard ${pct(cbnSpecificRate("Substandard") * 100, 0)} · Doubtful ${pct(cbnSpecificRate("Doubtful") * 100, 0)} · Lost ${pct(cbnSpecificRate("Lost") * 100, 0)} of outstanding`,
-      sources: "CBN classification by DPD (Loan Review §6.4.1)",
+      sources: "CBN classification by DPD (Loan Review)",
       prd: "§6.7.1",
     },
   ];
@@ -159,7 +159,7 @@ export function Ifrs9StagingPage() {
           <Card variant="filled" className="lg:col-span-5">
             <CardHeader>
               <Stack gap="xsmall">
-                <CardTitle>PRD §6.7.1 mapping</CardTitle>
+                <CardTitle>mapping</CardTitle>
                 <CardDescription>IFRS 9 stage, ECL basis and the CBN provisioning comparison.</CardDescription>
               </Stack>
             </CardHeader>
@@ -190,7 +190,7 @@ export function Ifrs9StagingPage() {
           <CardHeader>
             <Stack gap="xsmall">
               <CardTitle>Significant-increase-in-credit-risk (SICR) triggers</CardTitle>
-              <CardDescription>Tenant-configurable in the Rules &amp; Parameters Engine; the same triggers run in reverse for declassification (§6.7.5).</CardDescription>
+              <CardDescription>Tenant-configurable in the Rules &amp; Parameters Engine; the same triggers run in reverse for declassification.</CardDescription>
             </Stack>
           </CardHeader>
           <CardContent>
@@ -204,7 +204,7 @@ export function Ifrs9StagingPage() {
           <CardHeader>
             <Stack gap="xsmall">
               <CardTitle>Stage transfers — this quarter</CardTitle>
-              <CardDescription>Every migration with its trigger and ECL re-pricing; reportable on the CRO Dashboard (§6.11).</CardDescription>
+              <CardDescription>Every migration with its trigger and ECL re-pricing; reportable on the CRO Dashboard.</CardDescription>
             </Stack>
           </CardHeader>
           <CardContent>

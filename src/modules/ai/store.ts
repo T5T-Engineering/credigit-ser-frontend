@@ -2,8 +2,9 @@
 
 /** AI console store: query history, saved/scheduled queries and AI-output sign-offs (prototype persistence). */
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 import { getRule } from "@/lib/platform/rules";
+import { dataStorage, registerDatabaseStore } from "@/lib/data/workspace-storage";
 
 export type QueryRecord = { id: string; question: string; askedAt: string; askedBy: string; askedById?: string; roleId: string; intent: string; status: "answered" | "refused" | "unknown"; reason?: string };
 /** `cadence` is one of the `ai.schedule.cadences` rule values. */
@@ -35,6 +36,8 @@ export const useAi = create<AiState>()(
       removeSaved: (id) => set((s) => ({ saved: s.saved.filter((x) => x.id !== id) })),
       signOff: (id, so) => set((s) => ({ signOffs: { ...s.signOffs, [id]: so } })),
     }),
-    { name: "credigit.ser.ai", version: 1, storage: createJSONStorage(() => localStorage) },
+    { name: "credigit.ser.ai", version: 1, storage: dataStorage() },
   ),
 );
+
+registerDatabaseStore(useAi);

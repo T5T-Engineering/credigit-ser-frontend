@@ -22,8 +22,8 @@ import {
   StatCard,
   StatusBadge,
   Text,
-  useToast,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { newId } from "@/lib/data/store";
 import { useCan } from "@/lib/iam/permissions";
@@ -51,7 +51,7 @@ export function DeclassificationPage() {
   const canExport = useCan("ifrs9.data.export");
   const actor = useActorName();
   const audit = useAuditLog();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const submitOperation = useSubmitOperation();
   const params = useMemo(() => cureParams(), [rules]); // eslint-disable-line react-hooks/exhaustive-deps
   const decls = useIfrs9((s) => s.declassifications);
@@ -209,7 +209,7 @@ export function DeclassificationPage() {
     {
       metric: "ECL write-back",
       formula: "(ECL at origin stage basis − ECL at destination stage basis) × performing portion",
-      sources: "Same PD/LGD/EAD inputs (§6.7.2); destination basis 12-month or lifetime (§6.7.1)",
+      sources: "Same PD/LGD/EAD inputs; destination basis 12-month or lifetime",
       value: ms(writeBackApproved),
       prd: "§6.7.5",
     },
@@ -240,7 +240,7 @@ export function DeclassificationPage() {
         <Grid columns={{ base: 2, lg: 4 }} gap="medium">
           <StatCard label="Eligible for declassification" value={String(eligible.length)} hint={`of ${candidates.length} Stage 2/3 facilities`} tone="success" />
           <StatCard label="In probation" value={String(candidates.filter((c) => c.elig.status === "In probation").length)} tone="warning" hint="Cure / probation period running" />
-          <StatCard label="Awaiting approval" value={String(pending.length)} hint="Routed through Operations (§6.4.4)" tone="info" />
+          <StatCard label="Awaiting approval" value={String(pending.length)} hint="Routed through Operations" tone="info" />
           <StatCard label="ECL written back" value={ms(writeBackApproved)} hint="Credit to impairment charge (approved)" />
         </Grid>
 

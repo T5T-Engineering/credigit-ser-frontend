@@ -21,11 +21,12 @@ import {
   Select,
   Stack,
   StatusBadge,
+  SubmitButton,
   Text,
   Textarea,
   TextLink,
-  useToast,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { dateTime, moneyShort, pct } from "@/lib/format";
 import { isBreach, limitGate, recommendationLabel, recommendationLabelTones, recommendationTones } from "../logic";
 import { inGroup, PARAMS_HREF, TENANT_PARAM_NOTE } from "../params";
@@ -54,7 +55,7 @@ export function RecommendationTab({ c }: { c: AppCtx }) {
 
 function EngineCard({ c }: { c: AppCtx }) {
   const { app, engine } = c;
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const pendingOverride = usePendingFor(SUBJECT.override, app.id);
   const minReason = getRule<number>("origination.override.minReasonLength");
   const canAdopt = c.canEdit && inGroup("recommenders", c.roleId) && ["Analysis", "Recommendation", "Approval"].includes(app.stage) && !pendingOverride;
@@ -74,7 +75,7 @@ function EngineCard({ c }: { c: AppCtx }) {
           <Cpu aria-hidden className="size-5 text-fg-muted" />
           <CardTitle>Recommendation engine</CardTitle>
         </Stack>
-        <CardDescription>System-generated from the 360 RAR position, COP confidence, bureau findings, security cover and the limit gate (PRD §6.1.5). Rule set: {TENANT_PARAM_NOTE.toLowerCase()}.</CardDescription></div>
+        <CardDescription>System-generated from the 360 RAR position, COP confidence, bureau findings, security cover and the limit gate. Rule set: {TENANT_PARAM_NOTE.toLowerCase()}.</CardDescription></div>
       </CardHeader>
       <CardContent>
         <Stack gap="medium">
@@ -102,9 +103,9 @@ function EngineCard({ c }: { c: AppCtx }) {
                 </Field>
               ) : null}
               <div>
-                <Button disabled={override && reason.trim().length < minReason} onClick={adopt}>
+                <SubmitButton disabled={override && reason.trim().length < minReason} onClick={adopt}>
                   {override ? "Request override" : "Adopt recommendation"}
-                </Button>
+                </SubmitButton>
               </div>
             </Stack>
           ) : null}
@@ -118,7 +119,7 @@ function LimitGateCard({ c }: { c: AppCtx }) {
   const { app, gate } = c;
   const obligors = useObligors();
   const sectors = useSectors();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const pendingException = usePendingFor(SUBJECT.exception, app.id);
   const [justification, setJustification] = useState("");
   const canRun = c.canEdit && inGroup("analysts", c.roleId) && ["Draft", "Documents", "Analysis", "Recommendation"].includes(app.stage);
@@ -132,7 +133,7 @@ function LimitGateCard({ c }: { c: AppCtx }) {
         <Stack direction="horizontal" justify="between" align="start" wrap gap="medium">
           <div>
             <CardTitle>Portfolio-limit gate</CardTitle>
-            <CardDescription>Checked before submission to the next tier against the single-obligor and sectoral limits (PRD §5.6, §6.1.5).</CardDescription>
+            <CardDescription>Checked before submission to the next tier against the single-obligor and sectoral limits.</CardDescription>
           </div>
           {canRun ? (
             <Button
@@ -225,23 +226,23 @@ function CovenantCard({ c }: { c: AppCtx }) {
     // Nothing from the library saved yet → start from the auto-tagged suggestion.
     return new Set((saved.length ? saved : clauses).map((k) => k.id));
   });
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const custom = app.covenants.filter((t) => !clauses.some((k) => k.text === t));
-  const groups = ["§7.1 Conditions precedent", "§7.3 General covenants"] as const;
+  const groups = ["Conditions precedent", "General covenants"] as const;
   return (
     <Card>
       <CardHeader>
         <Stack direction="horizontal" justify="between" align="start" wrap gap="medium">
           <div>
             <CardTitle>Covenant & condition tagging</CardTitle>
-            <CardDescription>Auto-tagged from the master conditions / covenants library based on product, sector, tenor, collateral type and 360 RAR posture (PRD §6.1.5, §7). Tagged clauses carry into the offer letter.</CardDescription>
+            <CardDescription>Auto-tagged from the master conditions / covenants library based on product, sector, tenor, collateral type and 360 RAR posture. Tagged clauses carry into the offer letter.</CardDescription>
           </div>
           {canTag ? (
             <Stack direction="horizontal" gap="small" wrap>
               <Button variant="tertiary" onClick={() => setSelected(new Set(clauses.map((k) => k.id)))}>
                 Select all suggested
               </Button>
-              <Button
+              <SubmitButton
                 onClick={async () => {
                   const texts = [...custom, ...clauses.filter((k) => selected.has(k.id)).map((k) => k.text)];
                   const res = await recordChange(app.id, { point: "covenants.tag", event: "origination.covenants.tagged", action: "Tagged covenants and conditions for offer letter", changes: { covenants: texts }, before: `${app.covenants.length} clauses`, after: `${texts.length} clauses`, payload: { count: texts.length } });
@@ -249,7 +250,7 @@ function CovenantCard({ c }: { c: AppCtx }) {
                 }}
               >
                 Save to application
-              </Button>
+              </SubmitButton>
             </Stack>
           ) : null}
         </Stack>

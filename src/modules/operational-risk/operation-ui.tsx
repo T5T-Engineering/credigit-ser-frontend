@@ -5,9 +5,9 @@
  * pending badge (links to /operations/item?id=), submission outcome and an operations list.
  */
 import Link from "next/link";
-import { Alert, Badge, StatusBadge, Text, TextLink } from "@credigit/web-ui";
+import { Badge, StatusBadge, Text, TextLink } from "@credigit/web-ui";
 import { dateTime } from "@/lib/format";
-import { usePendingFor, useOperationsStore, type OperationInstance, type SubmitResult } from "@/lib/platform/operations";
+import { usePendingFor, useOperationsStore, type OperationInstance } from "@/lib/platform/operations";
 
 export const operationHref = (id: string) => `/operations/item?id=${encodeURIComponent(id)}`;
 
@@ -24,21 +24,8 @@ export function PendingBadge({ subjectType, subjectId }: { subjectType: string; 
   );
 }
 
-/** Outcome of a submission: link to the operation, "applied" or the reason it failed. */
-export function SubmitOutcome({ result, appliedText = "Applied — the workflow for this change has no approval steps." }: { result: SubmitResult | null; appliedText?: string }) {
-  if (!result) return null;
-  if (!result.ok) return <Alert tone="danger">{result.reason}</Alert>;
-  return result.applied ? (
-    <Alert tone="success">{appliedText}</Alert>
-  ) : (
-    <Alert tone="success" title="Sent for approval">
-      The change applies once it&rsquo;s approved in Operations.{" "}
-      <TextLink href={operationHref(result.instance.id)} as={Link}>
-        Track request {result.instance.id}
-      </TextLink>
-    </Alert>
-  );
-}
+/** Outcome of a submission as a popup: "applied", sent for approval (with the request link) or the reason it failed. */
+export { SubmitOutcome } from "@/modules/admin/operation-ui";
 
 /** Operations of the given types (newest first). */
 export function useOperationsOfType(types: string[]): OperationInstance[] {

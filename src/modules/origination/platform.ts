@@ -37,7 +37,7 @@ import { useOriginationStore } from "./data";
 import { slug } from "./params";
 
 const M = "origination";
-const DEMO = "Tenant parameter (demo value)";
+const DEMO = "Tenant parameter";
 
 // ---------------------------------------------------------------- business rules
 
@@ -59,15 +59,15 @@ const rule = (r: Omit<RuleDefinition, "module">): RuleDefinition => ({ module: M
 
 defineRules([
   // Limits & exposure (PRD §5.6 / CBN prudential guidelines)
-  rule({ key: "origination.singleObligorPct", label: "Single-obligor limit", description: "Maximum exposure to one obligor as % of unimpaired shareholders' funds.", category: "Limits & exposure", type: "percent", default: 20, min: 0, max: 100, step: 0.5, source: "PRD §5.6 — CBN 3.2(a)" }),
-  rule({ key: "origination.largeExposurePct", label: "Large-exposure threshold", description: "Exposure at or above this % of shareholders' funds is a large exposure.", category: "Limits & exposure", type: "percent", default: 10, min: 0, max: 100, step: 0.5, source: "PRD §5.6 — CBN 3.2(d)" }),
-  rule({ key: "origination.offBalanceWeightPct", label: "Off-balance-sheet weighting", description: "Weight applied to contingent (off-balance-sheet) products in the single-obligor test.", category: "Limits & exposure", type: "percent", default: 33.33, min: 0, max: 100, step: 0.01, source: "PRD §5.6 — CBN 3.2(b)" }),
-  rule({ key: "origination.offBalanceProducts", label: "Off-balance-sheet products", description: "Catalogue products treated as contingent for the single-obligor weighting.", category: "Limits & exposure", type: "list", default: ["Bank guarantee", "Advance payment guarantee", "Trade finance (LC)"], source: "PRD §5.6 — CBN 3.2(b)" }),
+  rule({ key: "origination.singleObligorPct", label: "Single-obligor limit", description: "Maximum exposure to one obligor as % of unimpaired shareholders' funds.", category: "Limits & exposure", type: "percent", default: 20, min: 0, max: 100, step: 0.5, source: "CBN 3.2(a)" }),
+  rule({ key: "origination.largeExposurePct", label: "Large-exposure threshold", description: "Exposure at or above this % of shareholders' funds is a large exposure.", category: "Limits & exposure", type: "percent", default: 10, min: 0, max: 100, step: 0.5, source: "CBN 3.2(d)" }),
+  rule({ key: "origination.offBalanceWeightPct", label: "Off-balance-sheet weighting", description: "Weight applied to contingent (off-balance-sheet) products in the single-obligor test.", category: "Limits & exposure", type: "percent", default: 33.33, min: 0, max: 100, step: 0.01, source: "CBN 3.2(b)" }),
+  rule({ key: "origination.offBalanceProducts", label: "Off-balance-sheet products", description: "Catalogue products treated as contingent for the single-obligor weighting.", category: "Limits & exposure", type: "list", default: ["Bank guarantee", "Advance payment guarantee", "Trade finance (LC)"], source: "CBN 3.2(b)" }),
   rule({ key: "origination.limitGate.warnUtilisationPct", label: "Limit utilisation warning", description: "Utilisation (% of limit) above which the limit gate shows amber.", category: "Limits & exposure", type: "percent", default: 85, min: 0, max: 100, source: DEMO }),
   rule({ key: "origination.coverage.warnPct", label: "Security cover warning", description: "Lending-value cover (%) below which security cover shows red; below 100% it shows amber.", category: "Limits & exposure", type: "percent", default: 70, min: 0, max: 100, source: DEMO }),
   // COP Ratio (PRD §6.1.4)
-  rule({ key: "origination.cop.highBand", label: "COP Ratio — high confidence from", description: "COP Ratio at or above this is High confidence (declared financials at full weight).", category: "COP Ratio", type: "number", default: 0.85, min: 0, max: 2, step: 0.01, source: "PRD §6.1.4 (example banding)" }),
-  rule({ key: "origination.cop.mediumBand", label: "COP Ratio — medium confidence from", description: "COP Ratio at or above this (and below High) is Medium confidence; below it is Low and needs an explanation.", category: "COP Ratio", type: "number", default: 0.6, min: 0, max: 2, step: 0.01, source: "PRD §6.1.4 (example banding)" }),
+  rule({ key: "origination.cop.highBand", label: "COP Ratio — high confidence from", description: "COP Ratio at or above this is High confidence (declared financials at full weight).", category: "COP Ratio", type: "number", default: 0.85, min: 0, max: 2, step: 0.01, source: "(example banding)" }),
+  rule({ key: "origination.cop.mediumBand", label: "COP Ratio — medium confidence from", description: "COP Ratio at or above this (and below High) is Medium confidence; below it is Low and needs an explanation.", category: "COP Ratio", type: "number", default: 0.6, min: 0, max: 2, step: 0.01, source: "(example banding)" }),
   rule({ key: "origination.cop.gaugeMax", label: "COP Ratio — gauge maximum", description: "Upper end of the COP Ratio gauge.", category: "COP Ratio", type: "number", default: 1.2, min: 1, max: 3, step: 0.05, source: DEMO }),
   rule({ key: "origination.cop.explanationMinLength", label: "COP explanation — minimum length", description: "Characters required in the customer explanation for a Low COP Ratio.", category: "COP Ratio", type: "number", default: 10, min: 1, max: 500, source: DEMO }),
   // Recommendation engine (PRD §6.1.5 names the outputs, not the rules — tenant parameters)
@@ -84,7 +84,7 @@ defineRules([
   rule({ key: "origination.sla.overrideHours", label: "SLA — recommendation override review", description: "Hours to review a recommendation override.", category: "SLA", type: "duration", durationUnit: "hours", default: 24, min: 1, max: 720, source: DEMO }),
   // Products
   rule({ key: "origination.products", label: "Origination products", description: "Catalogue products offered in a new credit request.", category: "Products", type: "list", default: ["Term loan", "Overdraft", "Revolving credit", "Lease finance", "Trade finance (LC)", "Bank guarantee", "Advance payment guarantee", "Invoice discounting", "Mortgage", "Asset finance"], source: DEMO }),
-  rule({ key: "origination.fastTrack.variants", label: "Fast-Track product variants", description: "Fast-Track eligible variants as “Label = Catalogue product”.", category: "Products", type: "list", default: ["APG issuance = Advance payment guarantee", "Bid bond = Bank guarantee", "Custom bond = Bank guarantee", "Temporary overdraft (TOD) = Overdraft", "Cash-backed facility = Term loan"], source: "PRD §6.1.3 (see docs/OPEN-QUESTIONS.md O2)" }),
+  rule({ key: "origination.fastTrack.variants", label: "Fast-Track product variants", description: "Fast-Track eligible variants as “Label = Catalogue product”.", category: "Products", type: "list", default: ["APG issuance = Advance payment guarantee", "Bid bond = Bank guarantee", "Custom bond = Bank guarantee", "Temporary overdraft (TOD) = Overdraft", "Cash-backed facility = Term loan"], source: "(see docs/OPEN-QUESTIONS.md O2)" }),
   rule({ key: "origination.defaultTenorMonths", label: "Default tenor", description: "Tenor pre-filled on a new request (months).", category: "Products", type: "number", unit: "months", default: 12, min: 1, max: 360, source: DEMO }),
   // Documents (PRD §5.4)
   rule({ key: "origination.docs.required", label: "Required documents — all obligors", description: "Document kinds every application needs.", category: "Documents", type: "list", default: ["Audited financials", "Bank statement", "KYC"], source: DEMO }),
@@ -93,9 +93,9 @@ defineRules([
   rule({ key: "origination.docs.maxUploadMb", label: "Maximum file size", description: "Largest file accepted for upload (MB).", category: "Documents", type: "number", unit: "MB", default: 25, min: 1, max: 500, source: DEMO }),
   rule({ key: "origination.ocr.reviewBelowPct", label: "OCR review threshold", description: "Extracted fields below this OCR confidence (%) are flagged for review.", category: "Documents", type: "percent", default: 90, min: 0, max: 100, source: DEMO }),
   // Role mappings
-  rule({ key: "origination.roles.initiators", label: "Roles that initiate applications", description: "Who may create, submit, withdraw and submit for approval.", category: "Role mappings", type: "roles", default: ["account-officer", "bdm"], source: "PRD §6.1.1 step 2" }),
-  rule({ key: "origination.roles.analysts", label: "Roles that perform credit analysis", description: "Who runs bureau / CRMS, the limit gate, verifies documents and completes analysis.", category: "Role mappings", type: "roles", default: ["credit-analyst"], source: "PRD §6.1.1 step 5" }),
-  rule({ key: "origination.roles.recommenders", label: "Roles that adopt the recommendation", description: "Who adopts or overrides the engine recommendation and tags covenants.", category: "Role mappings", type: "roles", default: ["credit-analyst", "cco"], source: "PRD §6.1.5" }),
+  rule({ key: "origination.roles.initiators", label: "Roles that initiate applications", description: "Who may create, submit, withdraw and submit for approval.", category: "Role mappings", type: "roles", default: ["account-officer", "bdm"], source: "Platform default" }),
+  rule({ key: "origination.roles.analysts", label: "Roles that perform credit analysis", description: "Who runs bureau / CRMS, the limit gate, verifies documents and completes analysis.", category: "Role mappings", type: "roles", default: ["credit-analyst"], source: "Platform default" }),
+  rule({ key: "origination.roles.recommenders", label: "Roles that adopt the recommendation", description: "Who adopts or overrides the engine recommendation and tags covenants.", category: "Role mappings", type: "roles", default: ["credit-analyst", "cco"], source: "Platform default" }),
   rule({ key: "origination.roles.releasers", label: "Roles that release to offer letter", description: "Who releases a fully approved request to offer-letter generation.", category: "Role mappings", type: "roles", default: ["account-officer", "bdm", "cco", "credit-analyst"], source: DEMO }),
   rule({ key: "origination.roles.uploaders", label: "Roles that upload documents", description: "Who uploads documents and new versions.", category: "Role mappings", type: "roles", default: ["account-officer", "bdm", "credit-analyst"], source: DEMO }),
   // Collateral pledged at origination
@@ -125,7 +125,7 @@ TIER_SLOTS.forEach((_slot, i) => {
     ...creditHandler,
     type: `${CREDIT_OP_PREFIX}.t${n}`,
     name: `Credit facility approval — ${n} tier${n > 1 ? "s" : ""}`,
-    description: `Standard Credit chart-flow up to tier ${n} (PRD §6.1.1–6.1.2). Steps are generated from Business rules → Credit chart-flow; co-signers sign together and dissent goes to the adjudicator.`,
+    description: `Standard Credit chart-flow up to tier ${n}. Steps are generated from Business rules → Credit chart-flow; co-signers sign together and dissent goes to the adjudicator.`,
     get defaultSteps() {
       return approvalStepsFor(getChartFlow().slice(0, n));
     },
@@ -135,7 +135,7 @@ registerOperation<CreditPayload>({
   ...creditHandler,
   type: `${CREDIT_OP_PREFIX}.fast-track`,
   name: "Credit facility approval — Fast-Track",
-  description: "Fast-Track Credit within the Fast-Track ceiling: the co-signer pair signs together; dissent goes to the adjudicator (PRD §6.1.3).",
+  description: "Fast-Track Credit within the Fast-Track ceiling: the co-signer pair signs together; dissent goes to the adjudicator.",
   get defaultSteps() {
     return approvalStepsFor([getFastTrackTier()]);
   },
@@ -145,7 +145,7 @@ registerOperation<{ applicationId: string; breach: string; justification: string
   type: LIMIT_EXCEPTION_OP,
   name: "Portfolio-limit exception",
   module: M,
-  description: "Informed exception decision on a single-obligor or sectoral limit breach before the request can progress (PRD §5.6, §6.1.5).",
+  description: "Informed exception decision on a single-obligor or sectoral limit breach before the request can progress.",
   get defaultSteps() {
     return [step("decide", "CRO / Board exception decision", ["cro", "board"], getRule<number>("origination.sla.limitExceptionHours"))];
   },
@@ -157,7 +157,7 @@ registerOperation<OverridePayload>({
   type: OVERRIDE_OP,
   name: "Recommendation override",
   module: M,
-  description: "Overriding the system recommendation needs a reason and a second-line review (PRD §6.1.5).",
+  description: "Overriding the system recommendation needs a reason and a second-line review.",
   get defaultSteps() {
     return [step("review", "CCO / CRO review", ["cco", "cro"], getRule<number>("origination.sla.overrideHours"))];
   },
@@ -276,7 +276,7 @@ registerHook<DecideCtx>({
     const step = currentStep(instance);
     if (instance.stepIndex === 0 && step?.approverRoles.includes("bdm") && actor.roleId === "bdm") {
       const pending = useDb.getState().collateral.filter((c) => app.collateralIds.includes(c.id) && (c.perfection === "Not started" || c.perfection === "Search in progress"));
-      if (pending.length) return { veto: "Collateral due diligence is not complete — Legal must finish the search before the BDM can concur (PRD §6.1.1 step 3)." };
+      if (pending.length) return { veto: "Collateral due diligence is not complete — Legal must finish the search before the BDM can concur." };
     }
   },
 });

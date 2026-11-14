@@ -47,8 +47,9 @@ test.describe("Operational risk", () => {
     await modal.getByLabel("Reason").fill("Board RMC widened tolerance after the Q3 hiring plan was approved.");
     await modal.getByRole("button", { name: "Submit for approval" }).click();
     await expect(modal).toBeHidden();
-    await page.keyboard.press("Escape");
+    // The outcome popup confirms the request; Escape closes it, then the drawer.
     await expect(page.getByText(/sent for approval/i).first()).toBeVisible();
+    await page.keyboard.press("Escape");
 
     await approveInOps(page, "head-of-risk", "KRI-HC-02 thresholds: 4/7 → 5/8");
     await expect(page.getByText(/^approved/i).first()).toBeVisible();

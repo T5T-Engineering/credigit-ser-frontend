@@ -552,7 +552,7 @@ export function percentileRank(dist: Distribution, value: number): number {
 
 export const macroSnapshot = {
   asAt: "2026-10-31",
-  source: "NBS & CBN MPC data feed (demo values)",
+  source: "NBS & CBN MPC data feed",
   indicators: [
     { label: "Headline inflation (y/y)", value: "18.4%", trend: "Easing" },
     { label: "Monetary Policy Rate", value: "26.50%", trend: "Held" },
@@ -598,7 +598,7 @@ export const walletPositionMeta: Record<
     tone: "warning",
     read: "The bank carries a large share of this customer's borrowing but sees only a small share of its transaction turnover; independent visibility over day-to-day cash flow is limited relative to the exposure.",
     action:
-      "Enforce or negotiate a proceeds-domiciliation or minimum-turnover covenant (§6.4.3) to migrate transaction banking; Loan Review to apply closer monitoring frequency until turnover share improves.",
+      "Enforce or negotiate a proceeds-domiciliation or minimum-turnover covenant to migrate transaction banking; Loan Review to apply closer monitoring frequency until turnover share improves.",
   },
   "Marginal Relationship": {
     tone: "neutral",
@@ -662,14 +662,14 @@ export function walletFor(obligorId: string, verifiedTurnover: number, tenantOut
       tenant: true,
       creditTurnover: tenantTurnover,
       outstanding: tenantOutstanding,
-      source: "CBA reconciled turnover (§5.1) · facility register",
+      source: "CBA reconciled turnover · facility register",
     },
     ...picks.map((bank, i) => ({
       bank,
       tenant: false,
       creditTurnover: Math.round((otherTurnover * weights[i]!) / wsum),
       outstanding: Math.round((otherOutstandingTotal * weights[(i + 1) % banks]!) / wsum),
-      source: "Other-bank statement (§5.3) · bureau/CRMS per-bank breakdown (§5.2)",
+      source: "Other-bank statement · bureau/CRMS per-bank breakdown",
     })),
   ];
   const totalT = lines.reduce((a, l) => a + l.creditTurnover, 0);

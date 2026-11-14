@@ -40,7 +40,7 @@ test.describe("Credit administration → disbursement", () => {
     const drawer = page.getByRole("dialog");
     await expect(drawer.getByText(/Released by/)).toBeVisible();
     await drawer.getByRole("button", { name: "Submit for authorisation" }).click();
-    await expect(drawer.getByText(/prepared and sent to a Checker/)).toBeVisible();
+    await expect(page.getByText(/prepared and sent to a Checker/).first()).toBeVisible();
 
     // The same person switching to the Checker role is blocked (no self-approval) — in the workspace and in Operations.
     await switchRoleSamePerson(page, "disbursement-checker", `/disbursement/?facility=${fac.id}`);
@@ -57,7 +57,7 @@ test.describe("Credit administration → disbursement", () => {
     await switchRole(page, "disbursement-checker", `/disbursement/?facility=${fac.id}`);
     await expect(page.getByRole("button", { name: /Account menu: Ikhidie Nwachukwu/ })).toBeVisible();
     await decide(page, "Authorise", "Beneficiary and amount verified against the mandate.");
-    await expect(page.getByRole("dialog").getByText(/Authorised — posted to the CBA/)).toBeVisible();
+    await expect(page.getByText(/Authorised — posted to the CBA/).first()).toBeVisible();
     await expect.poll(async () => (await facilityFor(page, APP))?.status).toBe("Active");
     expect(await applicationStage(page, APP)).toBe("Booked");
   });
@@ -74,7 +74,7 @@ test.describe("Credit administration → disbursement", () => {
     const submit = drawer.getByRole("button", { name: "Submit for authorisation" });
     await expect(route.or(submit)).toBeVisible();
     await (await route.isVisible() ? route : submit).click();
-    await expect(drawer.getByText(/sent to a Checker for authorisation/)).toBeVisible();
+    await expect(page.getByText(/sent to a Checker for authorisation/).first()).toBeVisible();
 
     await switchRole(page, "disbursement-checker", `/disbursement/?facility=${fac.id}`);
     // Cancel the step-up: nothing is recorded.
@@ -90,7 +90,7 @@ test.describe("Credit administration → disbursement", () => {
 
     // Verify with a code and authorise.
     await decide(page, "Authorise", "Verified against the CBA mandate.", { stepUp: true });
-    await expect(page.getByRole("dialog").getByText(/Authorised — posted to the CBA/)).toBeVisible();
+    await expect(page.getByText(/Authorised — posted to the CBA/).first()).toBeVisible();
     await expect.poll(async () => (await facilityFor(page, APP))?.status).toBe("Active");
     expect(await applicationStage(page, APP)).toBe("Booked");
   });

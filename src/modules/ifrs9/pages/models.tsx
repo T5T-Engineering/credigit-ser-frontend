@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
   DataTable,
+  SubmitButton,
   type DataTableColumn,
   DescriptionList,
   Drawer,
@@ -25,8 +26,8 @@ import {
   Text,
   Textarea,
   Input,
-  useToast,
 } from "@credigit/web-ui";
+import { useSaveFeedback } from "@/lib/ui/feedback";
 import { ModulePage } from "@/components/module-page";
 import { useCan } from "@/lib/iam/permissions";
 import { date, dateTime } from "@/lib/format";
@@ -61,7 +62,7 @@ export function Ifrs9ModelsPage() {
   const canExport = useCan("ifrs9.data.export");
   const actor = useActorName();
   const audit = useAuditLog();
-  const { toast } = useToast();
+  const { toast } = useSaveFeedback();
   const submitOperation = useSubmitOperation();
   const interval = useRule<number>("ifrs9.model.reviewIntervalMonths");
   const instances = useOperationsStore((s) => s.instances);
@@ -186,7 +187,7 @@ export function Ifrs9ModelsPage() {
         <Card variant="outlined">
           <CardHeader>
             <Stack gap="xsmall">
-              <CardTitle>Model inputs — source mapping (§6.7.2)</CardTitle>
+              <CardTitle>Model inputs — source mapping</CardTitle>
               <CardDescription>Where each ECL input comes from in the Risk Data Spine.</CardDescription>
             </Stack>
           </CardHeader>
@@ -247,7 +248,7 @@ export function Ifrs9ModelsPage() {
             <CardHeader>
               <Stack gap="xsmall">
                 <CardTitle>Model change log</CardTitle>
-                <CardDescription>Every version, validation and approval decision, retained for audit (§10.3).</CardDescription>
+                <CardDescription>Every version, validation and approval decision, retained for audit.</CardDescription>
               </Stack>
             </CardHeader>
             <CardContent>
@@ -316,7 +317,7 @@ export function Ifrs9ModelsPage() {
         footer={
           open && canSubmit(open) ? (
             <Stack direction="horizontal" gap="small" wrap>
-              <Button onClick={() => startSubmit(open)}>Submit for validation &amp; approval</Button>
+              <SubmitButton onClick={() => startSubmit(open)}>Submit for validation &amp; approval</SubmitButton>
             </Stack>
           ) : undefined
         }
@@ -372,9 +373,9 @@ export function Ifrs9ModelsPage() {
             <Button variant="tertiary" onClick={() => setSubmitFor(null)}>
               Cancel
             </Button>
-            <Button onClick={() => void confirm()} disabled={change.trim().length < 5}>
+            <SubmitButton onClick={() => void confirm()} disabled={change.trim().length < 5}>
               Submit to Operations
-            </Button>
+            </SubmitButton>
           </Stack>
         }
       >

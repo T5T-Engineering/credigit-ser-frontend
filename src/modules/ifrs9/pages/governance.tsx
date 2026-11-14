@@ -10,11 +10,11 @@ const PANELS: { title: string; keys: string[]; description?: string }[] = [
   { title: "Staging & SICR triggers", keys: IFRS9_RULE_GROUPS.staging },
   { title: "CBN prudential provisioning", keys: IFRS9_RULE_GROUPS.provisioning },
   { title: "Declassification (cure & probation)", keys: IFRS9_RULE_GROUPS.cure },
-  { title: "PD calibration & forward-looking overlay", keys: IFRS9_RULE_GROUPS.pd, description: "Demo calibration until the approved model register supplies these values (PRD §6.7.2)." },
+  { title: "PD calibration & forward-looking overlay", keys: IFRS9_RULE_GROUPS.pd, description: "Demo calibration until the approved model register supplies these values." },
   { title: "LGD & EAD", keys: IFRS9_RULE_GROUPS.lgdEad },
   { title: "Model governance", keys: IFRS9_RULE_GROUPS.models },
   { title: "ICAAP — capital adequacy & Pillar 2", keys: IFRS9_RULE_GROUPS.capital },
-  { title: "ICAAP — capital base (demo calibration)", keys: IFRS9_RULE_GROUPS.capitalBase },
+  { title: "ICAAP — capital base", keys: IFRS9_RULE_GROUPS.capitalBase },
   {
     title: "ICAAP — stress scenarios",
     keys: IFRS9_RULE_GROUPS.scenarios,
@@ -26,7 +26,7 @@ const PANELS: { title: string; keys: string[]; description?: string }[] = [
 export function Ifrs9GovernancePage() {
   const canRequestRuleChange = useCan("rules.rules.request-change");
   return (
-    <ModulePage module="ifrs9" title="Rules & approvals" description="Every IFRS 9 / ICAAP parameter with its PRD source, and the approvals routed through the Operations workflow.">
+    <ModulePage module="ifrs9" title="Rules & approvals" description="Every IFRS 9 / ICAAP parameter with its source, and the approvals routed through the Operations workflow.">
       <Stack gap="large">
         <ModuleApprovals modules={["ifrs9"]} limit={10} />
         <Grid columns={{ base: 1 }} gap="large">
