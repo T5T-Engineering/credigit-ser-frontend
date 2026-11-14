@@ -1,7 +1,9 @@
 "use client";
 
+import { backendSsoEnabled } from "@/lib/auth/backend-sso";
+import { BackendApplicationPage } from "@/modules/origination/backend/record-page";
 import { ApplicationRecordPage } from "@/modules/origination/pages/application-page";
 
 export default function Page() {
-  return <ApplicationRecordPage />;
+  return backendSsoEnabled ? <BackendApplicationPage /> : <ApplicationRecordPage />;
 }

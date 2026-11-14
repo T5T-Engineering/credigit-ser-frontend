@@ -7,7 +7,7 @@
 | PRD | §6.1, §6.1.1–6.1.5, §4.1–4.2, §5.1–5.6 (inputs), §8 (COP Ratio) |
 | Owner (business) | Account Officer / BDM (initiation), Credit Analyst (analysis), chart-flow approvers GH → CCO → HD → CRO → MD → MCC → BCC → Board |
 | Counterpart | [credigit-ser-core-backend `docs/modules/CreditOrigination/`](../../../../credigit-ser-core-backend/docs/modules/CreditOrigination/REQUIREMENTS.md) |
-| Last reviewed | 2026-11-12 |
+| Last reviewed | 2026-11-14 |
 
 ## 1. Purpose and scope
 
@@ -21,6 +21,17 @@ ladder in Operations. A fully approved request is released to the Offer Letter m
   recommendation overrides, release to offer.
 - Out of scope: 360 RAR scoring (credit-analysis module), offer-letter generation (offer-letters), conditions / disbursement
   (credit-admin, disbursement), collateral perfection (collateral), self-service customer portal (PRD §6.1.1 step 1 — not built).
+
+**Two data modes.** Without a backend (demo) the module runs on browser data as described below. With a backend
+(`NEXT_PUBLIC_API_BASE_URL` set, `backendSsoEnabled`) the pipeline, new-application form and application record read and write the
+backend CreditOrigination API (`/api/v1/origination`, backend ADR-0011); documents use the platform DMS (`SubjectDocuments`, subject
+type `Application`, backend ADR-0021); sector and branch pickers read master data; approvals, limit exceptions and overrides are backend
+Operations instances decided on `/operations/item`. Backend mode covers what the backend has built: create / update / submit
+(ORG-FR-01), documents (ORG-FR-03, without OCR), recording the analysis outcome with limit gate and system recommendation (ORG-FR-07,
+08 — values entered by the analyst, backend TD-024), limit exception and override requests, chart-flow approval (ORG-FR-10, 11, 13,
+15, 22), withdrawal (ORG-FR-17), pipeline / queue / mine / export (ORG-FR-18) and comments (ORG-FR-21). The demo-only sections
+(financials & COP, bureau / CRMS, 360 RAR, collateral, covenants, memo, release to offer) are listed on the record as "not on the
+backend yet" until their backend services exist (TD-980).
 
 ## 2. Users and permissions
 
@@ -134,7 +145,8 @@ ladder in Operations. A fully approved request is released to the Offer Letter m
 | Portfolio limit engine | Internal | Limit gate | Obligor / sector exposure (§5.6) | Computed client-side from spine |
 | Credit-analysis (360 RAR) | Internal | Record / engine | Posture, grade | In-app read |
 | Offer letters | Outbound (internal) | Release to offer | Approved application | Stage change + event |
-| Backend CreditOrigination API | Both | All actions | Application, analysis, approval | Not wired (backend exists, ADR-0011) |
+| Backend CreditOrigination API | Both | Every action in backend mode | Application, analysis, limit exception, override, approval, withdrawal, comments, CSV export | Wired in backend mode (`src/modules/origination/backend/api.ts`) |
+| Platform DMS (`/api/v1/documents`) | Both | Documents tab in backend mode | Subject `Application`; required types = rule `origination.docs.required` / `.requiredNonRetail` mapped to master-data `document-type` codes by code or label | Wired in backend mode (`SubjectDocuments`) |
 
 ## 9. Non-functional
 

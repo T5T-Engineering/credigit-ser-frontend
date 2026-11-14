@@ -92,6 +92,8 @@ defineRules([
   rule({ key: "origination.docs.acceptedTypes", label: "Accepted file types", description: "File extensions accepted for upload (comma-separated).", category: "Documents", type: "text", default: ".pdf,.doc,.docx,.xlsx,.png,.jpg,.jpeg,.tif", source: DEMO }),
   rule({ key: "origination.docs.maxUploadMb", label: "Maximum file size", description: "Largest file accepted for upload (MB).", category: "Documents", type: "number", unit: "MB", default: 25, min: 1, max: 500, source: DEMO }),
   rule({ key: "origination.ocr.reviewBelowPct", label: "OCR review threshold", description: "Extracted fields below this OCR confidence (%) are flagged for review.", category: "Documents", type: "percent", default: 90, min: 0, max: 100, source: DEMO }),
+  // Comments (backend rule of the same key and default)
+  rule({ key: "origination.comments.maxLength", label: "Comment — maximum length", description: "Characters allowed in one comment on a credit request.", category: "Comments", type: "number", default: 2000, min: 1, max: 20000, source: DEMO }),
   // Role mappings
   rule({ key: "origination.roles.initiators", label: "Roles that initiate applications", description: "Who may create, submit, withdraw and submit for approval.", category: "Role mappings", type: "roles", default: ["account-officer", "bdm"], source: "Platform default" }),
   rule({ key: "origination.roles.analysts", label: "Roles that perform credit analysis", description: "Who runs bureau / CRMS, the limit gate, verifies documents and completes analysis.", category: "Role mappings", type: "roles", default: ["credit-analyst"], source: "Platform default" }),
