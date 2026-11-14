@@ -1,0 +1,103 @@
+# CI on every PR and push: install → lint → typecheck → static build (proves the export compiles). Pushes to an
+# environment branch also build that environment's release and deploy it to its GitHub Environment:
+#   develop → dev · test → test · uat → uat · staging → staging · production → production
+# The site is a static export (next.config.ts `output: "export"`): NEXT_PUBLIC_* settings are compiled in at build time,
+# so each environment is built by deploy.yml with its own Environment variables (no shared artefact across environments).
+# Each deploy job is skipped until the repository variable DEPLOY_ENABLED_<ENV> is 'true' (see docs/DEPLOYMENT.md), so
+# pushes stay green before an environment's secrets exist. Actions are pinned to commit SHAs.
+name: ci-cd
+
+on:
+  push:
+    branches: [develop, test, uat, staging, production, work-in-progress, 'feature/**', 'fix/**']
+  pull_request:
+    branches: [develop, test, uat, staging, production]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: '26.13.0'
+
+jobs:
+  verify:
+    name: Lint, typecheck, build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      # No unit-test runner is installed yet (package.json `test` = vitest, not a dependency; no test files) — TECH-DEBT TD-955.
+      - name: Build (static export, demo defaults)
+        run: npm run build
+        env:
+          NEXT_PUBLIC_DEMO_ACCESS: 'true'
+      - name: Check deploy files
+        run: |
+          # The PM2 script must exist and be shipped by deploy.yml's package step.
+          node -e 'const c=require("./pm2.config.json"); const s=c.apps?.[0]?.script; if(!s || !require("fs").existsSync(s)) { console.error("pm2.config.json script missing: " + s); process.exit(1) }'
+          grep -q "$(node -p 'require("./pm2.config.json").apps[0].script')" .github/workflows/deploy.yml || { echo "::error::deploy.yml does not package the PM2 script"; exit 1; }
+          node -e 'JSON.parse(require("fs").readFileSync("serve.json","utf8"))'
+          bash -n scripts/deploy/activate.sh
+      - name: Audit production dependencies (report only; fails on high/critical)
+        run: |
+          npm audit --omit=dev || true
+          npm audit --omit=dev --audit-level=high
+
+  deploy-dev:
+    name: Deploy dev
+    needs: verify
+    if: github.event_name == 'push' && github.ref_name == 'develop' && vars.DEPLOY_ENABLED_DEV == 'true'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: dev
+    secrets: inherit
+
+  deploy-test:
+    name: Deploy test
+    needs: verify
+    if: github.event_name == 'push' && github.ref_name == 'test' && vars.DEPLOY_ENABLED_TEST == 'true'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: test
+    secrets: inherit
+
+  deploy-uat:
+    name: Deploy uat
+    needs: verify
+    if: github.event_name == 'push' && github.ref_name == 'uat' && vars.DEPLOY_ENABLED_UAT == 'true'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: uat
+    secrets: inherit
+
+  deploy-staging:
+    name: Deploy staging
+    needs: verify
+    if: github.event_name == 'push' && github.ref_name == 'staging' && vars.DEPLOY_ENABLED_STAGING == 'true'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+    secrets: inherit
+
+  deploy-production:
+    name: Deploy production
+    needs: verify
+    if: github.event_name == 'push' && github.ref_name == 'production' && vars.DEPLOY_ENABLED_PRODUCTION == 'true'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: production
+    secrets: inherit

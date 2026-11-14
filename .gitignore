@@ -13,3 +13,5 @@ next-env.d.ts
 out/
 playwright-report/
 test-results/
+# Deploy packaging (serve runtime bundled by .github/workflows/deploy.yml)
+runtime/
