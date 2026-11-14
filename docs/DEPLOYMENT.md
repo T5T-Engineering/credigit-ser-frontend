@@ -63,7 +63,9 @@ workflow. Ports per environment across the platform (backend README):
 | `test` / `uat` | 9060 | 9061 | 9062 |
 
 `NEXT_PUBLIC_API_BASE_URL` in `.env.<env>.public` is the backend origin as the browser sees it (the host's public name or
-reverse proxy with the API port of that environment, e.g. `http://<uat-host>:9060`). Useful commands on the host:
+reverse proxy with the API port of that environment). Set today: `dev` → `https://dev.credigitapi.t5tapps.com` (portal
+`https://dev.credigit.t5tapps.com`), `test` → `https://credigitapi.t5tapps.com` (portal `https://credigit.t5tapps.com`); UAT is
+not assigned yet. Entra redirect URIs per environment are listed in the backend README. Useful commands on the host:
 
 ```bash
 pm2 status
